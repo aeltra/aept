@@ -10,11 +10,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <solv/pool.h>
-#include <solv/repo.h>
-#include <solv/solvable.h>
-#include <solv/knownid.h>
-
 #include "aept/aept.h"
 #include "aept/msg.h"
 #include "aept/solver.h"
@@ -41,93 +36,6 @@ int status_load(void)
     return r;
 }
 
-int status_write(void)
-{
-    Pool *pool = solver_pool();
-    FILE *fp;
-    char *tmp_path = NULL;
-    Id p;
-    Solvable *s;
-
-    if (!pool || !pool->installed)
-        return 0;
-
-    xasprintf(&tmp_path, "%s.tmp", cfg->status_file);
-
-    fp = fopen(tmp_path, "w");
-    if (!fp) {
-        log_error("cannot write status file '%s': %s",
-                  tmp_path, strerror(errno));
-        free(tmp_path);
-        return -1;
-    }
-
-    int write_err = 0;
-
-    FOR_REPO_SOLVABLES(pool->installed, p, s) {
-        const char *name = pool_id2str(pool, s->name);
-        const char *evr = pool_id2str(pool, s->evr);
-        const char *arch = pool_id2str(pool, s->arch);
-        const char *desc = solvable_lookup_str(s, SOLVABLE_DESCRIPTION);
-
-        fprintf(fp, "Package: %s\n", name);
-        fprintf(fp, "Version: %s\n", evr);
-        if (arch)
-            fprintf(fp, "Architecture: %s\n", arch);
-        fprintf(fp, "Status: install ok installed\n");
-
-        /* Write dependency fields */
-        if (s->requires) {
-            Id *reqp, req;
-            int first = 1;
-
-            reqp = s->repo->idarraydata + s->requires;
-            while ((req = *reqp++) != 0) {
-                if (SOLVABLE_PREREQMARKER == req)
-                    continue;
-                if (first) {
-                    fprintf(fp, "Depends: ");
-                    first = 0;
-                } else {
-                    fprintf(fp, ", ");
-                }
-                fprintf(fp, "%s", pool_dep2str(pool, req));
-            }
-            if (!first)
-                fprintf(fp, "\n");
-        }
-
-        if (desc)
-            fprintf(fp, "Description: %s\n", desc);
-
-        fprintf(fp, "\n");
-
-        if (ferror(fp)) {
-            write_err = 1;
-            break;
-        }
-    }
-
-    if (fclose(fp) != 0)
-        write_err = 1;
-
-    if (write_err) {
-        log_error("failed to write status file '%s'", tmp_path);
-        unlink(tmp_path);
-        free(tmp_path);
-        return -1;
-    }
-
-    if (rename(tmp_path, cfg->status_file) < 0) {
-        log_error("cannot rename status file: %s", strerror(errno));
-        unlink(tmp_path);
-        free(tmp_path);
-        return -1;
-    }
-
-    free(tmp_path);
-    return 0;
-}
 
 int status_add(const char *control_path)
 {

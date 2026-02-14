@@ -139,12 +139,8 @@ int aept_remove(const char **names, int count)
         goto out;
 
     r = solver_resolve_remove(names, count);
-    if (r < 0) {
-        if (!cfg->force_depends)
-            goto out;
-        log_warning("proceeding despite dependency errors "
-                    "(--force-depends)");
-    }
+    if (r < 0)
+        goto out;
 
     trans = solver_transaction();
     pool = solver_pool();

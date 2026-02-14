@@ -364,12 +364,8 @@ int aept_install(const char **names, int count)
     }
 
     r = solver_resolve_install(names, count);
-    if (r < 0) {
-        if (!cfg->force_depends)
-            goto out;
-        log_warning("proceeding despite dependency errors "
-                    "(--force-depends)");
-    }
+    if (r < 0)
+        goto out;
 
     trans = solver_transaction();
     pool = solver_pool();

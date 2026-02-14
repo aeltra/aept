@@ -10,9 +10,6 @@
 /* Load the status file into the solver as the installed repo. */
 int status_load(void);
 
-/* Write the status file from the currently installed solvables. */
-int status_write(void);
-
 /* Append a package entry to the status file. */
 int status_add(const char *control_path);
 

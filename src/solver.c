@@ -140,6 +140,23 @@ static int do_solve(Queue *job)
         solver_set_flag(solv, SOLVER_FLAG_ALLOW_DOWNGRADE, 1);
 
     problems = solver_solve(solv, job);
+    if (problems > 0 && cfg->force_depends) {
+        log_warning("dependency problems (--force-depends, accepting solutions):");
+
+        problem = 0;
+        while ((problem = solver_next_problem(solv, problem)) != 0) {
+            Id solution;
+
+            log_warning("  - %s", solver_problem2str(solv, problem));
+
+            solution = solver_next_solution(solv, problem, 0);
+            if (solution)
+                solver_take_solution(solv, problem, solution, job);
+        }
+
+        problems = solver_solve(solv, job);
+    }
+
     if (problems > 0) {
         log_error("dependency problems:");
 
