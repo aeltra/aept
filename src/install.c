@@ -428,6 +428,8 @@ static int do_reinstall(const char **names, int count,
             return r;
 
         r = do_install_package(ipk_path, pool, avail, old_ver);
+        if (cfg->no_cache)
+            unlink(ipk_path);
         free(ipk_path);
         if (r < 0)
             return r;
@@ -488,32 +490,39 @@ int aept_install(const char **names, int count)
         goto out;
     }
 
+    if (cfg->no_cache && cfg->download_only) {
+        log_warning("--no-cache ignored with --download-only");
+        cfg->no_cache = 0;
+    }
+
     /* Download phase */
     char **ipk_paths = NULL;
     ipk_paths = xmalloc(trans->steps.count * sizeof(char *));
     memset(ipk_paths, 0, trans->steps.count * sizeof(char *));
 
-    for (i = 0; i < trans->steps.count; i++) {
-        Id p = trans->steps.elements[i];
-        int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
+    if (!cfg->no_cache) {
+        for (i = 0; i < trans->steps.count; i++) {
+            Id p = trans->steps.elements[i];
+            int type = transaction_type(trans, p,
+                SOLVER_TRANSACTION_SHOW_ACTIVE |
+                SOLVER_TRANSACTION_SHOW_ALL);
 
-        if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
-            continue;
+            if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
+                continue;
 
-        r = download_package(p, pool, &ipk_paths[i]);
-        if (r < 0)
+            r = download_package(p, pool, &ipk_paths[i]);
+            if (r < 0)
+                goto download_cleanup;
+
+            if (cfg->download_only)
+                continue;
+        }
+
+        if (cfg->download_only) {
+            log_info("download complete");
+            r = 0;
             goto download_cleanup;
-
-        if (cfg->download_only)
-            continue;
-    }
-
-    if (cfg->download_only) {
-        log_info("download complete");
-        r = 0;
-        goto download_cleanup;
+        }
     }
 
     /* Execute transaction — track installed files so that removals
@@ -552,6 +561,12 @@ int aept_install(const char **names, int count)
             if (r < 0 && !cfg->force_depends)
                 goto fileset_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
+            if (cfg->no_cache) {
+                r = download_package(p, pool, &ipk_paths[i]);
+                if (r < 0)
+                    goto fileset_cleanup;
+            }
+
             if (!ipk_paths[i])
                 continue;
 
@@ -592,6 +607,12 @@ int aept_install(const char **names, int count)
                     fclose(lfp);
                     fileset_sorted = 0;
                 }
+            }
+
+            if (cfg->no_cache) {
+                unlink(ipk_paths[i]);
+                free(ipk_paths[i]);
+                ipk_paths[i] = NULL;
             }
         }
     }

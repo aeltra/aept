@@ -63,6 +63,11 @@ installed package.
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
 
+*--no-cache*
+	Download, install, and immediately delete each package instead of
+	downloading all packages first. Useful on devices with limited storage.
+	Ignored when *--download-only* is also specified.
+
 ## remove [options] <packages...>
 
 Remove one or more installed packages. Reverse dependencies are resolved
@@ -100,6 +105,11 @@ Upgrade all installed packages to the latest available version.
 
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
+
+*--no-cache*
+	Download, install, and immediately delete each package instead of
+	downloading all packages first. Useful on devices with limited storage.
+	Ignored when *--download-only* is also specified.
 
 ## show [options] <package>
 

@@ -37,6 +37,7 @@ typedef struct {
     int noaction;
     int download_only;
     int reinstall;
+    int no_cache;
     int verbosity;
 } aept_config_t;
 

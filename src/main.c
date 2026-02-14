@@ -121,6 +121,7 @@ static void usage_install(FILE *out)
         "\n"
         "  --allow-downgrade         Allow package downgrades\n"
         "  --reinstall               Reinstall already installed packages\n"
+        "  --no-cache                Download, install, and delete each package\n"
     );
 }
 
@@ -154,6 +155,7 @@ static void usage_upgrade(FILE *out)
         "  -h, --help                Show this help\n"
         "\n"
         "  --allow-downgrade         Allow package downgrades\n"
+        "  --no-cache                Download, install, and delete each package\n"
     );
 }
 
@@ -254,6 +256,7 @@ static struct option install_options[] = {
     {"help",            no_argument,       NULL, 'h'},
     {"allow-downgrade", no_argument,       NULL, 0x100},
     {"reinstall",       no_argument,       NULL, 0x101},
+    {"no-cache",        no_argument,       NULL, 0x102},
     {NULL, 0, NULL, 0}
 };
 
@@ -332,7 +335,7 @@ static int cmd_install(int argc, char *argv[])
 {
     const char *offline_root = NULL;
     int force_depends = 0, download_only = 0, noaction = 0;
-    int allow_downgrade = 0, reinstall = 0;
+    int allow_downgrade = 0, reinstall = 0, no_cache = 0;
     int opt, r;
 
     optind = 1;
@@ -344,6 +347,7 @@ static int cmd_install(int argc, char *argv[])
         case 'n': noaction = 1; break;
         case 0x100: allow_downgrade = 1; break;
         case 0x101: reinstall = 1; break;
+        case 0x102: no_cache = 1; break;
         case 'h': usage_install(stdout); return 0;
         default:  usage_install(stderr); return 1;
         }
@@ -362,6 +366,7 @@ static int cmd_install(int argc, char *argv[])
     cfg->noaction = noaction;
     cfg->allow_downgrade = allow_downgrade;
     cfg->reinstall = reinstall;
+    cfg->no_cache = no_cache;
 
     r = aept_install((const char **)&argv[optind], argc - optind);
     teardown_config();
@@ -405,7 +410,7 @@ static int cmd_upgrade(int argc, char *argv[])
 {
     const char *offline_root = NULL;
     int force_depends = 0, download_only = 0, noaction = 0;
-    int allow_downgrade = 0;
+    int allow_downgrade = 0, no_cache = 0;
     int opt, r;
 
     optind = 1;
@@ -417,6 +422,7 @@ static int cmd_upgrade(int argc, char *argv[])
         case 'n': noaction = 1; break;
         case 0x100: allow_downgrade = 1; break;
         case 0x101: break; /* --reinstall: ignored for upgrade */
+        case 0x102: no_cache = 1; break;
         case 'h': usage_upgrade(stdout); return 0;
         default:  usage_upgrade(stderr); return 1;
         }
@@ -429,6 +435,7 @@ static int cmd_upgrade(int argc, char *argv[])
     cfg->download_only = download_only;
     cfg->noaction = noaction;
     cfg->allow_downgrade = allow_downgrade;
+    cfg->no_cache = no_cache;
 
     r = aept_install(NULL, 0);
     teardown_config();
