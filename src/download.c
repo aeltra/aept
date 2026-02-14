@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <string.h>
-
 #include "aept/aept.h"
 #include "aept/download.h"
 #include "aept/msg.h"
@@ -17,9 +15,6 @@
 int aept_download(const char *url, const char *dest)
 {
     const char *argv[] = {"wget", "-q", "-O", dest, url, NULL};
-
-    if (strncmp(url, "https://", 8) != 0)
-        log_warning("downloading over insecure connection: %s", url);
 
     log_info("downloading %s", url);
 

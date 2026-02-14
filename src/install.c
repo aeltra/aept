@@ -357,6 +357,12 @@ int aept_install(const char **names, int count)
     if (r < 0)
         goto out;
 
+    for (i = 0; i < cfg->nsources; i++) {
+        if (strncmp(cfg->sources[i].url, "https://", 8) != 0)
+            log_warning("source '%s' uses insecure transport",
+                        cfg->sources[i].name);
+    }
+
     r = solver_resolve_install(names, count);
     if (r < 0) {
         if (!cfg->force_depends)

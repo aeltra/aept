@@ -51,6 +51,12 @@ int aept_update(void)
     file_mkdir_hier(cfg->lists_dir, 0755);
 
     for (i = 0; i < cfg->nsources; i++) {
+        if (strncmp(cfg->sources[i].url, "https://", 8) != 0)
+            log_warning("source '%s' uses insecure transport",
+                        cfg->sources[i].name);
+    }
+
+    for (i = 0; i < cfg->nsources; i++) {
         aept_source_t *src = &cfg->sources[i];
         char *url = NULL;
         char *dest = NULL;
