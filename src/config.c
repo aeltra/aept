@@ -122,10 +122,6 @@ void config_apply_offline_root(void)
     free(cfg->lock_file);
     cfg->lock_file = tmp;
 
-    xasprintf(&tmp, "%s%s", cfg->offline_root, cfg->usign_keydir);
-    free(cfg->usign_keydir);
-    cfg->usign_keydir = tmp;
-
 }
 
 int config_load(const char *filename)

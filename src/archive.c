@@ -148,7 +148,11 @@ static char *join_paths(const char *left, const char *right)
     if (!left)
         return xstrdup(right);
 
-    xasprintf(&path, "%s%s", left, right);
+    size_t len = strlen(left);
+    while (len > 1 && left[len - 1] == '/')
+        len--;
+
+    xasprintf(&path, "%.*s/%s", (int)len, left, right);
     return path;
 }
 
