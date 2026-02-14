@@ -7,14 +7,24 @@
 #ifndef MSG_H_7BF97F
 #define MSG_H_7BF97F
 
-enum aept_msg_level {
+enum aept_log_level {
     AEPT_ERROR,
-    AEPT_NOTICE,
+    AEPT_WARNING,
     AEPT_INFO,
     AEPT_DEBUG
 };
 
-void aept_msg(int level, const char *fmt, ...)
-	__attribute__((format(printf, 2, 3)));
+void aept_log_init(void);
+void aept_log(int level, const char *file, int line, const char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+
+#define log_error(fmt, ...) \
+    aept_log(AEPT_ERROR, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define log_warning(fmt, ...) \
+    aept_log(AEPT_WARNING, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...) \
+    aept_log(AEPT_INFO, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) \
+    aept_log(AEPT_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 #endif

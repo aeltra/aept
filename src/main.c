@@ -62,6 +62,8 @@ int main(int argc, char *argv[])
     int opt;
     int r;
 
+    aept_log_init();
+
     while ((opt = getopt_long(argc, argv, "+c:o:fdnvh", long_options, NULL)) != -1) {
         switch (opt) {
         case 'c':
@@ -113,14 +115,14 @@ int main(int argc, char *argv[])
         r = aept_update();
     } else if (strcmp(command, "install") == 0) {
         if (optind >= argc) {
-            aept_msg(AEPT_ERROR, "install requires at least one package name\n");
+            log_error("install requires at least one package name");
             r = 1;
         } else {
             r = aept_install((const char **)&argv[optind], argc - optind);
         }
     } else if (strcmp(command, "remove") == 0) {
         if (optind >= argc) {
-            aept_msg(AEPT_ERROR, "remove requires at least one package name\n");
+            log_error("remove requires at least one package name");
             r = 1;
         } else {
             r = aept_remove((const char **)&argv[optind], argc - optind);
@@ -128,7 +130,7 @@ int main(int argc, char *argv[])
     } else if (strcmp(command, "upgrade") == 0) {
         r = aept_install(NULL, 0);
     } else {
-        aept_msg(AEPT_ERROR, "unknown command '%s'\n", command);
+        log_error("unknown command '%s'", command);
         usage();
         r = 1;
     }

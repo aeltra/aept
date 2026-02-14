@@ -30,8 +30,8 @@ int status_load(void)
 
     fp = fopen(cfg->status_file, "r");
     if (!fp) {
-        aept_msg(AEPT_ERROR, "cannot open status file '%s': %s\n",
-                 cfg->status_file, strerror(errno));
+        log_error("cannot open status file '%s': %s",
+                  cfg->status_file, strerror(errno));
         return -1;
     }
 
@@ -56,8 +56,8 @@ int status_write(void)
 
     fp = fopen(tmp_path, "w");
     if (!fp) {
-        aept_msg(AEPT_ERROR, "cannot write status file '%s': %s\n",
-                 tmp_path, strerror(errno));
+        log_error("cannot write status file '%s': %s",
+                  tmp_path, strerror(errno));
         free(tmp_path);
         return -1;
     }
@@ -104,8 +104,7 @@ int status_write(void)
     fclose(fp);
 
     if (rename(tmp_path, cfg->status_file) < 0) {
-        aept_msg(AEPT_ERROR, "cannot rename status file: %s\n",
-                 strerror(errno));
+        log_error("cannot rename status file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -122,15 +121,15 @@ int status_add(const char *control_path)
 
     src = fopen(control_path, "r");
     if (!src) {
-        aept_msg(AEPT_ERROR, "cannot open control file '%s': %s\n",
-                 control_path, strerror(errno));
+        log_error("cannot open control file '%s': %s",
+                  control_path, strerror(errno));
         return -1;
     }
 
     dst = fopen(cfg->status_file, "a");
     if (!dst) {
-        aept_msg(AEPT_ERROR, "cannot open status file '%s': %s\n",
-                 cfg->status_file, strerror(errno));
+        log_error("cannot open status file '%s': %s",
+                  cfg->status_file, strerror(errno));
         fclose(src);
         return -1;
     }

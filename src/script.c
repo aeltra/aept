@@ -43,7 +43,7 @@ int run_script(const char *script_dir, const char *pkg_name,
         return 0;
     }
 
-    aept_msg(AEPT_INFO, "running %s %s\n", script, args ? args : "");
+    log_info("running %s %s", script, args ? args : "");
 
     setenv("PKG_ROOT", cfg->root_dir, 1);
 
@@ -63,8 +63,7 @@ int run_script(const char *script_dir, const char *pkg_name,
     free(cmd);
 
     if (r != 0) {
-        aept_msg(AEPT_ERROR, "%s script failed with exit code %d\n",
-                 script, r);
+        log_error("%s script failed with exit code %d", script, r);
         return r;
     }
 

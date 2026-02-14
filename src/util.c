@@ -123,7 +123,7 @@ int xsystem(const char *argv[])
 
     switch (pid) {
     case -1:
-        aept_msg(AEPT_ERROR, "%s: vfork: %s\n", argv[0], strerror(errno));
+        log_error("%s: vfork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
         execvp(argv[0], (char *const *)argv);
@@ -134,19 +134,17 @@ int xsystem(const char *argv[])
 
     r = waitpid(pid, &status, 0);
     if (r == -1) {
-        aept_msg(AEPT_ERROR, "%s: waitpid: %s\n", argv[0], strerror(errno));
+        log_error("%s: waitpid: %s", argv[0], strerror(errno));
         return -1;
     }
 
     if (WIFSIGNALED(status)) {
-        aept_msg(AEPT_ERROR, "%s: killed by signal %d\n",
-                 argv[0], WTERMSIG(status));
+        log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
         return -1;
     }
 
     if (!WIFEXITED(status)) {
-        aept_msg(AEPT_ERROR, "%s: unexpected status %d from waitpid\n",
-                 argv[0], status);
+        log_error("%s: unexpected status %d from waitpid", argv[0], status);
         return -1;
     }
 
@@ -164,8 +162,8 @@ static int unshare_and_map_user(void)
     gid_t gid = getegid();
 
     if (unshare(CLONE_NEWUSER) != 0) {
-        aept_msg(AEPT_ERROR, "failed to unshare user namespace: %s\n",
-                 strerror(errno));
+        log_error("failed to unshare user namespace: %s",
+                  strerror(errno));
         return -1;
     }
 
@@ -173,8 +171,7 @@ static int unshare_and_map_user(void)
     xasprintf(&mapfile, "/proc/%ld/uid_map", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to open '%s': %s\n",
-                 mapfile, strerror(errno));
+        log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
@@ -185,7 +182,7 @@ static int unshare_and_map_user(void)
     content = NULL;
 
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to write uid_map\n");
+        log_error("failed to write uid_map");
         goto error;
     }
 
@@ -196,8 +193,7 @@ static int unshare_and_map_user(void)
     xasprintf(&mapfile, "/proc/%ld/setgroups", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to open '%s': %s\n",
-                 mapfile, strerror(errno));
+        log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
@@ -205,7 +201,7 @@ static int unshare_and_map_user(void)
     close(fd);
 
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to disable setgroups\n");
+        log_error("failed to disable setgroups");
         goto error;
     }
 
@@ -216,8 +212,7 @@ static int unshare_and_map_user(void)
     xasprintf(&mapfile, "/proc/%ld/gid_map", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to open '%s': %s\n",
-                 mapfile, strerror(errno));
+        log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
@@ -228,7 +223,7 @@ static int unshare_and_map_user(void)
     content = NULL;
 
     if (ret == -1) {
-        aept_msg(AEPT_ERROR, "failed to write gid_map\n");
+        log_error("failed to write gid_map");
         goto error;
     }
 
@@ -253,7 +248,7 @@ int xsystem_offline_root(const char *argv[])
 
     switch (pid) {
     case -1:
-        aept_msg(AEPT_ERROR, "%s: vfork: %s\n", argv[0], strerror(errno));
+        log_error("%s: vfork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
         if (cfg->offline_root) {
@@ -263,8 +258,8 @@ int xsystem_offline_root(const char *argv[])
             }
 
             if (chroot(cfg->offline_root) != 0) {
-                aept_msg(AEPT_ERROR, "failed to chroot to '%s': %s\n",
-                         cfg->offline_root, strerror(errno));
+                log_error("failed to chroot to '%s': %s",
+                          cfg->offline_root, strerror(errno));
                 _exit(255);
             }
         }
@@ -276,19 +271,17 @@ int xsystem_offline_root(const char *argv[])
 
     r = waitpid(pid, &status, 0);
     if (r == -1) {
-        aept_msg(AEPT_ERROR, "%s: waitpid: %s\n", argv[0], strerror(errno));
+        log_error("%s: waitpid: %s", argv[0], strerror(errno));
         return -1;
     }
 
     if (WIFSIGNALED(status)) {
-        aept_msg(AEPT_ERROR, "%s: killed by signal %d\n",
-                 argv[0], WTERMSIG(status));
+        log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
         return -1;
     }
 
     if (!WIFEXITED(status)) {
-        aept_msg(AEPT_ERROR, "%s: unexpected status %d from waitpid\n",
-                 argv[0], status);
+        log_error("%s: unexpected status %d from waitpid", argv[0], status);
         return -1;
     }
 

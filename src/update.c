@@ -74,8 +74,8 @@ int aept_update(void)
             free(gz_path);
 
             if (r < 0) {
-                aept_msg(AEPT_ERROR, "failed to decompress Packages.gz "
-                         "for '%s'\n", src->name);
+                log_error("failed to decompress Packages.gz for '%s'",
+                          src->name);
                 errors++;
                 goto next;
             }
@@ -98,8 +98,8 @@ int aept_update(void)
 
             r = aept_download(sig_url, sig_path);
             if (r < 0) {
-                aept_msg(AEPT_ERROR, "failed to download signature "
-                         "for '%s'\n", src->name);
+                log_error("failed to download signature for '%s'",
+                          src->name);
                 unlink(list_path);
                 errors++;
                 free(sig_url);
@@ -121,7 +121,7 @@ int aept_update(void)
             free(sig_path);
         }
 
-        aept_msg(AEPT_NOTICE, "updated source '%s'\n", src->name);
+        log_info("updated source '%s'", src->name);
 
     next:
         free(url);

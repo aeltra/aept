@@ -39,9 +39,9 @@ static int load_repos(void)
 
         fp = fopen(list_path, "r");
         if (!fp) {
-            aept_msg(AEPT_ERROR, "cannot open package list '%s': %s\n"
-                     "  (have you run 'aept update'?)\n",
-                     list_path, strerror(errno));
+            log_error("cannot open package list '%s': %s\n"
+                      "  (have you run 'aept update'?)",
+                      list_path, strerror(errno));
             free(list_path);
             return -1;
         }
@@ -83,7 +83,7 @@ static int display_transaction(Transaction *trans, Pool *pool)
     }
 
     if (n_install == 0 && n_erase == 0) {
-        aept_msg(AEPT_NOTICE, "nothing to do\n");
+        log_info("nothing to do");
         return 1;
     }
 
@@ -105,15 +105,15 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     int r;
 
     if (!location) {
-        aept_msg(AEPT_ERROR, "no download location for '%s'\n",
-                 pool_id2str(pool, s->name));
+        log_error("no download location for '%s'",
+                  pool_id2str(pool, s->name));
         return -1;
     }
 
     src_idx = solver_solvable_source_index(p);
     if (src_idx < 0 || src_idx >= cfg->nsources) {
-        aept_msg(AEPT_ERROR, "unknown source for '%s'\n",
-                 pool_id2str(pool, s->name));
+        log_error("unknown source for '%s'",
+                  pool_id2str(pool, s->name));
         return -1;
     }
 
@@ -150,16 +150,15 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     int r = -1;
 
     if (!mkdtemp(tmpdir)) {
-        aept_msg(AEPT_ERROR, "failed to create temp directory: %s\n",
-                 strerror(errno));
+        log_error("failed to create temp directory: %s",
+                  strerror(errno));
         return -1;
     }
 
     /* Extract control archive */
     ctrl_ar = ar_open_pkg_control_archive(ipk_path);
     if (!ctrl_ar) {
-        aept_msg(AEPT_ERROR, "failed to open control archive in '%s'\n",
-                 ipk_path);
+        log_error("failed to open control archive in '%s'", ipk_path);
         goto cleanup;
     }
 
@@ -168,7 +167,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     ctrl_ar = NULL;
 
     if (r < 0) {
-        aept_msg(AEPT_ERROR, "failed to extract control archive\n");
+        log_error("failed to extract control archive");
         goto cleanup;
     }
 
@@ -180,8 +179,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     /* Extract data archive to root */
     data_ar = ar_open_pkg_data_archive(ipk_path);
     if (!data_ar) {
-        aept_msg(AEPT_ERROR, "failed to open data archive in '%s'\n",
-                 ipk_path);
+        log_error("failed to open data archive in '%s'", ipk_path);
         r = -1;
         goto cleanup;
     }
@@ -191,7 +189,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     data_ar = NULL;
 
     if (r < 0) {
-        aept_msg(AEPT_ERROR, "failed to extract data archive\n");
+        log_error("failed to extract data archive");
         goto cleanup;
     }
 
@@ -236,7 +234,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     /* Run postinst */
     r = run_script(cfg->info_dir, name, "postinst", "configure");
     if (r != 0) {
-        aept_msg(AEPT_ERROR, "postinst failed for '%s'\n", name);
+        log_error("postinst failed for '%s'", name);
         /* Continue despite postinst failure — package is installed */
         r = 0;
     }
@@ -249,7 +247,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     free(ctrl_path);
     ctrl_path = NULL;
 
-    aept_msg(AEPT_NOTICE, "installed %s\n", name);
+    log_info("installed %s", name);
     r = 0;
 
 cleanup:
@@ -289,15 +287,15 @@ int aept_install(const char **names, int count)
     if (r < 0) {
         if (!cfg->force_depends)
             goto out;
-        aept_msg(AEPT_NOTICE, "proceeding despite dependency errors "
-                 "(--force-depends)\n");
+        log_warning("proceeding despite dependency errors "
+                    "(--force-depends)");
     }
 
     trans = solver_transaction();
     pool = solver_pool();
 
     if (!trans || trans->steps.count == 0) {
-        aept_msg(AEPT_NOTICE, "nothing to do\n");
+        log_info("nothing to do");
         r = 0;
         goto out;
     }
@@ -308,7 +306,7 @@ int aept_install(const char **names, int count)
     }
 
     if (cfg->noaction) {
-        aept_msg(AEPT_NOTICE, "dry run, not installing\n");
+        log_info("dry run, not installing");
         r = 0;
         goto out;
     }
@@ -336,7 +334,7 @@ int aept_install(const char **names, int count)
     }
 
     if (cfg->download_only) {
-        aept_msg(AEPT_NOTICE, "download complete\n");
+        log_info("download complete");
         r = 0;
         goto download_cleanup;
     }

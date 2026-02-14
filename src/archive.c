@@ -76,21 +76,21 @@ retry:
         return 0;
 
     case ARCHIVE_WARN:
-        aept_msg(AEPT_ERROR, "warning when reading archive data: %s\n",
+        log_error("warning when reading archive data: %s",
                  archive_error_string(a));
         return 0;
 
     case ARCHIVE_RETRY:
-        aept_msg(AEPT_ERROR, "failed to read archive data: %s\n",
+        log_error("failed to read archive data: %s",
                  archive_error_string(a));
         if (retries++ < 3) {
-            aept_msg(AEPT_NOTICE, "retrying...\n");
+            log_warning("retrying...");
             goto retry;
         }
         return 0;
 
     default:
-        aept_msg(AEPT_ERROR, "failed to read archive data: %s\n",
+        log_error("failed to read archive data: %s",
                  archive_error_string(a));
         return 0;
     }
@@ -119,7 +119,7 @@ static int copy_to_stream(struct archive *a, FILE *stream)
 
         sz_out = fwrite(buffer, 1, sz_in, stream);
         if (sz_out < sz_in) {
-            aept_msg(AEPT_ERROR, "failed to write data to stream: %s\n",
+            log_error("failed to write data to stream: %s",
                      strerror(errno));
             goto err_cleanup;
         }
@@ -183,7 +183,7 @@ static int transform_all_paths(struct archive_entry *entry, const char *dest)
     if (filename) {
         path = join_paths(dest, filename);
         if (!path) {
-            aept_msg(AEPT_ERROR, "not extracting '%s': hardlink to nowhere\n",
+            log_error("not extracting '%s': hardlink to nowhere",
                      archive_entry_pathname(entry));
             return 1;
         }
@@ -211,7 +211,7 @@ retry:
         break;
 
     case ARCHIVE_WARN:
-        aept_msg(AEPT_DEBUG, "warning when reading archive header: %s\n",
+        log_debug("warning when reading archive header: %s",
                  archive_error_string(ar));
         break;
 
@@ -221,14 +221,14 @@ retry:
         return NULL;
 
     case ARCHIVE_RETRY:
-        aept_msg(AEPT_ERROR, "failed to read archive header: %s\n",
+        log_error("failed to read archive header: %s",
                  archive_error_string(ar));
         if (retries++ < 3)
             goto retry;
         return NULL;
 
     default:
-        aept_msg(AEPT_ERROR, "failed to read archive header: %s\n",
+        log_error("failed to read archive header: %s",
                  archive_error_string(ar));
         return NULL;
     }
@@ -273,15 +273,15 @@ static int extract_paths_to_stream(struct archive *a, FILE *stream)
         path = archive_entry_pathname(entry);
         entry_stat = archive_entry_stat(entry);
         if (S_ISLNK(entry_stat->st_mode)) {
-            r = fprintf(stream, "%s\t%#03o\t%s\n", path,
+            r = fprintf(stream, "%s\t%#03o\t%s", path,
                         (unsigned int)entry_stat->st_mode,
                         archive_entry_symlink(entry));
         } else {
-            r = fprintf(stream, "%s\t%#03o\n", path,
+            r = fprintf(stream, "%s\t%#03o", path,
                         (unsigned int)entry_stat->st_mode);
         }
         if (r <= 0) {
-            aept_msg(AEPT_ERROR, "failed to write path to stream: %s\n",
+            log_error("failed to write path to stream: %s",
                      strerror(errno));
             return -1;
         }
@@ -295,27 +295,27 @@ static struct archive *open_disk(int flags)
 
     disk = archive_write_disk_new();
     if (!disk) {
-        aept_msg(AEPT_ERROR, "failed to create disk archive object\n");
+        log_error("failed to create disk archive object");
         return NULL;
     }
 
     r = archive_write_disk_set_options(disk, flags);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_DEBUG, "warning when setting disk options: %s\n",
+        log_debug("warning when setting disk options: %s",
                  archive_error_string(disk));
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "failed to set disk options: %s\n",
+        log_error("failed to set disk options: %s",
                  archive_error_string(disk));
         goto err_cleanup;
     }
 
     r = archive_write_disk_set_standard_lookup(disk);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_DEBUG,
-                 "warning when setting user/group lookup functions: %s\n",
+        log_debug(
+                 "warning when setting user/group lookup functions: %s",
                  archive_error_string(disk));
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "failed to set user/group lookup functions: %s\n",
+        log_error("failed to set user/group lookup functions: %s",
                  archive_error_string(disk));
         goto err_cleanup;
     }
@@ -352,11 +352,11 @@ static int extract_all(struct archive *a, const char *dest, int flags,
         if (r == 1)
             continue;
         if (r < 0) {
-            aept_msg(AEPT_ERROR, "failed to transform path\n");
+            log_error("failed to transform path");
             goto err_cleanup;
         }
 
-        aept_msg(AEPT_DEBUG, "extracting '%s'\n",
+        log_debug("extracting '%s'",
                  archive_entry_pathname(entry));
 
         r = archive_read_extract2(a, entry, disk);
@@ -364,12 +364,12 @@ static int extract_all(struct archive *a, const char *dest, int flags,
         case ARCHIVE_OK:
             break;
         case ARCHIVE_WARN:
-            aept_msg(AEPT_DEBUG, "warning extracting '%s': %s\n",
+            log_debug("warning extracting '%s': %s",
                      archive_entry_pathname(entry),
                      archive_error_string(a));
             break;
         default:
-            aept_msg(AEPT_ERROR, "failed to extract '%s': %s\n",
+            log_error("failed to extract '%s': %s",
                      archive_entry_pathname(entry),
                      archive_error_string(a));
             r = -1;
@@ -397,33 +397,33 @@ static struct archive *open_outer(const char *filename)
 
     outer = archive_read_new();
     if (!outer) {
-        aept_msg(AEPT_ERROR, "failed to create outer archive object\n");
+        log_error("failed to create outer archive object");
         return NULL;
     }
 
     r = archive_read_support_format_ar(outer);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "ar format not supported: %s\n",
+        log_error("ar format not supported: %s",
                  archive_error_string(outer));
         goto err_cleanup;
     }
     r = archive_read_support_filter_gzip(outer);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "gzip support provided by external program\n");
+        log_info("gzip support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "gzip format not supported\n");
+        log_error("gzip format not supported");
         goto err_cleanup;
     }
     r = archive_read_support_format_tar(outer);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "tar format not supported: %s\n",
+        log_error("tar format not supported: %s",
                  archive_error_string(outer));
         goto err_cleanup;
     }
 
     r = archive_read_open_filename(outer, filename, EXTRACT_BUFFER_LEN);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "failed to open package '%s': %s\n",
+        log_error("failed to open package '%s': %s",
                  filename, archive_error_string(outer));
         goto err_cleanup;
     }
@@ -446,7 +446,7 @@ static struct archive *open_inner(struct archive *outer)
 
     inner = archive_read_new();
     if (!inner) {
-        aept_msg(AEPT_ERROR, "failed to create inner archive object\n");
+        log_error("failed to create inner archive object");
         return NULL;
     }
 
@@ -456,18 +456,18 @@ static struct archive *open_inner(struct archive *outer)
 
     r = archive_read_support_filter_gzip(inner);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "gzip support provided by external program\n");
+        log_info("gzip support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "gzip format not supported\n");
+        log_error("gzip format not supported");
         goto err_cleanup;
     }
 
 #if HAVE_XZ
     r = archive_read_support_filter_xz(inner);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "xz support provided by external program\n");
+        log_info("xz support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "xz format not supported\n");
+        log_error("xz format not supported");
         goto err_cleanup;
     }
 #endif
@@ -475,9 +475,9 @@ static struct archive *open_inner(struct archive *outer)
 #if HAVE_BZIP2
     r = archive_read_support_filter_bzip2(inner);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "bzip2 support provided by external program\n");
+        log_info("bzip2 support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "bzip2 format not supported\n");
+        log_error("bzip2 format not supported");
         goto err_cleanup;
     }
 #endif
@@ -485,9 +485,9 @@ static struct archive *open_inner(struct archive *outer)
 #if HAVE_LZ4
     r = archive_read_support_filter_lz4(inner);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "lz4 support provided by external program\n");
+        log_info("lz4 support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "lz4 format not supported\n");
+        log_error("lz4 format not supported");
         goto err_cleanup;
     }
 #endif
@@ -495,30 +495,30 @@ static struct archive *open_inner(struct archive *outer)
 #if HAVE_ZSTD
     r = archive_read_support_filter_zstd(inner);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "zstd support provided by external program\n");
+        log_info("zstd support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "zstd format not supported\n");
+        log_error("zstd format not supported");
         goto err_cleanup;
     }
 #endif
 
     r = archive_read_support_format_tar(inner);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "tar format not supported: %s\n",
+        log_error("tar format not supported: %s",
                  archive_error_string(inner));
         goto err_cleanup;
     }
 
     r = archive_read_support_format_empty(inner);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "empty format not supported: %s\n",
+        log_error("empty format not supported: %s",
                  archive_error_string(inner));
         goto err_cleanup;
     }
 
     r = archive_read_open(inner, data, NULL, inner_read, inner_close);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "failed to open inner archive: %s\n",
+        log_error("failed to open inner archive: %s",
                  archive_error_string(inner));
         return NULL;
     }
@@ -582,37 +582,37 @@ static struct archive *open_compressed(const char *filename)
 
     ar = archive_read_new();
     if (!ar) {
-        aept_msg(AEPT_ERROR,
-                 "failed to create archive object for compressed file\n");
+        log_error(
+                 "failed to create archive object for compressed file");
         return NULL;
     }
 
     r = archive_read_support_filter_gzip(ar);
     if (r == ARCHIVE_WARN)
-        aept_msg(AEPT_INFO, "gzip support provided by external program\n");
+        log_info("gzip support provided by external program");
     else if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "gzip format not supported: %s\n",
+        log_error("gzip format not supported: %s",
                  archive_error_string(ar));
         goto err_cleanup;
     }
 
     r = archive_read_support_format_raw(ar);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "raw format not supported: %s\n",
+        log_error("raw format not supported: %s",
                  archive_error_string(ar));
         goto err_cleanup;
     }
 
     r = archive_read_support_format_empty(ar);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "empty format not supported: %s\n",
+        log_error("empty format not supported: %s",
                  archive_error_string(ar));
         goto err_cleanup;
     }
 
     r = archive_read_open_filename(ar, filename, EXTRACT_BUFFER_LEN);
     if (r != ARCHIVE_OK) {
-        aept_msg(AEPT_ERROR, "failed to open compressed file '%s': %s\n",
+        log_error("failed to open compressed file '%s': %s",
                  filename, archive_error_string(ar));
         goto err_cleanup;
     }

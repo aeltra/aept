@@ -25,8 +25,7 @@ int aept_verify_signature(const char *file, const char *sigfile)
     pid = fork();
 
     if (pid < 0) {
-        aept_msg(AEPT_ERROR, "failed to fork usign process: %s\n",
-                 strerror(errno));
+        log_error("failed to fork usign process: %s", strerror(errno));
         return -1;
     }
 
@@ -62,7 +61,7 @@ int aept_verify_signature(const char *file, const char *sigfile)
     waitpid(pid, &status, 0);
 
     if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-        aept_msg(AEPT_ERROR, "signature verification failed for '%s'\n", file);
+        log_error("signature verification failed for '%s'", file);
         return -1;
     }
 

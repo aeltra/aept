@@ -36,7 +36,7 @@ int solver_init(void)
 {
     pool = pool_create();
     if (!pool) {
-        aept_msg(AEPT_ERROR, "failed to create solver pool\n");
+        log_error("failed to create solver pool");
         return -1;
     }
 
@@ -58,18 +58,18 @@ int solver_load_repo(const char *name, FILE *fp, int source_index)
     Repo *repo;
 
     if (nrepos >= MAX_REPOS) {
-        aept_msg(AEPT_ERROR, "too many repositories\n");
+        log_error("too many repositories");
         return -1;
     }
 
     repo = repo_create(pool, name);
     if (!repo) {
-        aept_msg(AEPT_ERROR, "failed to create repo '%s'\n", name);
+        log_error("failed to create repo '%s'", name);
         return -1;
     }
 
     if (repo_add_debpackages(repo, fp, 0)) {
-        aept_msg(AEPT_ERROR, "failed to parse Packages for '%s'\n", name);
+        log_error("failed to parse Packages for '%s'", name);
         repo_free(repo, 0);
         return -1;
     }
@@ -85,12 +85,12 @@ int solver_load_installed(FILE *fp)
 {
     installed_repo = repo_create(pool, "@installed");
     if (!installed_repo) {
-        aept_msg(AEPT_ERROR, "failed to create installed repo\n");
+        log_error("failed to create installed repo");
         return -1;
     }
 
     if (repo_add_debpackages(installed_repo, fp, 0)) {
-        aept_msg(AEPT_ERROR, "failed to parse status file\n");
+        log_error("failed to parse status file");
         repo_free(installed_repo, 0);
         installed_repo = NULL;
         return -1;
@@ -110,18 +110,18 @@ static int do_solve(Queue *job)
 
     solv = solver_create(pool);
     if (!solv) {
-        aept_msg(AEPT_ERROR, "failed to create solver\n");
+        log_error("failed to create solver");
         return -1;
     }
 
     problems = solver_solve(solv, job);
     if (problems > 0) {
-        aept_msg(AEPT_ERROR, "dependency problems:\n");
+        log_error("dependency problems:");
 
         problem = 0;
         while ((problem = solver_next_problem(solv, problem)) != 0) {
             const char *s = solver_problem2str(solv, problem);
-            aept_msg(AEPT_ERROR, "  - %s\n", s);
+            log_error("  - %s", s);
         }
 
         solver_free(solv);

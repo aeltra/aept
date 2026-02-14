@@ -33,7 +33,7 @@ static void config_set_defaults(void)
     cfg->usign_keydir = xstrdup("/etc/aept/usign/trustdb");
 
     cfg->check_signature = 1;
-    cfg->verbosity = AEPT_NOTICE;
+    cfg->verbosity = AEPT_INFO;
 }
 
 static void add_source(const char *name, const char *url, int gzip)
@@ -86,7 +86,7 @@ static void set_option(const char *key, const char *value)
         cfg->ignore_uid = atoi(value);
         return;
     } else {
-        aept_msg(AEPT_NOTICE, "unknown option '%s'\n", key);
+        log_warning("unknown option '%s'", key);
         return;
     }
 
@@ -143,8 +143,8 @@ int config_load(const char *filename)
 
     fp = fopen(filename, "r");
     if (!fp) {
-        aept_msg(AEPT_ERROR, "cannot open config file '%s': %s\n",
-                 filename, strerror(errno));
+        log_error("cannot open config file '%s': %s",
+                  filename, strerror(errno));
         return -1;
     }
 
@@ -185,7 +185,7 @@ int config_load(const char *filename)
             if (arch)
                 add_arch(arch);
         } else {
-            aept_msg(AEPT_NOTICE, "unknown config directive '%s'\n", token);
+            log_warning("unknown config directive '%s'", token);
         }
     }
 

@@ -62,8 +62,8 @@ static int remove_files(const char *name)
         xasprintf(&full_path, "%s%s", cfg->root_dir, path);
 
         if (unlink(full_path) < 0 && errno != ENOENT)
-            aept_msg(AEPT_DEBUG, "cannot remove '%s': %s\n",
-                     full_path, strerror(errno));
+            log_debug("cannot remove '%s': %s",
+                      full_path, strerror(errno));
 
         free(full_path);
     }
@@ -91,12 +91,12 @@ int aept_do_remove(const char *name)
 {
     int r;
 
-    aept_msg(AEPT_INFO, "removing %s\n", name);
+    log_info("removing %s", name);
 
     /* Run prerm */
     r = run_script(cfg->info_dir, name, "prerm", "remove");
     if (r != 0)
-        aept_msg(AEPT_NOTICE, "prerm failed for '%s', continuing\n", name);
+        log_warning("prerm failed for '%s', continuing", name);
 
     /* Remove files */
     remove_files(name);
@@ -104,7 +104,7 @@ int aept_do_remove(const char *name)
     /* Run postrm */
     r = run_script(cfg->info_dir, name, "postrm", "remove");
     if (r != 0)
-        aept_msg(AEPT_NOTICE, "postrm failed for '%s', continuing\n", name);
+        log_warning("postrm failed for '%s', continuing", name);
 
     /* Remove info files */
     remove_info_files(name);
@@ -112,7 +112,7 @@ int aept_do_remove(const char *name)
     /* Update status */
     status_remove(name);
 
-    aept_msg(AEPT_NOTICE, "removed %s\n", name);
+    log_info("removed %s", name);
 
     return 0;
 }
@@ -135,15 +135,15 @@ int aept_remove(const char **names, int count)
     if (r < 0) {
         if (!cfg->force_depends)
             goto out;
-        aept_msg(AEPT_NOTICE, "proceeding despite dependency errors "
-                 "(--force-depends)\n");
+        log_warning("proceeding despite dependency errors "
+                    "(--force-depends)");
     }
 
     trans = solver_transaction();
     pool = solver_pool();
 
     if (!trans || trans->steps.count == 0) {
-        aept_msg(AEPT_NOTICE, "nothing to do\n");
+        log_info("nothing to do");
         r = 0;
         goto out;
     }
@@ -165,7 +165,7 @@ int aept_remove(const char **names, int count)
     }
 
     if (cfg->noaction) {
-        aept_msg(AEPT_NOTICE, "dry run, not removing\n");
+        log_info("dry run, not removing");
         r = 0;
         goto out;
     }
