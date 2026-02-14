@@ -115,6 +115,11 @@ int main(int argc, char *argv[])
 
     config_apply_offline_root();
 
+    if (config_validate() < 0) {
+        config_free();
+        return 1;
+    }
+
     if (config_lock() < 0) {
         config_free();
         return 1;

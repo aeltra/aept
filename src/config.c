@@ -188,6 +188,46 @@ int config_load(const char *filename)
     return 0;
 }
 
+static int validate_dir(const char *name, const char *path)
+{
+    if (file_exists(path) && !file_is_dir(path)) {
+        log_error("'%s' (%s) exists but is not a directory", name, path);
+        return -1;
+    }
+    return 0;
+}
+
+int config_validate(void)
+{
+    int r = 0;
+
+    if (cfg->offline_root) {
+        if (!file_exists(cfg->offline_root)) {
+            log_error("offline_root '%s' does not exist",
+                      cfg->offline_root);
+            return -1;
+        }
+        if (!file_is_dir(cfg->offline_root)) {
+            log_error("offline_root '%s' is not a directory",
+                      cfg->offline_root);
+            return -1;
+        }
+    }
+
+    r |= validate_dir("info_dir", cfg->info_dir);
+    r |= validate_dir("lists_dir", cfg->lists_dir);
+    r |= validate_dir("cache_dir", cfg->cache_dir);
+    r |= validate_dir("tmp_dir", cfg->tmp_dir);
+    r |= validate_dir("usign_keydir", cfg->usign_keydir);
+
+    if (file_exists(cfg->usign_bin) && file_is_dir(cfg->usign_bin)) {
+        log_error("usign_bin '%s' is a directory", cfg->usign_bin);
+        r = -1;
+    }
+
+    return r;
+}
+
 void config_free(void)
 {
     int i;

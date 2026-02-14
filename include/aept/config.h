@@ -17,6 +17,9 @@ void config_apply_offline_root(void);
 /* Return path prefixed with offline_root if set. Caller must free. */
 char *config_root_path(const char *path);
 
+/* Validate config values (paths exist and have expected types). */
+int config_validate(void);
+
 /* Acquire/release exclusive lock to prevent concurrent aept instances. */
 int config_lock(void);
 void config_unlock(void);
