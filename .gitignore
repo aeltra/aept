@@ -1,0 +1,24 @@
+# Autotools generated files
+/aclocal.m4
+/autom4te.cache/
+/build-aux/
+/config.h.in
+/config.h.in~
+/configure
+/m4/*.m4
+Makefile.in
+
+# Build output (after ./configure && make)
+/config.h
+/config.log
+/config.status
+/stamp-h1
+Makefile
+.deps/
+*.o
+/src/aept
+
+# Distribution tarballs
+*.tar.gz
+*.tar.bz2
+*.tar.xz
