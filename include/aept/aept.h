@@ -1,4 +1,8 @@
-/* aept.h - global configuration and forward declarations */
+/* aept.h - global configuration and forward declarations
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef AEPT_H_7BF97F
 #define AEPT_H_7BF97F

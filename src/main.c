@@ -1,4 +1,8 @@
-/* main.c - CLI entry point */
+/* main.c - CLI entry point
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #include <getopt.h>
 #include <stdio.h>

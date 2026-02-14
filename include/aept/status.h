@@ -1,4 +1,8 @@
-/* status.h - installed package database */
+/* status.h - installed package database
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef STATUS_H_7BF97F
 #define STATUS_H_7BF97F

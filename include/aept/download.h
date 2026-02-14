@@ -1,4 +1,8 @@
-/* download.h - wget download wrapper */
+/* download.h - wget download wrapper
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef DOWNLOAD_H_7BF97F
 #define DOWNLOAD_H_7BF97F

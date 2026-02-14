@@ -1,4 +1,8 @@
-/* solver.c - libsolv integration */
+/* solver.c - libsolv integration
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #include <stdio.h>
 #include <stdlib.h>

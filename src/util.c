@@ -1,4 +1,11 @@
-/* util.c - utility functions */
+/* util.c - utility functions
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * Based in part on xsystem by Carl D. Worth,
+ *   Copyright (C) 2001 University of Southern California
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #include <config.h>
 

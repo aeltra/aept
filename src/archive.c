@@ -1,6 +1,9 @@
 /* archive.c - IPK archive extraction via libarchive
  *
- * Adapted from opkg (Copyright (C) 2014 Paul Barker, GPL-2.0-or-later).
+ * Copyright (C) 2014 Paul Barker (original opkg implementation)
+ * Copyright (C) 2026 Tobias Koch (adapted for aept)
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <config.h>

@@ -1,4 +1,8 @@
-/* solver.h - libsolv integration */
+/* solver.h - libsolv integration
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef SOLVER_H_7BF97F
 #define SOLVER_H_7BF97F

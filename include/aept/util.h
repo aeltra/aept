@@ -1,4 +1,8 @@
-/* util.h - utility functions */
+/* util.h - utility functions
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef UTIL_H_7BF97F
 #define UTIL_H_7BF97F

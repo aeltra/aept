@@ -1,4 +1,8 @@
-/* msg.c - logging */
+/* msg.c - logging
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #include <stdio.h>
 #include <stdarg.h>

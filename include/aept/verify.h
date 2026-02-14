@@ -1,4 +1,8 @@
-/* verify.h - usign signature verification */
+/* verify.h - usign signature verification
+ *
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #ifndef VERIFY_H_7BF97F
 #define VERIFY_H_7BF97F
