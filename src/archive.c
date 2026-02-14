@@ -130,6 +130,65 @@ err_cleanup:
     return -1;
 }
 
+/*
+ * Lexically normalize a path by resolving '.' and '..' components.
+ * Does not touch the filesystem. Caller must free the result.
+ */
+static char *path_normalize(const char *path)
+{
+    int is_abs = (path[0] == '/');
+    char *dup = xstrdup(path);
+    char *saveptr = NULL;
+    char *tok;
+
+    /* Collect resolved components on a stack */
+    size_t cap = 16;
+    size_t n = 0;
+    char **parts = xmalloc(cap * sizeof(char *));
+
+    for (tok = strtok_r(dup, "/", &saveptr); tok;
+         tok = strtok_r(NULL, "/", &saveptr)) {
+        if (strcmp(tok, ".") == 0)
+            continue;
+        if (strcmp(tok, "..") == 0) {
+            if (n > 0)
+                n--;
+            continue;
+        }
+        if (n == cap) {
+            cap *= 2;
+            parts = xrealloc(parts, cap * sizeof(char *));
+        }
+        parts[n++] = tok;
+    }
+
+    /* Calculate result length */
+    size_t len = is_abs ? 1 : 0;
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0)
+            len++;
+        len += strlen(parts[i]);
+    }
+
+    char *result = xmalloc(len + 1);
+    char *p = result;
+
+    if (is_abs)
+        *p++ = '/';
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0)
+            *p++ = '/';
+        size_t clen = strlen(parts[i]);
+        memcpy(p, parts[i], clen);
+        p += clen;
+    }
+    *p = '\0';
+
+    free(parts);
+    free(dup);
+    return result;
+}
+
 static char *join_paths(const char *left, const char *right)
 {
     char *path;
@@ -153,7 +212,24 @@ static char *join_paths(const char *left, const char *right)
         len--;
 
     xasprintf(&path, "%.*s/%s", (int)len, left, right);
-    return path;
+
+    char *normalized = path_normalize(path);
+    free(path);
+
+    char *norm_prefix = path_normalize(left);
+    size_t prefix_len = strlen(norm_prefix);
+
+    if (strncmp(normalized, norm_prefix, prefix_len) != 0 ||
+            (normalized[prefix_len] != '/' &&
+             normalized[prefix_len] != '\0')) {
+        log_error("path '%s' escapes extraction directory", right);
+        free(normalized);
+        free(norm_prefix);
+        return NULL;
+    }
+
+    free(norm_prefix);
+    return normalized;
 }
 
 static int transform_dest_path(struct archive_entry *entry, const char *dest)
@@ -660,7 +736,8 @@ struct aept_ar *ar_open_pkg_control_archive(const char *filename)
         return NULL;
     }
 
-    ar->extract_flags = 0;
+    ar->extract_flags = ARCHIVE_EXTRACT_SECURE_SYMLINKS |
+        ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
     return ar;
 }
@@ -695,7 +772,8 @@ struct aept_ar *ar_open_pkg_data_archive(const char *filename)
 
     ar->extract_flags = ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_PERM |
         ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_UNLINK |
-        ARCHIVE_EXTRACT_NO_OVERWRITE;
+        ARCHIVE_EXTRACT_NO_OVERWRITE | ARCHIVE_EXTRACT_SECURE_SYMLINKS |
+        ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
     if (cfg->ignore_uid)
         ar->extract_flags &= ~ARCHIVE_EXTRACT_OWNER;
