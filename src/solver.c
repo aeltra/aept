@@ -133,6 +133,12 @@ static int do_solve(Queue *job)
         return -1;
     }
 
+    solver_set_flag(solv, SOLVER_FLAG_ALLOW_UNINSTALL, 1);
+    solver_set_flag(solv, SOLVER_FLAG_ALLOW_ARCHCHANGE, 1);
+
+    if (cfg->allow_downgrade)
+        solver_set_flag(solv, SOLVER_FLAG_ALLOW_DOWNGRADE, 1);
+
     problems = solver_solve(solv, job);
     if (problems > 0) {
         log_error("dependency problems:");

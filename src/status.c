@@ -161,12 +161,10 @@ int status_add(const char *control_path)
     }
 
     /* Append new entry */
-    fprintf(dst, "Status: install ok installed\n");
-
     while (fgets(buf, sizeof(buf), src))
         fputs(buf, dst);
 
-    fprintf(dst, "\n");
+    fprintf(dst, "Status: install ok installed\n\n");
 
     fclose(src);
 

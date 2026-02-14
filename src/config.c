@@ -91,6 +91,9 @@ static void set_option(const char *key, const char *value)
     } else if (strcmp(key, "ignore_uid") == 0) {
         cfg->ignore_uid = atoi(value);
         return;
+    } else if (strcmp(key, "allow_downgrade") == 0) {
+        cfg->allow_downgrade = atoi(value);
+        return;
     } else {
         log_warning("unknown option '%s'", key);
         return;

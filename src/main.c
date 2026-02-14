@@ -41,7 +41,9 @@ static void usage(FILE *out)
         "  -d, --download-only   Only download, do not install\n"
         "  -n, --noaction        Dry run, show what would be done\n"
         "  -v, --verbose         Increase verbosity\n"
-        "  -h, --help            Show this help\n",
+        "  -h, --help            Show this help\n"
+        "\n"
+        "  --allow-downgrade     Allow package downgrades\n",
         DEFAULT_CONF
     );
 }
@@ -54,6 +56,7 @@ static struct option long_options[] = {
     {"noaction",      no_argument,       NULL, 'n'},
     {"verbose",       no_argument,       NULL, 'v'},
     {"help",          no_argument,       NULL, 'h'},
+    {"allow-downgrade", no_argument,     NULL, 0x100},
     {NULL, 0, NULL, 0}
 };
 
@@ -89,6 +92,9 @@ int main(int argc, char *argv[])
         case 'h':
             usage(stdout);
             return 0;
+        case 0x100:
+            cfg->allow_downgrade = 1;
+            break;
         default:
             usage(stderr);
             return 1;

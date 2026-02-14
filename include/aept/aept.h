@@ -32,6 +32,7 @@ typedef struct {
 
     int check_signature;    /* default 1 */
     int ignore_uid;         /* default 0 */
+    int allow_downgrade;
     int force_depends;
     int noaction;
     int download_only;
