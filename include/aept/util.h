@@ -10,6 +10,13 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+typedef struct {
+    char **paths;
+    int count;
+    int alloc;
+    int sorted;
+} aept_fileset_t;
+
 void *xmalloc(size_t size);
 void *xrealloc(void *ptr, size_t size);
 char *xstrdup(const char *s);
@@ -24,5 +31,11 @@ int file_mkdir_hier(const char *path, mode_t mode);
 
 int xsystem(const char *argv[]);
 int xsystem_offline_root(const char *argv[]);
+
+void fileset_init(aept_fileset_t *fs);
+void fileset_add(aept_fileset_t *fs, const char *path);
+void fileset_sort(aept_fileset_t *fs);
+int fileset_contains(const aept_fileset_t *fs, const char *path);
+void fileset_free(aept_fileset_t *fs);
 
 #endif

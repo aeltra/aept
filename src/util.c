@@ -282,6 +282,70 @@ error:
     return ret;
 }
 
+static const char *normalize_path(const char *path)
+{
+    while (path[0] == '.' && path[1] == '/')
+        path += 2;
+    while (path[0] == '/')
+        path++;
+    return path;
+}
+
+static int path_cmp(const void *a, const void *b)
+{
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
+void fileset_init(aept_fileset_t *fs)
+{
+    fs->paths = NULL;
+    fs->count = 0;
+    fs->alloc = 0;
+    fs->sorted = 0;
+}
+
+void fileset_add(aept_fileset_t *fs, const char *path)
+{
+    path = normalize_path(path);
+    if (path[0] == '\0')
+        return;
+
+    if (fs->count >= fs->alloc) {
+        fs->alloc = fs->alloc ? fs->alloc * 2 : 256;
+        fs->paths = xrealloc(fs->paths, fs->alloc * sizeof(char *));
+    }
+
+    fs->paths[fs->count++] = xstrdup(path);
+    fs->sorted = 0;
+}
+
+void fileset_sort(aept_fileset_t *fs)
+{
+    if (fs->sorted || fs->count <= 1)
+        return;
+    qsort(fs->paths, fs->count, sizeof(char *), path_cmp);
+    fs->sorted = 1;
+}
+
+int fileset_contains(const aept_fileset_t *fs, const char *path)
+{
+    path = normalize_path(path);
+    if (fs->count == 0 || path[0] == '\0')
+        return 0;
+    return bsearch(&path, fs->paths, fs->count, sizeof(char *),
+                   path_cmp) != NULL;
+}
+
+void fileset_free(aept_fileset_t *fs)
+{
+    int i;
+
+    for (i = 0; i < fs->count; i++)
+        free(fs->paths[i]);
+    free(fs->paths);
+    fileset_init(fs);
+}
+
 int xsystem_offline_root(const char *argv[])
 {
     int status;

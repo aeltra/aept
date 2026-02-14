@@ -23,7 +23,7 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-static int remove_files(const char *name)
+static int remove_files(const char *name, const aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -59,6 +59,9 @@ static int remove_files(const char *name)
         if (path[0] == '\0')
             continue;
 
+        if (protected && fileset_contains(protected, path))
+            continue;
+
         char *full_path = NULL;
         xasprintf(&full_path, "%s/%s",
                   cfg->offline_root ? cfg->offline_root : "", path);
@@ -89,7 +92,8 @@ static void remove_info_files(const char *name)
     }
 }
 
-int aept_do_remove(const char *name, const char *new_version)
+int aept_do_remove(const char *name, const char *new_version,
+                   const aept_fileset_t *protected)
 {
     char *script_args = NULL;
     int r;
@@ -111,7 +115,7 @@ int aept_do_remove(const char *name, const char *new_version)
         log_warning("prerm failed for '%s', continuing", name);
 
     /* Remove files */
-    remove_files(name);
+    remove_files(name, protected);
 
     /* Run postrm */
     r = run_script(cfg->info_dir, name, "postrm",
@@ -193,7 +197,7 @@ int aept_remove(const char **names, int count)
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
 
-        r = aept_do_remove(pkg_name, NULL);
+        r = aept_do_remove(pkg_name, NULL, NULL);
         if (r < 0 && !cfg->force_depends)
             goto out;
     }

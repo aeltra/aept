@@ -427,7 +427,12 @@ int aept_install(const char **names, int count)
         goto download_cleanup;
     }
 
-    /* Execute transaction */
+    /* Execute transaction — track installed files so that removals
+     * later in the same transaction don't delete them. */
+    aept_fileset_t installed_files;
+    int fileset_sorted = 0;
+    fileset_init(&installed_files);
+
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
@@ -440,6 +445,11 @@ int aept_install(const char **names, int count)
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
             const char *new_ver = NULL;
 
+            if (!fileset_sorted) {
+                fileset_sort(&installed_files);
+                fileset_sorted = 1;
+            }
+
             if (type == SOLVER_TRANSACTION_UPGRADED ||
                     type == SOLVER_TRANSACTION_DOWNGRADED) {
                 Id op = transaction_obs_pkg(trans, p);
@@ -449,9 +459,9 @@ int aept_install(const char **names, int count)
                 }
             }
 
-            r = aept_do_remove(pkg_name, new_ver);
+            r = aept_do_remove(pkg_name, new_ver, &installed_files);
             if (r < 0 && !cfg->force_depends)
-                goto download_cleanup;
+                goto fileset_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
             if (!ipk_paths[i])
                 continue;
@@ -469,9 +479,42 @@ int aept_install(const char **names, int count)
 
             r = do_install_package(ipk_paths[i], pool, p, old_ver);
             if (r < 0)
-                goto download_cleanup;
+                goto fileset_cleanup;
+
+            /* Record installed files for removal protection */
+            {
+                char *list_path = NULL;
+                FILE *lfp;
+                char lbuf[4096];
+
+                xasprintf(&list_path, "%s/%s.list", cfg->info_dir, pkg_name);
+                lfp = fopen(list_path, "r");
+                free(list_path);
+
+                if (lfp) {
+                    while (fgets(lbuf, sizeof(lbuf), lfp)) {
+                        char *tab;
+                        lbuf[strcspn(lbuf, "\n")] = '\0';
+                        tab = strchr(lbuf, '\t');
+                        if (tab)
+                            *tab = '\0';
+                        fileset_add(&installed_files, lbuf);
+                    }
+                    fclose(lfp);
+                    fileset_sorted = 0;
+                }
+            }
         }
     }
+
+    goto fileset_cleanup_ok;
+
+fileset_cleanup:
+    fileset_free(&installed_files);
+    goto download_cleanup;
+
+fileset_cleanup_ok:
+    fileset_free(&installed_files);
 
     r = 0;
 
