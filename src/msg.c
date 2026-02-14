@@ -29,29 +29,32 @@ static const char *level_color[] = {
 
 void aept_log_init(void)
 {
-    use_color = isatty(STDERR_FILENO);
+    use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
 }
 
 void aept_log(int level, const char *file, int line, const char *fmt, ...)
 {
     va_list ap;
+    FILE *out;
 
     if (cfg && level > cfg->verbosity)
         return;
 
+    out = (level <= AEPT_WARNING) ? stderr : stdout;
+
     if (use_color) {
-        fprintf(stderr, "\033[1maept\033[0m: %s\033[1m%s\033[0m: ",
+        fprintf(out, "\033[1maept\033[0m: %s\033[1m%s\033[0m: ",
                 level_color[level], level_name[level]);
     } else {
-        fprintf(stderr, "aept: %s: ", level_name[level]);
+        fprintf(out, "aept: %s: ", level_name[level]);
     }
 
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    vfprintf(out, fmt, ap);
     va_end(ap);
 
     if (level == AEPT_DEBUG && file)
-        fprintf(stderr, " (%s:%d)", file, line);
+        fprintf(out, " (%s:%d)", file, line);
 
-    fputc('\n', stderr);
+    fputc('\n', out);
 }
