@@ -81,7 +81,7 @@ static void usage_main(FILE *out)
         "  remove <pkgs...>    Remove packages\n"
         "  upgrade             Upgrade all installed packages\n"
         "  clean               Remove cached package files\n"
-        "  search <path>       Find which package owns a file\n"
+        "  owns <path>         Find which package owns a file\n"
         "  print-architecture  Show configured architectures\n"
         "\n"
         "Run 'aept <command> --help' for command-specific options.\n",
@@ -166,10 +166,10 @@ static void usage_clean(FILE *out)
     );
 }
 
-static void usage_search(FILE *out)
+static void usage_owns(FILE *out)
 {
     fprintf(out,
-        "Usage: aept search [options] <path>\n"
+        "Usage: aept owns [options] <path>\n"
         "\n"
         "Find which installed package owns a file.\n"
         "\n"
@@ -225,7 +225,7 @@ static struct option clean_options[] = {
     {NULL, 0, NULL, 0}
 };
 
-static struct option search_options[] = {
+static struct option owns_options[] = {
     {"offline-root", required_argument, NULL, 'o'},
     {"help",         no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -370,22 +370,22 @@ static int cmd_clean(int argc, char *argv[])
     return r;
 }
 
-static int cmd_search(int argc, char *argv[])
+static int cmd_owns(int argc, char *argv[])
 {
     const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", search_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "o:h", owns_options, NULL)) != -1) {
         switch (opt) {
         case 'o': offline_root = optarg; break;
-        case 'h': usage_search(stdout); return 0;
-        default:  usage_search(stderr); return 1;
+        case 'h': usage_owns(stdout); return 0;
+        default:  usage_owns(stderr); return 1;
         }
     }
 
     if (optind >= argc) {
-        log_error("search requires a file path");
+        log_error("owns requires a file path");
         return 1;
     }
 
@@ -402,7 +402,7 @@ static int cmd_search(int argc, char *argv[])
 
     config_apply_offline_root();
 
-    r = aept_search(argv[optind]);
+    r = aept_owns(argv[optind]);
     config_free();
     return r;
 }
@@ -472,8 +472,8 @@ int main(int argc, char *argv[])
         return cmd_upgrade(argc - optind, argv + optind);
     if (strcmp(command, "clean") == 0)
         return cmd_clean(argc - optind, argv + optind);
-    if (strcmp(command, "search") == 0)
-        return cmd_search(argc - optind, argv + optind);
+    if (strcmp(command, "owns") == 0)
+        return cmd_owns(argc - optind, argv + optind);
     if (strcmp(command, "print-architecture") == 0)
         return cmd_print_architecture(argc - optind, argv + optind);
 

@@ -7,9 +7,9 @@
 #ifndef QUERY_H_7BF97F
 #define QUERY_H_7BF97F
 
-/* Search which installed package owns a file path.
+/* Find which installed package owns a file path.
  * Prints the package name to stdout. Returns 0 if found, 1 if not. */
-int aept_search(const char *path);
+int aept_owns(const char *path);
 
 /* Print configured architectures (one per line).
  * Returns 0 on success. */

@@ -33,7 +33,7 @@ static size_t path_len(const char *p)
     return len;
 }
 
-int aept_search(const char *path)
+int aept_owns(const char *path)
 {
     DIR *dir;
     struct dirent *ent;
@@ -42,7 +42,7 @@ int aept_search(const char *path)
     int found = 0;
 
     if (*path == '\0') {
-        log_error("empty search path");
+        log_error("empty file path");
         return 1;
     }
     needle = strip_leading(path);
