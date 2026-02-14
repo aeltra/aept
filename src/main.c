@@ -16,6 +16,7 @@
 #include "aept/config.h"
 #include "aept/install.h"
 #include "aept/msg.h"
+#include "aept/query.h"
 #include "aept/remove.h"
 #include "aept/update.h"
 #include "aept/util.h"
@@ -80,6 +81,8 @@ static void usage_main(FILE *out)
         "  remove <pkgs...>    Remove packages\n"
         "  upgrade             Upgrade all installed packages\n"
         "  clean               Remove cached package files\n"
+        "  search <path>       Find which package owns a file\n"
+        "  print-architecture  Show configured architectures\n"
         "\n"
         "Run 'aept <command> --help' for command-specific options.\n",
         DEFAULT_CONF
@@ -163,6 +166,31 @@ static void usage_clean(FILE *out)
     );
 }
 
+static void usage_search(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept search [options] <path>\n"
+        "\n"
+        "Find which installed package owns a file.\n"
+        "\n"
+        "Options:\n"
+        "  -o, --offline-root <dir>  Use an offline root directory\n"
+        "  -h, --help                Show this help\n"
+    );
+}
+
+static void usage_print_architecture(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept print-architecture [options]\n"
+        "\n"
+        "Show configured architectures.\n"
+        "\n"
+        "Options:\n"
+        "  -h, --help  Show this help\n"
+    );
+}
+
 /* ── per-command option tables ─────────────────────────────────────── */
 
 static struct option update_options[] = {
@@ -194,6 +222,17 @@ static struct option remove_options[] = {
 static struct option clean_options[] = {
     {"offline-root", required_argument, NULL, 'o'},
     {"help",         no_argument,       NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option search_options[] = {
+    {"offline-root", required_argument, NULL, 'o'},
+    {"help",         no_argument,       NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option print_arch_options[] = {
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
@@ -331,6 +370,66 @@ static int cmd_clean(int argc, char *argv[])
     return r;
 }
 
+static int cmd_search(int argc, char *argv[])
+{
+    const char *offline_root = NULL;
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "o:h", search_options, NULL)) != -1) {
+        switch (opt) {
+        case 'o': offline_root = optarg; break;
+        case 'h': usage_search(stdout); return 0;
+        default:  usage_search(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        log_error("search requires a file path");
+        return 1;
+    }
+
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
+        return 1;
+    }
+
+    if (offline_root) {
+        free(cfg->offline_root);
+        cfg->offline_root = xstrdup(offline_root);
+    }
+
+    config_apply_offline_root();
+
+    r = aept_search(argv[optind]);
+    config_free();
+    return r;
+}
+
+static int cmd_print_architecture(int argc, char *argv[])
+{
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h': usage_print_architecture(stdout); return 0;
+        default:  usage_print_architecture(stderr); return 1;
+        }
+    }
+
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
+        return 1;
+    }
+
+    r = aept_print_architecture();
+    config_free();
+    return r;
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 static struct option global_options[] = {
@@ -373,6 +472,10 @@ int main(int argc, char *argv[])
         return cmd_upgrade(argc - optind, argv + optind);
     if (strcmp(command, "clean") == 0)
         return cmd_clean(argc - optind, argv + optind);
+    if (strcmp(command, "search") == 0)
+        return cmd_search(argc - optind, argv + optind);
+    if (strcmp(command, "print-architecture") == 0)
+        return cmd_print_architecture(argc - optind, argv + optind);
 
     log_error("unknown command '%s'", command);
     usage_main(stderr);
