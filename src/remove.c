@@ -1,0 +1,191 @@
+/* remove.c - remove orchestration */
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <solv/pool.h>
+#include <solv/solvable.h>
+#include <solv/transaction.h>
+
+#include "aept/aept.h"
+#include "aept/msg.h"
+#include "aept/remove.h"
+#include "aept/script.h"
+#include "aept/solver.h"
+#include "aept/status.h"
+#include "aept/util.h"
+
+static int remove_files(const char *name)
+{
+    char *list_path = NULL;
+    FILE *fp;
+    char buf[4096];
+
+    xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
+
+    fp = fopen(list_path, "r");
+    free(list_path);
+
+    if (!fp)
+        return 0;
+
+    while (fgets(buf, sizeof(buf), fp)) {
+        char *path;
+        char *tab;
+
+        /* Format: path\tmode[\tsymlink_target]\n */
+        buf[strcspn(buf, "\n")] = '\0';
+
+        tab = strchr(buf, '\t');
+        if (tab)
+            *tab = '\0';
+
+        path = buf;
+
+        /* Skip leading ./ */
+        while (path[0] == '.' && path[1] == '/')
+            path += 2;
+        while (path[0] == '/')
+            path++;
+
+        if (path[0] == '\0')
+            continue;
+
+        char *full_path = NULL;
+        xasprintf(&full_path, "%s%s", cfg->root_dir, path);
+
+        if (unlink(full_path) < 0 && errno != ENOENT)
+            aept_msg(AEPT_DEBUG, "cannot remove '%s': %s\n",
+                     full_path, strerror(errno));
+
+        free(full_path);
+    }
+
+    fclose(fp);
+
+    return 0;
+}
+
+static void remove_info_files(const char *name)
+{
+    const char *exts[] = {
+        "list", "control", "preinst", "postinst", "prerm", "postrm", NULL
+    };
+
+    for (int i = 0; exts[i]; i++) {
+        char *path = NULL;
+        xasprintf(&path, "%s/%s.%s", cfg->info_dir, name, exts[i]);
+        unlink(path);
+        free(path);
+    }
+}
+
+int aept_do_remove(const char *name)
+{
+    int r;
+
+    aept_msg(AEPT_INFO, "removing %s\n", name);
+
+    /* Run prerm */
+    r = run_script(cfg->info_dir, name, "prerm", "remove");
+    if (r != 0)
+        aept_msg(AEPT_NOTICE, "prerm failed for '%s', continuing\n", name);
+
+    /* Remove files */
+    remove_files(name);
+
+    /* Run postrm */
+    r = run_script(cfg->info_dir, name, "postrm", "remove");
+    if (r != 0)
+        aept_msg(AEPT_NOTICE, "postrm failed for '%s', continuing\n", name);
+
+    /* Remove info files */
+    remove_info_files(name);
+
+    /* Update status */
+    status_remove(name);
+
+    aept_msg(AEPT_NOTICE, "removed %s\n", name);
+
+    return 0;
+}
+
+int aept_remove(const char **names, int count)
+{
+    Transaction *trans;
+    Pool *pool;
+    int i, r;
+
+    r = solver_init();
+    if (r < 0)
+        return -1;
+
+    r = status_load();
+    if (r < 0)
+        goto out;
+
+    r = solver_resolve_remove(names, count);
+    if (r < 0) {
+        if (!cfg->force_depends)
+            goto out;
+        aept_msg(AEPT_NOTICE, "proceeding despite dependency errors "
+                 "(--force-depends)\n");
+    }
+
+    trans = solver_transaction();
+    pool = solver_pool();
+
+    if (!trans || trans->steps.count == 0) {
+        aept_msg(AEPT_NOTICE, "nothing to do\n");
+        r = 0;
+        goto out;
+    }
+
+    for (i = 0; i < trans->steps.count; i++) {
+        Id p = trans->steps.elements[i];
+        int type = transaction_type(trans, p,
+            SOLVER_TRANSACTION_SHOW_ACTIVE |
+            SOLVER_TRANSACTION_SHOW_ALL);
+
+        if ((type & 0xf0) != SOLVER_TRANSACTION_ERASE)
+            continue;
+
+        Solvable *s = pool_id2solvable(pool, p);
+        const char *pkg_name = pool_id2str(pool, s->name);
+        const char *evr = pool_id2str(pool, s->evr);
+
+        fprintf(stderr, "  remove %s %s\n", pkg_name, evr);
+    }
+
+    if (cfg->noaction) {
+        aept_msg(AEPT_NOTICE, "dry run, not removing\n");
+        r = 0;
+        goto out;
+    }
+
+    for (i = 0; i < trans->steps.count; i++) {
+        Id p = trans->steps.elements[i];
+        int type = transaction_type(trans, p,
+            SOLVER_TRANSACTION_SHOW_ACTIVE |
+            SOLVER_TRANSACTION_SHOW_ALL);
+
+        if ((type & 0xf0) != SOLVER_TRANSACTION_ERASE)
+            continue;
+
+        Solvable *s = pool_id2solvable(pool, p);
+        const char *pkg_name = pool_id2str(pool, s->name);
+
+        r = aept_do_remove(pkg_name);
+        if (r < 0 && !cfg->force_depends)
+            goto out;
+    }
+
+    r = 0;
+
+out:
+    solver_fini();
+    return r;
+}

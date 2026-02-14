@@ -1,0 +1,21 @@
+/* script.h - maintainer script execution */
+
+#ifndef SCRIPT_H_7BF97F
+#define SCRIPT_H_7BF97F
+
+/* Run a maintainer script.
+ *
+ * script_dir: directory containing the script
+ * pkg_name: package name (NULL if script has no pkg prefix)
+ * script: "preinst", "postinst", "prerm", "postrm"
+ * args: arguments passed to the script (e.g. "install", "configure")
+ *
+ * If pkg_name is non-NULL, looks for {script_dir}/{pkg_name}.{script}.
+ * If pkg_name is NULL, looks for {script_dir}/{script}.
+ *
+ * Returns 0 on success, script exit code on failure,
+ * 0 if script does not exist. */
+int run_script(const char *script_dir, const char *pkg_name,
+               const char *script, const char *args);
+
+#endif
