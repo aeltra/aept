@@ -49,10 +49,10 @@ verification is performed by usign.
 
 *-o*, *--offline-root* <dir>
 	Install packages into _dir_ instead of the filesystem root. All state
-	paths (lists, cache, info, status, lock, key directory) are automatically
-	prefixed with _dir_. Scripts are executed in a chroot via user namespaces
-	(see *OFFLINE ROOT*). This option overrides both the _offline_root_
-	config option and the *OFFLINE_ROOT* environment variable.
+	paths (lists, cache, info, status, lock) are automatically prefixed with
+	_dir_. Scripts are executed in a chroot via user namespaces (see *OFFLINE
+	ROOT*). This option overrides both the _offline_root_ config option and
+	the *OFFLINE_ROOT* environment variable.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -66,6 +66,9 @@ verification is performed by usign.
 
 *-v*, *--verbose*
 	Increase verbosity. Can be specified multiple times.
+
+*--allow-downgrade*
+	Allow the solver to downgrade installed packages.
 
 *-h*, *--help*
 	Show usage summary and exit.
@@ -138,6 +141,9 @@ The following keys are recognized:
 |  ignore_uid
 :  0
 :  Set to 1 to skip the root/UID check
+|  allow_downgrade
+:  0
+:  Set to 1 to allow package downgrades
 
 ## Example configuration
 
@@ -158,8 +164,9 @@ option check_signature 1
 # OFFLINE ROOT
 
 When an offline root is set (via *--offline-root*, the *offline_root* config
-option, or the *OFFLINE_ROOT* environment variable), all state directories are
-automatically prefixed with the offline root path.
+option, or the *OFFLINE_ROOT* environment variable), all state directories
+(lists, cache, info, status, lock) are automatically prefixed with the offline
+root path.
 
 Maintainer scripts are executed inside the offline root using
 *unshare*(2) with *CLONE_NEWUSER* to set up a user namespace. UID and GID
@@ -169,6 +176,27 @@ chroots into the offline root directory.
 
 This allows non-root users to build root filesystems or install packages into
 an alternate directory tree.
+
+# MAINTAINER SCRIPTS
+
+Maintainer scripts receive Debian-style arguments indicating the action being
+performed:
+
+*preinst* install++
+*postinst* configure
+	Fresh installation.
+
+*preinst* upgrade <old-version>++
+*postinst* configure <old-version>
+	Upgrade from _old-version_.
+
+*prerm* remove++
+*postrm* remove
+	Pure removal.
+
+*prerm* upgrade <new-version>++
+*postrm* upgrade <new-version>
+	Removal of old version during upgrade to _new-version_.
 
 # FILES
 
@@ -203,10 +231,6 @@ _/var/lib/aept/lock_
 *OFFLINE_ROOT*
 	If set and no *--offline-root* option or _offline_root_ config option is
 	given, use this as the offline root directory.
-
-*PKG_ROOT*
-	Set by *aept* when executing maintainer scripts. Contains the effective
-	root directory path.
 
 # EXIT STATUS
 
