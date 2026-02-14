@@ -5,6 +5,7 @@
 /config.h.in
 /config.h.in~
 /configure
+/configure~
 /m4/*.m4
 Makefile.in
 
