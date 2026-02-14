@@ -37,6 +37,9 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     va_list ap;
     FILE *out;
 
+    if (level < 0 || level > AEPT_DEBUG)
+        return;
+
     if (cfg && level > cfg->verbosity)
         return;
 

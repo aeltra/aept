@@ -12,6 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <solv/chksum.h>
+#include <solv/knownid.h>
 #include <solv/pool.h>
 #include <solv/solvable.h>
 #include <solv/transaction.h>
@@ -93,6 +95,59 @@ static int display_transaction(Transaction *trans, Pool *pool)
     return 0;
 }
 
+static int verify_checksum(const char *path, Pool *pool, Solvable *s)
+{
+    Id checksum_type;
+    const unsigned char *expected;
+    Chksum *chk;
+    FILE *fp;
+    char buf[4096];
+    size_t n;
+    const unsigned char *computed;
+    int len;
+    const char *name = pool_id2str(pool, s->name);
+
+    expected = solvable_lookup_bin_checksum(s, SOLVABLE_CHECKSUM,
+                                            &checksum_type);
+    if (!expected) {
+        log_warning("no checksum for '%s', skipping verification", name);
+        return 0;
+    }
+
+    chk = solv_chksum_create(checksum_type);
+    if (!chk) {
+        log_error("unsupported checksum type for '%s'", name);
+        return -1;
+    }
+
+    fp = fopen(path, "rb");
+    if (!fp) {
+        log_error("cannot open '%s' for checksum verification: %s",
+                  path, strerror(errno));
+        solv_chksum_free(chk, NULL);
+        return -1;
+    }
+
+    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0)
+        solv_chksum_add(chk, buf, (int)n);
+
+    fclose(fp);
+
+    computed = solv_chksum_get(chk, &len);
+
+    if (len != solv_chksum_len(checksum_type) ||
+            memcmp(computed, expected, len) != 0) {
+        log_error("%s checksum mismatch for '%s'",
+                  solv_chksum_type2str(checksum_type), name);
+        solv_chksum_free(chk, NULL);
+        unlink(path);
+        return -1;
+    }
+
+    solv_chksum_free(chk, NULL);
+    return 0;
+}
+
 static int download_package(Id p, Pool *pool, char **dest_out)
 {
     Solvable *s = pool_id2solvable(pool, p);
@@ -130,6 +185,12 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     r = aept_download(url, dest);
     free(url);
 
+    if (r < 0) {
+        free(dest);
+        return -1;
+    }
+
+    r = verify_checksum(dest, pool, s);
     if (r < 0) {
         free(dest);
         return -1;

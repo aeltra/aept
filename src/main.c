@@ -115,6 +115,11 @@ int main(int argc, char *argv[])
 
     config_apply_offline_root();
 
+    if (config_lock() < 0) {
+        config_free();
+        return 1;
+    }
+
     if (strcmp(command, "update") == 0) {
         r = aept_update();
     } else if (strcmp(command, "install") == 0) {
@@ -141,6 +146,7 @@ int main(int argc, char *argv[])
         r = 1;
     }
 
+    config_unlock();
     config_free();
 
     return r ? 1 : 0;

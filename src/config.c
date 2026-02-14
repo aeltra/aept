@@ -6,9 +6,12 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
+#include <unistd.h>
 
 #include "aept/aept.h"
 #include "aept/config.h"
@@ -218,4 +221,40 @@ char *config_root_path(const char *path)
     xasprintf(&result, "%s%s",
               cfg->offline_root ? cfg->offline_root : "", path);
     return result;
+}
+
+static int lock_fd = -1;
+
+int config_lock(void)
+{
+    file_mkdir_hier(cfg->lock_file, 0755);
+
+    lock_fd = open(cfg->lock_file, O_CREAT | O_RDWR, 0644);
+    if (lock_fd < 0) {
+        log_error("cannot open lock file '%s': %s",
+                  cfg->lock_file, strerror(errno));
+        return -1;
+    }
+
+    if (flock(lock_fd, LOCK_EX | LOCK_NB) < 0) {
+        if (errno == EWOULDBLOCK)
+            log_error("another aept instance is running");
+        else
+            log_error("cannot lock '%s': %s",
+                      cfg->lock_file, strerror(errno));
+        close(lock_fd);
+        lock_fd = -1;
+        return -1;
+    }
+
+    return 0;
+}
+
+void config_unlock(void)
+{
+    if (lock_fd >= 0) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        lock_fd = -1;
+    }
 }

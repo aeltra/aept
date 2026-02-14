@@ -84,7 +84,7 @@ int pkg_name_is_safe(const char *name)
 int file_exists(const char *path)
 {
     struct stat st;
-    return stat(path, &st) == 0;
+    return lstat(path, &st) == 0;
 }
 
 int file_is_dir(const char *path)
