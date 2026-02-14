@@ -7,6 +7,7 @@
 #ifndef AEPT_CONFIG_H_7BF97F
 #define AEPT_CONFIG_H_7BF97F
 
+void config_set_defaults(void);
 int config_load(const char *filename);
 void config_free(void);
 

@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "aept/aept.h"
 #include "aept/clean.h"
@@ -21,13 +23,18 @@
 #define DEFAULT_CONF "/etc/aept/aept.conf"
 
 static const char *conf_file = DEFAULT_CONF;
+static int conf_explicit;
 
 /* ── shared config helpers ─────────────────────────────────────────── */
 
 static int setup_config(const char *offline_root)
 {
-    if (config_load(conf_file) < 0)
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        log_warning("config file '%s' not found, using defaults", conf_file);
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
         return -1;
+    }
 
     if (offline_root) {
         free(cfg->offline_root);
@@ -342,7 +349,7 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt_long(argc, argv, "+c:vh", global_options, NULL)) != -1) {
         switch (opt) {
-        case 'c': conf_file = optarg; break;
+        case 'c': conf_file = optarg; conf_explicit = 1; break;
         case 'v': cfg->verbosity++; break;
         case 'h': usage_main(stdout); return 0;
         default:  usage_main(stderr); return 1;

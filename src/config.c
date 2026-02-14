@@ -22,7 +22,7 @@
 static aept_config_t _cfg;
 aept_config_t *cfg = &_cfg;
 
-static void config_set_defaults(void)
+void config_set_defaults(void)
 {
     memset(cfg, 0, sizeof(*cfg));
 
