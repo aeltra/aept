@@ -168,7 +168,7 @@ int aept_remove(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
         const char *evr = pool_id2str(pool, s->evr);
 
-        fprintf(stderr, "  remove %s %s\n", pkg_name, evr);
+        printf("  remove %s %s\n", pkg_name, evr);
     }
 
     if (cfg->noaction) {

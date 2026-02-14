@@ -77,10 +77,10 @@ static int display_transaction(Transaction *trans, Pool *pool)
         const char *evr = pool_id2str(pool, s->evr);
 
         if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
-            fprintf(stderr, "  install %s %s\n", name, evr);
+            printf("  install %s %s\n", name, evr);
             n_install++;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            fprintf(stderr, "  remove  %s %s\n", name, evr);
+            printf("  remove  %s %s\n", name, evr);
             n_erase++;
         }
     }
@@ -90,7 +90,7 @@ static int display_transaction(Transaction *trans, Pool *pool)
         return 1;
     }
 
-    fprintf(stderr, "\n%d to install, %d to remove\n", n_install, n_erase);
+    printf("\n%d to install, %d to remove\n", n_install, n_erase);
 
     return 0;
 }

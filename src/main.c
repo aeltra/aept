@@ -20,9 +20,9 @@
 
 #define DEFAULT_CONF "/etc/aept/aept.conf"
 
-static void usage(void)
+static void usage(FILE *out)
 {
-    fprintf(stderr,
+    fprintf(out,
         "Usage: aept <command> [options] [packages...]\n"
         "\n"
         "Commands:\n"
@@ -87,16 +87,16 @@ int main(int argc, char *argv[])
             cfg->verbosity++;
             break;
         case 'h':
-            usage();
+            usage(stdout);
             return 0;
         default:
-            usage();
+            usage(stderr);
             return 1;
         }
     }
 
     if (optind >= argc) {
-        usage();
+        usage(stderr);
         return 1;
     }
 
@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
         r = aept_clean();
     } else {
         log_error("unknown command '%s'", command);
-        usage();
+        usage(stderr);
         r = 1;
     }
 
