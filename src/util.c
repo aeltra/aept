@@ -72,6 +72,15 @@ int xasprintf(char **strp, const char *fmt, ...)
     return r;
 }
 
+int pkg_name_is_safe(const char *name)
+{
+    if (!name || name[0] == '\0' || name[0] == '.')
+        return 0;
+    if (strchr(name, '/'))
+        return 0;
+    return 1;
+}
+
 int file_exists(const char *path)
 {
     struct stat st;
@@ -119,7 +128,7 @@ int file_copy(const char *src, const char *dst)
     return 0;
 }
 
-int file_mkdir_hier(const char *path, int mode)
+int file_mkdir_hier(const char *path, mode_t mode)
 {
     char *p, *dir;
     int r;
@@ -279,11 +288,11 @@ int xsystem_offline_root(const char *argv[])
     pid_t pid;
     int r;
 
-    pid = vfork();
+    pid = fork();
 
     switch (pid) {
     case -1:
-        log_error("%s: vfork: %s", argv[0], strerror(errno));
+        log_error("%s: fork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
         if (cfg->offline_root) {

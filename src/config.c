@@ -37,6 +37,11 @@ static void config_set_defaults(void)
 
 static void add_source(const char *name, const char *url, int gzip)
 {
+    if (!pkg_name_is_safe(name)) {
+        log_warning("ignoring source with unsafe name '%s'", name);
+        return;
+    }
+
     cfg->nsources++;
     cfg->sources = xrealloc(cfg->sources,
                             cfg->nsources * sizeof(aept_source_t));
@@ -94,10 +99,6 @@ static void set_option(const char *key, const char *value)
 void config_apply_offline_root(void)
 {
     char *tmp;
-
-    if (!cfg->offline_root)
-        cfg->offline_root = getenv("OFFLINE_ROOT")
-            ? xstrdup(getenv("OFFLINE_ROOT")) : NULL;
 
     if (!cfg->offline_root)
         return;

@@ -93,6 +93,11 @@ int aept_do_remove(const char *name)
 {
     int r;
 
+    if (!pkg_name_is_safe(name)) {
+        log_error("refusing to remove package with unsafe name '%s'", name);
+        return -1;
+    }
+
     log_info("removing %s", name);
 
     /* Run prerm */

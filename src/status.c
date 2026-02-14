@@ -131,7 +131,8 @@ int status_write(void)
 
 int status_add(const char *control_path)
 {
-    FILE *src, *dst;
+    FILE *src, *old, *dst;
+    char *tmp_path = NULL;
     char buf[4096];
 
     src = fopen(control_path, "r");
@@ -141,14 +142,25 @@ int status_add(const char *control_path)
         return -1;
     }
 
-    dst = fopen(cfg->status_file, "a");
+    xasprintf(&tmp_path, "%s.tmp", cfg->status_file);
+    dst = fopen(tmp_path, "w");
     if (!dst) {
         log_error("cannot open status file '%s': %s",
-                  cfg->status_file, strerror(errno));
+                  tmp_path, strerror(errno));
         fclose(src);
+        free(tmp_path);
         return -1;
     }
 
+    /* Copy existing status file */
+    old = fopen(cfg->status_file, "r");
+    if (old) {
+        while (fgets(buf, sizeof(buf), old))
+            fputs(buf, dst);
+        fclose(old);
+    }
+
+    /* Append new entry */
     fprintf(dst, "Status: install ok installed\n");
 
     while (fgets(buf, sizeof(buf), src))
@@ -159,11 +171,20 @@ int status_add(const char *control_path)
     fclose(src);
 
     if (ferror(dst) || fclose(dst) != 0) {
-        log_error("failed to write status file '%s'",
-                  cfg->status_file);
+        log_error("failed to write status file '%s'", tmp_path);
+        unlink(tmp_path);
+        free(tmp_path);
         return -1;
     }
 
+    if (rename(tmp_path, cfg->status_file) < 0) {
+        log_error("cannot rename status file: %s", strerror(errno));
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
+    free(tmp_path);
     return 0;
 }
 

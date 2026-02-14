@@ -145,14 +145,22 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     const char *name = pool_id2str(pool, s->name);
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
-    char tmpdir[] = "/tmp/aept-XXXXXX";
+    char *tmpdir = NULL;
+
+    if (!pkg_name_is_safe(name)) {
+        log_error("refusing to install package with unsafe name '%s'", name);
+        return -1;
+    }
     char *ctrl_path = NULL;
     char *list_path = NULL;
     int r = -1;
 
+    xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
+
     if (!mkdtemp(tmpdir)) {
         log_error("failed to create temp directory: %s",
                   strerror(errno));
+        free(tmpdir);
         return -1;
     }
 
@@ -262,13 +270,11 @@ cleanup:
 
     /* Clean up tmpdir */
     {
-        char *rm_cmd = NULL;
-        xasprintf(&rm_cmd, "rm -rf %s", tmpdir);
-        const char *rm_argv[] = {"/bin/sh", "-c", rm_cmd, NULL};
+        const char *rm_argv[] = {"rm", "-rf", tmpdir, NULL};
         xsystem(rm_argv);
-        free(rm_cmd);
     }
 
+    free(tmpdir);
     return r;
 }
 
