@@ -202,7 +202,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
         FILE *list_fp = fopen(list_path, "w");
         if (list_fp) {
             ar_extract_paths_to_stream(data_ar, list_fp);
-            fclose(list_fp);
+            if (ferror(list_fp) || fclose(list_fp) != 0)
+                log_warning("failed to write file list '%s'", list_path);
         }
         ar_close(data_ar);
         data_ar = NULL;
@@ -213,7 +214,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     if (file_exists(ctrl_path)) {
         char *dest = NULL;
         xasprintf(&dest, "%s/%s.control", cfg->info_dir, name);
-        rename(ctrl_path, dest);
+        if (rename(ctrl_path, dest) < 0 && file_copy(ctrl_path, dest) < 0)
+            log_warning("failed to install control file for '%s'", name);
         free(dest);
     }
     free(ctrl_path);
@@ -225,7 +227,9 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
         xasprintf(&src, "%s/%s", tmpdir, scripts[i]);
         if (file_exists(src)) {
             xasprintf(&dst, "%s/%s.%s", cfg->info_dir, name, scripts[i]);
-            rename(src, dst);
+            if (rename(src, dst) < 0 && file_copy(src, dst) < 0)
+                log_warning("failed to install %s script for '%s'",
+                            scripts[i], name);
             free(dst);
         }
         free(src);

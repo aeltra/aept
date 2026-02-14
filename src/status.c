@@ -62,6 +62,8 @@ int status_write(void)
         return -1;
     }
 
+    int write_err = 0;
+
     FOR_REPO_SOLVABLES(pool->installed, p, s) {
         const char *name = pool_id2str(pool, s->name);
         const char *evr = pool_id2str(pool, s->evr);
@@ -99,9 +101,22 @@ int status_write(void)
             fprintf(fp, "Description: %s\n", desc);
 
         fprintf(fp, "\n");
+
+        if (ferror(fp)) {
+            write_err = 1;
+            break;
+        }
     }
 
-    fclose(fp);
+    if (fclose(fp) != 0)
+        write_err = 1;
+
+    if (write_err) {
+        log_error("failed to write status file '%s'", tmp_path);
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
 
     if (rename(tmp_path, cfg->status_file) < 0) {
         log_error("cannot rename status file: %s", strerror(errno));
@@ -142,7 +157,12 @@ int status_add(const char *control_path)
     fprintf(dst, "\n");
 
     fclose(src);
-    fclose(dst);
+
+    if (ferror(dst) || fclose(dst) != 0) {
+        log_error("failed to write status file '%s'",
+                  cfg->status_file);
+        return -1;
+    }
 
     return 0;
 }
@@ -181,10 +201,21 @@ int status_remove(const char *name)
     }
 
     fclose(fp);
-    fclose(tmp);
 
-    rename(tmp_path, cfg->status_file);
+    if (ferror(tmp) || fclose(tmp) != 0) {
+        log_error("failed to write status file '%s'", tmp_path);
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
+    if (rename(tmp_path, cfg->status_file) < 0) {
+        log_error("cannot rename status file: %s", strerror(errno));
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
     free(tmp_path);
-
     return 0;
 }

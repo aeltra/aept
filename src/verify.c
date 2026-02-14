@@ -58,7 +58,11 @@ int aept_verify_signature(const char *file, const char *sigfile)
         _exit(255);
     }
 
-    waitpid(pid, &status, 0);
+    r = waitpid(pid, &status, 0);
+    if (r == -1) {
+        log_error("usign: waitpid: %s", strerror(errno));
+        return -1;
+    }
 
     if (!WIFEXITED(status) || WEXITSTATUS(status)) {
         log_error("signature verification failed for '%s'", file);

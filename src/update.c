@@ -35,7 +35,9 @@ static int decompress_gz(const char *gz_path, const char *out_path)
 
     r = ar_copy_to_stream(ar, fp);
 
-    fclose(fp);
+    if (fclose(fp) != 0 && r == 0)
+        r = -1;
+
     ar_close(ar);
 
     return r;

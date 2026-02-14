@@ -84,6 +84,41 @@ int file_is_dir(const char *path)
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+int file_copy(const char *src, const char *dst)
+{
+    FILE *in, *out;
+    char buf[4096];
+    size_t n;
+
+    in = fopen(src, "r");
+    if (!in)
+        return -1;
+
+    out = fopen(dst, "w");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            fclose(in);
+            fclose(out);
+            unlink(dst);
+            return -1;
+        }
+    }
+
+    fclose(in);
+
+    if (fclose(out) != 0) {
+        unlink(dst);
+        return -1;
+    }
+
+    return 0;
+}
+
 int file_mkdir_hier(const char *path, int mode)
 {
     char *p, *dir;
