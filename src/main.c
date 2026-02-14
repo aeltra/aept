@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "aept/aept.h"
+#include "aept/clean.h"
 #include "aept/config.h"
 #include "aept/install.h"
 #include "aept/msg.h"
@@ -29,6 +30,7 @@ static void usage(void)
         "  install <pkgs...>     Install packages\n"
         "  remove <pkgs...>      Remove packages\n"
         "  upgrade               Upgrade all installed packages\n"
+        "  clean                 Remove cached package files\n"
         "  list                  List available packages\n"
         "  info <pkg>            Show package information\n"
         "\n"
@@ -129,6 +131,8 @@ int main(int argc, char *argv[])
         }
     } else if (strcmp(command, "upgrade") == 0) {
         r = aept_install(NULL, 0);
+    } else if (strcmp(command, "clean") == 0) {
+        r = aept_clean();
     } else {
         log_error("unknown command '%s'", command);
         usage();
