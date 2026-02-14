@@ -17,4 +17,4 @@ aept_SOURCES = \
     msg.c
 
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
-aept_LDADD = $(LIBARCHIVE_LIBS) -lsolv -lsolvext
+aept_LDADD = $(SOLV_LIBS) $(ARCHIVE_LIBS)
