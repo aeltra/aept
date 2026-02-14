@@ -89,8 +89,9 @@ static void remove_info_files(const char *name)
     }
 }
 
-int aept_do_remove(const char *name)
+int aept_do_remove(const char *name, const char *new_version)
 {
+    char *script_args = NULL;
     int r;
 
     if (!pkg_name_is_safe(name)) {
@@ -98,10 +99,14 @@ int aept_do_remove(const char *name)
         return -1;
     }
 
+    if (new_version)
+        xasprintf(&script_args, "upgrade %s", new_version);
+
     log_info("removing %s", name);
 
     /* Run prerm */
-    r = run_script(cfg->info_dir, name, "prerm", "remove");
+    r = run_script(cfg->info_dir, name, "prerm",
+                   script_args ? script_args : "remove");
     if (r != 0)
         log_warning("prerm failed for '%s', continuing", name);
 
@@ -109,9 +114,12 @@ int aept_do_remove(const char *name)
     remove_files(name);
 
     /* Run postrm */
-    r = run_script(cfg->info_dir, name, "postrm", "remove");
+    r = run_script(cfg->info_dir, name, "postrm",
+                   script_args ? script_args : "remove");
     if (r != 0)
         log_warning("postrm failed for '%s', continuing", name);
+
+    free(script_args);
 
     /* Remove info files */
     remove_info_files(name);
@@ -185,7 +193,7 @@ int aept_remove(const char **names, int count)
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
 
-        r = aept_do_remove(pkg_name);
+        r = aept_do_remove(pkg_name, NULL);
         if (r < 0 && !cfg->force_depends)
             goto out;
     }

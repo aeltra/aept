@@ -200,13 +200,16 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     return 0;
 }
 
-static int do_install_package(const char *ipk_path, Pool *pool, Id p)
+static int do_install_package(const char *ipk_path, Pool *pool, Id p,
+                              const char *old_version)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
     char *tmpdir = NULL;
+    char *preinst_args = NULL;
+    char *postinst_args = NULL;
 
     if (!pkg_name_is_safe(name)) {
         log_error("refusing to install package with unsafe name '%s'", name);
@@ -215,6 +218,11 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     char *ctrl_path = NULL;
     char *list_path = NULL;
     int r = -1;
+
+    if (old_version) {
+        xasprintf(&preinst_args, "upgrade %s", old_version);
+        xasprintf(&postinst_args, "configure %s", old_version);
+    }
 
     xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
 
@@ -242,7 +250,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     }
 
     /* Run preinst */
-    r = run_script(tmpdir, NULL, "preinst", "install");
+    r = run_script(tmpdir, NULL, "preinst",
+                   preinst_args ? preinst_args : "install");
     if (r != 0)
         goto cleanup;
 
@@ -308,7 +317,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     }
 
     /* Run postinst */
-    r = run_script(cfg->info_dir, name, "postinst", "configure");
+    r = run_script(cfg->info_dir, name, "postinst",
+                   postinst_args ? postinst_args : "configure");
     if (r != 0) {
         log_error("postinst failed for '%s'", name);
         /* Continue despite postinst failure — package is installed */
@@ -327,6 +337,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
     r = 0;
 
 cleanup:
+    free(preinst_args);
+    free(postinst_args);
     free(list_path);
 
     /* Clean up tmpdir */
@@ -426,14 +438,36 @@ int aept_install(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
 
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            r = aept_do_remove(pkg_name);
+            const char *new_ver = NULL;
+
+            if (type == SOLVER_TRANSACTION_UPGRADED ||
+                    type == SOLVER_TRANSACTION_DOWNGRADED) {
+                Id op = transaction_obs_pkg(trans, p);
+                if (op) {
+                    Solvable *os = pool_id2solvable(pool, op);
+                    new_ver = pool_id2str(pool, os->evr);
+                }
+            }
+
+            r = aept_do_remove(pkg_name, new_ver);
             if (r < 0 && !cfg->force_depends)
                 goto download_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
             if (!ipk_paths[i])
                 continue;
 
-            r = do_install_package(ipk_paths[i], pool, p);
+            const char *old_ver = NULL;
+
+            if (type == SOLVER_TRANSACTION_UPGRADE ||
+                    type == SOLVER_TRANSACTION_DOWNGRADE) {
+                Id op = transaction_obs_pkg(trans, p);
+                if (op) {
+                    Solvable *os = pool_id2solvable(pool, op);
+                    old_ver = pool_id2str(pool, os->evr);
+                }
+            }
+
+            r = do_install_package(ipk_paths[i], pool, p, old_ver);
             if (r < 0)
                 goto download_cleanup;
         }
