@@ -6,7 +6,7 @@ aept - Aeltra Package Tool
 
 # SYNOPSIS
 
-*aept* <command> [options] [packages...]
+*aept* [-c <file>] [-v] <command> [options] [args...]
 
 # DESCRIPTION
 
@@ -15,44 +15,40 @@ resolution. It uses libsolv for dependency solving and libarchive for archive
 extraction. Package lists and signatures are fetched with wget, and signature
 verification is performed by usign.
 
-# COMMANDS
-
-*update*
-	Fetch package lists from all configured repositories. If signature
-	checking is enabled, also downloads and verifies the _Packages.sig_ file
-	for each source. Package lists are stored in the lists directory (see
-	*FILES*).
-
-*install* <packages...>
-	Install one or more packages by name. Dependencies are resolved
-	automatically. Packages that are already installed at the requested
-	version are skipped. The solver may also schedule removals if a package
-	conflicts with or replaces an installed package.
-
-*remove* <packages...>
-	Remove one or more installed packages. Reverse dependencies are resolved
-	automatically, and any packages that depend on the removed packages will
-	also be removed unless *--force-depends* is given.
-
-*upgrade*
-	Upgrade all installed packages to the latest available version. This is
-	equivalent to running install with no package arguments.
-
-*clean*
-	Remove all cached package files from the cache directory.
-
-# OPTIONS
+# GLOBAL OPTIONS
 
 *-c*, *--conf* <file>
 	Use _file_ as the configuration file instead of the default
 	_/etc/aept/aept.conf_.
 
+*-v*, *--verbose*
+	Increase verbosity. Can be specified multiple times.
+
+*-h*, *--help*
+	Show usage summary and exit.
+
+# COMMANDS
+
+## update [options]
+
+Fetch package lists from all configured repositories. If signature checking
+is enabled, also downloads and verifies the _Packages.sig_ file for each
+source. Package lists are stored in the lists directory (see *FILES*).
+
 *-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. All state
-	paths (lists, cache, info, status, lock) are automatically prefixed with
-	_dir_. Scripts are executed in a chroot via user namespaces (see *OFFLINE
-	ROOT*). This option overrides both the _offline_root_ config option and
-	the *OFFLINE_ROOT* environment variable.
+	Install packages into _dir_ instead of the filesystem root. See
+	*OFFLINE ROOT*.
+
+## install [options] <packages...>
+
+Install one or more packages by name. Dependencies are resolved automatically.
+Packages that are already installed at the requested version are skipped. The
+solver may also schedule removals if a package conflicts with or replaces an
+installed package.
+
+*-o*, *--offline-root* <dir>
+	Install packages into _dir_ instead of the filesystem root. See
+	*OFFLINE ROOT*.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -64,14 +60,79 @@ verification is performed by usign.
 	Dry run. Show which packages would be installed or removed, but do not
 	actually perform any changes.
 
-*-v*, *--verbose*
-	Increase verbosity. Can be specified multiple times.
+*--allow-downgrade*
+	Allow the solver to downgrade installed packages.
+
+## remove [options] <packages...>
+
+Remove one or more installed packages. Reverse dependencies are resolved
+automatically, and any packages that depend on the removed packages will also
+be removed unless *--force-depends* is given.
+
+*-o*, *--offline-root* <dir>
+	Install packages into _dir_ instead of the filesystem root. See
+	*OFFLINE ROOT*.
+
+*-f*, *--force-depends*
+	Ignore dependency errors from the solver and proceed anyway.
+
+*-n*, *--noaction*
+	Dry run. Show which packages would be removed, but do not actually
+	perform any changes.
+
+## upgrade [options]
+
+Upgrade all installed packages to the latest available version.
+
+*-o*, *--offline-root* <dir>
+	Install packages into _dir_ instead of the filesystem root. See
+	*OFFLINE ROOT*.
+
+*-f*, *--force-depends*
+	Ignore dependency errors from the solver and proceed anyway.
+
+*-d*, *--download-only*
+	Download packages to the cache directory but do not install them.
+
+*-n*, *--noaction*
+	Dry run. Show which packages would be installed or removed, but do not
+	actually perform any changes.
 
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
 
-*-h*, *--help*
-	Show usage summary and exit.
+## show [options] <package>
+
+Show information about a package. Displays fields such as name, version,
+architecture, installed size, dependencies, homepage, filename, and
+description. If a package is available in a repository and also installed,
+the repository version is shown and the install status is indicated. Returns
+exit code 1 if the package is not found.
+
+*-o*, *--offline-root* <dir>
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
+
+## clean [options]
+
+Remove all cached package files from the cache directory.
+
+*-o*, *--offline-root* <dir>
+	Install packages into _dir_ instead of the filesystem root. See
+	*OFFLINE ROOT*.
+
+## owns [options] <path>
+
+Find which installed package owns a file. Searches the _.list_ files in the
+info directory for a matching path. Returns exit code 1 if no package owns
+the file.
+
+*-o*, *--offline-root* <dir>
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
+
+## print-architecture
+
+Print the configured architectures, one per line. The first architecture is
+the native (most preferred) one.
 
 # CONFIGURATION
 
@@ -163,10 +224,9 @@ option check_signature 1
 
 # OFFLINE ROOT
 
-When an offline root is set (via *--offline-root*, the *offline_root* config
-option, or the *OFFLINE_ROOT* environment variable), all state directories
-(lists, cache, info, status, lock) are automatically prefixed with the offline
-root path.
+When an offline root is set (via *--offline-root* or the *offline_root* config
+option), all state directories (lists, cache, info, status, lock) are
+automatically prefixed with the offline root path.
 
 Maintainer scripts are executed inside the offline root using
 *unshare*(2) with *CLONE_NEWUSER* to set up a user namespace. UID and GID
@@ -225,12 +285,6 @@ _/var/cache/aept/_
 
 _/var/lib/aept/lock_
 	Lock file to prevent concurrent operations.
-
-# ENVIRONMENT
-
-*OFFLINE_ROOT*
-	If set and no *--offline-root* option or _offline_root_ config option is
-	given, use this as the offline root directory.
 
 # EXIT STATUS
 
