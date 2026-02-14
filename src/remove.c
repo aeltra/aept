@@ -15,6 +15,7 @@
 #include <solv/transaction.h>
 
 #include "aept/aept.h"
+#include "aept/config.h"
 #include "aept/msg.h"
 #include "aept/remove.h"
 #include "aept/script.h"
@@ -59,7 +60,8 @@ static int remove_files(const char *name)
             continue;
 
         char *full_path = NULL;
-        xasprintf(&full_path, "%s%s", cfg->root_dir, path);
+        xasprintf(&full_path, "%s/%s",
+                  cfg->offline_root ? cfg->offline_root : "", path);
 
         if (unlink(full_path) < 0 && errno != ENOENT)
             log_debug("cannot remove '%s': %s",

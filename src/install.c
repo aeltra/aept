@@ -18,6 +18,7 @@
 
 #include "aept/aept.h"
 #include "aept/archive.h"
+#include "aept/config.h"
 #include "aept/download.h"
 #include "aept/msg.h"
 #include "aept/remove.h"
@@ -184,7 +185,9 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p)
         goto cleanup;
     }
 
-    r = ar_extract_all(data_ar, cfg->root_dir, NULL);
+    char *extract_root = config_root_path("/");
+    r = ar_extract_all(data_ar, extract_root, NULL);
+    free(extract_root);
     ar_close(data_ar);
     data_ar = NULL;
 

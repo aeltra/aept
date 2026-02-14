@@ -17,7 +17,6 @@ typedef struct {
     aept_source_t *sources;
     int nsources;
 
-    char *root_dir;         /* default "/" */
     char *offline_root;     /* NULL or path */
     char *info_dir;         /* default "/var/lib/aept/info" */
     char *lists_dir;        /* default "/var/lib/aept/lists" */

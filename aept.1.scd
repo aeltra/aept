@@ -105,9 +105,6 @@ The following keys are recognized:
 [[ *Key*
 :[ *Default*
 :[ *Description*
-|  root_dir
-:  /
-:  Filesystem root for package extraction
 |  offline_root
 :  (none)
 :  Offline root directory (see *OFFLINE ROOT*)

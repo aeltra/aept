@@ -22,7 +22,6 @@ static void config_set_defaults(void)
 {
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->root_dir = xstrdup("/");
     cfg->info_dir = xstrdup("/var/lib/aept/info");
     cfg->lists_dir = xstrdup("/var/lib/aept/lists");
     cfg->status_file = xstrdup("/var/lib/aept/status");
@@ -59,9 +58,7 @@ static void set_option(const char *key, const char *value)
 {
     char **strp = NULL;
 
-    if (strcmp(key, "root_dir") == 0)
-        strp = &cfg->root_dir;
-    else if (strcmp(key, "offline_root") == 0)
+    if (strcmp(key, "offline_root") == 0)
         strp = &cfg->offline_root;
     else if (strcmp(key, "info_dir") == 0)
         strp = &cfg->info_dir;
@@ -129,9 +126,6 @@ void config_apply_offline_root(void)
     free(cfg->usign_keydir);
     cfg->usign_keydir = tmp;
 
-    xasprintf(&tmp, "%s%s", cfg->offline_root, cfg->root_dir);
-    free(cfg->root_dir);
-    cfg->root_dir = tmp;
 }
 
 int config_load(const char *filename)
@@ -208,7 +202,6 @@ void config_free(void)
         free(cfg->archs[i]);
     free(cfg->archs);
 
-    free(cfg->root_dir);
     free(cfg->offline_root);
     free(cfg->info_dir);
     free(cfg->lists_dir);
