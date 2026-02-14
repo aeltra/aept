@@ -21,6 +21,7 @@
 #include "aept/aept.h"
 #include "aept/msg.h"
 #include "aept/solver.h"
+#include "aept/util.h"
 
 #define MAX_REPOS 64
 
@@ -40,10 +41,28 @@ int solver_init(void)
         return -1;
     }
 
-    if (cfg->narchs > 0)
-        pool_setarch(pool, cfg->archs[0]);
-    else
+    if (cfg->narchs > 0) {
+        int i;
+        size_t len = 0;
+        char *archstr;
+
+        for (i = 0; i < cfg->narchs; i++)
+            len += strlen(cfg->archs[i]) + 1;
+
+        archstr = xmalloc(len);
+        archstr[0] = '\0';
+
+        for (i = 0; i < cfg->narchs; i++) {
+            if (i > 0)
+                strcat(archstr, ":");
+            strcat(archstr, cfg->archs[i]);
+        }
+
+        pool_setarch(pool, archstr);
+        free(archstr);
+    } else {
         pool_setarch(pool, "noarch");
+    }
 
     installed_repo = NULL;
     nrepos = 0;
