@@ -113,6 +113,8 @@ int main(int argc, char *argv[])
         cfg->offline_root = xstrdup(offline_root);
     }
 
+    config_apply_offline_root();
+
     if (strcmp(command, "update") == 0) {
         r = aept_update();
     } else if (strcmp(command, "install") == 0) {

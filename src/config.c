@@ -94,7 +94,7 @@ static void set_option(const char *key, const char *value)
     *strp = xstrdup(value);
 }
 
-static void apply_offline_root(void)
+void config_apply_offline_root(void)
 {
     char *tmp;
 
@@ -190,8 +190,6 @@ int config_load(const char *filename)
     }
 
     fclose(fp);
-
-    apply_offline_root();
 
     return 0;
 }

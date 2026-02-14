@@ -45,7 +45,12 @@ int run_script(const char *script_dir, const char *pkg_name,
 
     log_info("running %s %s", script, args ? args : "");
 
-    setenv("PKG_ROOT", cfg->root_dir, 1);
+    if (cfg->offline_root) {
+        const char *root = strip_offline_root(cfg->root_dir);
+        setenv("PKG_ROOT", root, 1);
+    } else {
+        setenv("PKG_ROOT", cfg->root_dir, 1);
+    }
 
     const char *run_path = path;
     if (cfg->offline_root)

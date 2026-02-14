@@ -10,6 +10,10 @@
 int config_load(const char *filename);
 void config_free(void);
 
+/* Apply offline_root prefix to all configured paths. Must be called
+ * after config_load() and any command-line overrides of offline_root. */
+void config_apply_offline_root(void);
+
 /* Return path prefixed with offline_root if set. Caller must free. */
 char *config_root_path(const char *path);
 
