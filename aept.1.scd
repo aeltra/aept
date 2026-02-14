@@ -68,6 +68,9 @@ installed package.
 	downloading all packages first. Useful on devices with limited storage.
 	Ignored when *--download-only* is also specified.
 
+*--reinstall*
+	Reinstall packages that are already installed at the requested version.
+
 ## remove [options] <packages...>
 
 Remove one or more installed packages. Reverse dependencies are resolved
@@ -75,8 +78,7 @@ automatically, and any packages that depend on the removed packages will also
 be removed unless *--force-depends* is given.
 
 *-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. See
-	*OFFLINE ROOT*.
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -122,19 +124,40 @@ exit code 1 if the package is not found.
 *-o*, *--offline-root* <dir>
 	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
 
+## list [options] [pattern]
+
+List packages. With no arguments, all available packages are shown. An
+optional glob pattern filters by package name.
+
+*-o*, *--offline-root* <dir>
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
+
+*--installed*
+	Only show installed packages.
+
+*--upgradable*
+	Only show packages for which a newer version is available.
+
 ## clean [options]
 
 Remove all cached package files from the cache directory.
 
 *-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. See
-	*OFFLINE ROOT*.
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
 
 ## owns [options] <path>
 
 Find which installed package owns a file. Searches the _.list_ files in the
 info directory for a matching path. Returns exit code 1 if no package owns
 the file.
+
+*-o*, *--offline-root* <dir>
+	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
+
+## files [options] <package>
+
+List files belonging to an installed package. Prints file paths to stdout.
+Returns exit code 1 if the package is not installed.
 
 *-o*, *--offline-root* <dir>
 	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
