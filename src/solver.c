@@ -167,7 +167,7 @@ int solver_resolve_install(const char **names, int count)
     } else {
         for (i = 0; i < count; i++) {
             Id id = pool_str2id(pool, names[i], 1);
-            queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE_NAME, id);
+            queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
         }
     }
 
@@ -186,7 +186,7 @@ int solver_resolve_remove(const char **names, int count)
 
     for (i = 0; i < count; i++) {
         Id id = pool_str2id(pool, names[i], 1);
-        queue_push2(&job, SOLVER_ERASE | SOLVER_SOLVABLE_NAME, id);
+        queue_push2(&job, SOLVER_ERASE | SOLVER_SOLVABLE_PROVIDES, id);
     }
 
     r = do_solve(&job);
