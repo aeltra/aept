@@ -15,6 +15,7 @@
 #include <solv/chksum.h>
 #include <solv/knownid.h>
 #include <solv/pool.h>
+#include <solv/repo.h>
 #include <solv/solvable.h>
 #include <solv/transaction.h>
 
@@ -351,6 +352,90 @@ cleanup:
     return r;
 }
 
+/* Look up the installed version of a package by name.
+ * Returns a pool string pointer (valid until solver_fini), or NULL. */
+static const char *installed_version(Pool *pool, const char *name)
+{
+    Repo *installed = pool->installed;
+    Id p;
+    Solvable *s;
+
+    if (!installed)
+        return NULL;
+
+    FOR_REPO_SOLVABLES(installed, p, s) {
+        if (strcmp(pool_id2str(pool, s->name), name) == 0)
+            return pool_id2str(pool, s->evr);
+    }
+
+    return NULL;
+}
+
+/* Check whether name was covered by an INSTALL step in the transaction. */
+static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
+{
+    int i;
+
+    for (i = 0; i < trans->steps.count; i++) {
+        Id p = trans->steps.elements[i];
+        int type = transaction_type(trans, p,
+            SOLVER_TRANSACTION_SHOW_ACTIVE |
+            SOLVER_TRANSACTION_SHOW_ALL);
+
+        if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
+            continue;
+
+        Solvable *s = pool_id2solvable(pool, p);
+        if (strcmp(pool_id2str(pool, s->name), name) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+static int do_reinstall(const char **names, int count,
+                        Transaction *trans, Pool *pool)
+{
+    int i, r = 0;
+
+    for (i = 0; i < count; i++) {
+        Id avail = solver_find_available(names[i]);
+        if (!avail) {
+            log_warning("'%s' not found in any repository, "
+                        "skipping reinstall", names[i]);
+            continue;
+        }
+
+        Solvable *s = pool_id2solvable(pool, avail);
+        const char *pkg_name = pool_id2str(pool, s->name);
+
+        if (name_in_transaction(pkg_name, trans, pool))
+            continue;
+
+        const char *old_ver = installed_version(pool, pkg_name);
+        if (!old_ver) {
+            log_warning("'%s' is not installed, skipping reinstall",
+                        names[i]);
+            continue;
+        }
+
+        log_info("reinstalling %s %s", pkg_name,
+                 pool_id2str(pool, s->evr));
+
+        char *ipk_path = NULL;
+        r = download_package(avail, pool, &ipk_path);
+        if (r < 0)
+            return r;
+
+        r = do_install_package(ipk_path, pool, avail, old_ver);
+        free(ipk_path);
+        if (r < 0)
+            return r;
+    }
+
+    return 0;
+}
+
 int aept_install(const char **names, int count)
 {
     Transaction *trans;
@@ -383,14 +468,18 @@ int aept_install(const char **names, int count)
     pool = solver_pool();
 
     if (!trans || trans->steps.count == 0) {
-        log_info("nothing to do");
-        r = 0;
-        goto out;
-    }
-
-    if (display_transaction(trans, pool)) {
-        r = 0;
-        goto out;
+        if (!cfg->reinstall) {
+            log_info("nothing to do");
+            r = 0;
+            goto out;
+        }
+    } else {
+        if (display_transaction(trans, pool)) {
+            if (!cfg->reinstall) {
+                r = 0;
+                goto out;
+            }
+        }
     }
 
     if (cfg->noaction) {
@@ -507,16 +596,21 @@ int aept_install(const char **names, int count)
         }
     }
 
-    goto fileset_cleanup_ok;
+    fileset_free(&installed_files);
+
+    /* Reinstall phase — download and reinstall requested packages
+     * that were not covered by the solver transaction. */
+    if (cfg->reinstall && names) {
+        r = do_reinstall(names, count, trans, pool);
+        if (r < 0)
+            goto download_cleanup;
+    }
+
+    r = 0;
+    goto download_cleanup;
 
 fileset_cleanup:
     fileset_free(&installed_files);
-    goto download_cleanup;
-
-fileset_cleanup_ok:
-    fileset_free(&installed_files);
-
-    r = 0;
 
 download_cleanup:
     for (i = 0; i < trans->steps.count; i++)

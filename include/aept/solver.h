@@ -37,6 +37,10 @@ Pool *solver_pool(void);
 /* Get the source index for a solvable (which repo/source it came from). */
 int solver_solvable_source_index(Id p);
 
+/* Find the best available (non-installed) solvable for a package name.
+ * Returns the solvable Id, or 0 if not found. */
+Id solver_find_available(const char *name);
+
 /* Free all solver state. */
 void solver_fini(void);
 

@@ -120,6 +120,7 @@ static void usage_install(FILE *out)
         "  -h, --help                Show this help\n"
         "\n"
         "  --allow-downgrade         Allow package downgrades\n"
+        "  --reinstall               Reinstall already installed packages\n"
     );
 }
 
@@ -252,6 +253,7 @@ static struct option install_options[] = {
     {"noaction",        no_argument,       NULL, 'n'},
     {"help",            no_argument,       NULL, 'h'},
     {"allow-downgrade", no_argument,       NULL, 0x100},
+    {"reinstall",       no_argument,       NULL, 0x101},
     {NULL, 0, NULL, 0}
 };
 
@@ -329,17 +331,19 @@ static int cmd_update(int argc, char *argv[])
 static int cmd_install(int argc, char *argv[])
 {
     const char *offline_root = NULL;
+    int force_depends = 0, download_only = 0, noaction = 0;
+    int allow_downgrade = 0, reinstall = 0;
     int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "o:fdnh", install_options, NULL)) != -1) {
         switch (opt) {
         case 'o': offline_root = optarg; break;
-        case 'f': cfg->force_depends = 1; break;
-        case 'd': cfg->download_only = 1; break;
-        case 'n': cfg->noaction = 1; break;
-        case 'v': cfg->verbosity++; break;
-        case 0x100: cfg->allow_downgrade = 1; break;
+        case 'f': force_depends = 1; break;
+        case 'd': download_only = 1; break;
+        case 'n': noaction = 1; break;
+        case 0x100: allow_downgrade = 1; break;
+        case 0x101: reinstall = 1; break;
         case 'h': usage_install(stdout); return 0;
         default:  usage_install(stderr); return 1;
         }
@@ -353,6 +357,12 @@ static int cmd_install(int argc, char *argv[])
     if (setup_config(offline_root) < 0)
         return 1;
 
+    cfg->force_depends = force_depends;
+    cfg->download_only = download_only;
+    cfg->noaction = noaction;
+    cfg->allow_downgrade = allow_downgrade;
+    cfg->reinstall = reinstall;
+
     r = aept_install((const char **)&argv[optind], argc - optind);
     teardown_config();
     return r;
@@ -361,14 +371,15 @@ static int cmd_install(int argc, char *argv[])
 static int cmd_remove(int argc, char *argv[])
 {
     const char *offline_root = NULL;
+    int force_depends = 0, noaction = 0;
     int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "o:fnh", remove_options, NULL)) != -1) {
         switch (opt) {
         case 'o': offline_root = optarg; break;
-        case 'f': cfg->force_depends = 1; break;
-        case 'n': cfg->noaction = 1; break;
+        case 'f': force_depends = 1; break;
+        case 'n': noaction = 1; break;
         case 'h': usage_remove(stdout); return 0;
         default:  usage_remove(stderr); return 1;
         }
@@ -382,6 +393,9 @@ static int cmd_remove(int argc, char *argv[])
     if (setup_config(offline_root) < 0)
         return 1;
 
+    cfg->force_depends = force_depends;
+    cfg->noaction = noaction;
+
     r = aept_remove((const char **)&argv[optind], argc - optind);
     teardown_config();
     return r;
@@ -390,17 +404,19 @@ static int cmd_remove(int argc, char *argv[])
 static int cmd_upgrade(int argc, char *argv[])
 {
     const char *offline_root = NULL;
+    int force_depends = 0, download_only = 0, noaction = 0;
+    int allow_downgrade = 0;
     int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "o:fdnh", install_options, NULL)) != -1) {
         switch (opt) {
         case 'o': offline_root = optarg; break;
-        case 'f': cfg->force_depends = 1; break;
-        case 'd': cfg->download_only = 1; break;
-        case 'n': cfg->noaction = 1; break;
-        case 'v': cfg->verbosity++; break;
-        case 0x100: cfg->allow_downgrade = 1; break;
+        case 'f': force_depends = 1; break;
+        case 'd': download_only = 1; break;
+        case 'n': noaction = 1; break;
+        case 0x100: allow_downgrade = 1; break;
+        case 0x101: break; /* --reinstall: ignored for upgrade */
         case 'h': usage_upgrade(stdout); return 0;
         default:  usage_upgrade(stderr); return 1;
         }
@@ -408,6 +424,11 @@ static int cmd_upgrade(int argc, char *argv[])
 
     if (setup_config(offline_root) < 0)
         return 1;
+
+    cfg->force_depends = force_depends;
+    cfg->download_only = download_only;
+    cfg->noaction = noaction;
+    cfg->allow_downgrade = allow_downgrade;
 
     r = aept_install(NULL, 0);
     teardown_config();

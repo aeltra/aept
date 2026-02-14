@@ -36,6 +36,7 @@ typedef struct {
     int force_depends;
     int noaction;
     int download_only;
+    int reinstall;
     int verbosity;
 } aept_config_t;
 

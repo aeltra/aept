@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <solv/evr.h>
 #include <solv/pool.h>
 #include <solv/poolarch.h>
 #include <solv/repo.h>
@@ -239,6 +240,32 @@ int solver_solvable_source_index(Id p)
     }
 
     return -1;
+}
+
+Id solver_find_available(const char *name)
+{
+    Id nameid = pool_str2id(pool, name, 0);
+    Id best = 0;
+    Id p, pp;
+
+    if (!nameid)
+        return 0;
+
+    FOR_PROVIDES(p, pp, nameid) {
+        Solvable *s = pool_id2solvable(pool, p);
+
+        if (s->repo == pool->installed)
+            continue;
+
+        if (!best ||
+                pool_evrcmp(pool,
+                    pool_id2solvable(pool, best)->evr,
+                    s->evr, EVRCMP_COMPARE) < 0) {
+            best = p;
+        }
+    }
+
+    return best;
 }
 
 void solver_fini(void)
