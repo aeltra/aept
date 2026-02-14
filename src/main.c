@@ -80,6 +80,7 @@ static void usage_main(FILE *out)
         "  install <pkgs...>   Install packages\n"
         "  remove <pkgs...>    Remove packages\n"
         "  upgrade             Upgrade all installed packages\n"
+        "  show <pkg>           Show package information\n"
         "  clean               Remove cached package files\n"
         "  owns <path>         Find which package owns a file\n"
         "  print-architecture  Show configured architectures\n"
@@ -179,6 +180,19 @@ static void usage_owns(FILE *out)
     );
 }
 
+static void usage_show(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept show [options] <package>\n"
+        "\n"
+        "Show package information.\n"
+        "\n"
+        "Options:\n"
+        "  -o, --offline-root <dir>  Use an offline root directory\n"
+        "  -h, --help                Show this help\n"
+    );
+}
+
 static void usage_print_architecture(FILE *out)
 {
     fprintf(out,
@@ -220,6 +234,12 @@ static struct option remove_options[] = {
 /* upgrade reuses install_options */
 
 static struct option clean_options[] = {
+    {"offline-root", required_argument, NULL, 'o'},
+    {"help",         no_argument,       NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option show_options[] = {
     {"offline-root", required_argument, NULL, 'o'},
     {"help",         no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -370,6 +390,43 @@ static int cmd_clean(int argc, char *argv[])
     return r;
 }
 
+static int cmd_show(int argc, char *argv[])
+{
+    const char *offline_root = NULL;
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "o:h", show_options, NULL)) != -1) {
+        switch (opt) {
+        case 'o': offline_root = optarg; break;
+        case 'h': usage_show(stdout); return 0;
+        default:  usage_show(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        log_error("show requires a package name");
+        return 1;
+    }
+
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
+        return 1;
+    }
+
+    if (offline_root) {
+        free(cfg->offline_root);
+        cfg->offline_root = xstrdup(offline_root);
+    }
+
+    config_apply_offline_root();
+
+    r = aept_show(argv[optind]);
+    config_free();
+    return r;
+}
+
 static int cmd_owns(int argc, char *argv[])
 {
     const char *offline_root = NULL;
@@ -472,6 +529,8 @@ int main(int argc, char *argv[])
         return cmd_upgrade(argc - optind, argv + optind);
     if (strcmp(command, "clean") == 0)
         return cmd_clean(argc - optind, argv + optind);
+    if (strcmp(command, "show") == 0)
+        return cmd_show(argc - optind, argv + optind);
     if (strcmp(command, "owns") == 0)
         return cmd_owns(argc - optind, argv + optind);
     if (strcmp(command, "print-architecture") == 0)

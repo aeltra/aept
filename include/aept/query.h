@@ -15,4 +15,8 @@ int aept_owns(const char *path);
  * Returns 0 on success. */
 int aept_print_architecture(void);
 
+/* Show package metadata from available repos (with installed fallback).
+ * Prints metadata to stdout. Returns 0 if found, 1 if not. */
+int aept_show(const char *name);
+
 #endif

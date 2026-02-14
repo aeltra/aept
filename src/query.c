@@ -5,13 +5,23 @@
  */
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <solv/evr.h>
+#include <solv/knownid.h>
+#include <solv/pool.h>
+#include <solv/queue.h>
+#include <solv/solvable.h>
+
 #include "aept/aept.h"
+#include "aept/config.h"
 #include "aept/msg.h"
 #include "aept/query.h"
+#include "aept/solver.h"
+#include "aept/status.h"
 #include "aept/util.h"
 
 static const char *strip_leading(const char *p)
@@ -114,4 +124,164 @@ int aept_print_architecture(void)
         printf("%s\n", cfg->archs[i]);
 
     return 0;
+}
+
+/* ── show ──────────────────────────────────────────────────────────── */
+
+static void print_deparray(Pool *pool, Solvable *s, Id keyname, Id marker,
+                           const char *label)
+{
+    Queue q;
+    int i;
+
+    queue_init(&q);
+    solvable_lookup_deparray(s, keyname, &q, marker);
+
+    if (q.count == 0) {
+        queue_free(&q);
+        return;
+    }
+
+    printf("%s:", label);
+    for (i = 0; i < q.count; i++) {
+        if (i > 0)
+            printf(",");
+        printf(" %s", pool_dep2str(pool, q.elements[i]));
+    }
+    printf("\n");
+    queue_free(&q);
+}
+
+static int load_repos(void)
+{
+    int i;
+
+    for (i = 0; i < cfg->nsources; i++) {
+        char *list_path = NULL;
+        FILE *fp;
+
+        xasprintf(&list_path, "%s/%s", cfg->lists_dir, cfg->sources[i].name);
+
+        fp = fopen(list_path, "r");
+        if (!fp) {
+            log_debug("cannot open package list '%s': %s",
+                      list_path, strerror(errno));
+            free(list_path);
+            continue;
+        }
+
+        solver_load_repo(cfg->sources[i].name, fp, i);
+        fclose(fp);
+        free(list_path);
+    }
+
+    return 0;
+}
+
+static void print_description(Pool *pool, Solvable *s)
+{
+    const char *summary = solvable_lookup_str(s, SOLVABLE_SUMMARY);
+    const char *desc = solvable_lookup_str(s, SOLVABLE_DESCRIPTION);
+
+    if (!summary)
+        return;
+
+    printf("Description: %s\n", summary);
+    if (desc) {
+        const char *p = desc;
+        while (*p) {
+            const char *eol = strchr(p, '\n');
+            if (eol) {
+                printf(" %.*s\n", (int)(eol - p), p);
+                p = eol + 1;
+            } else {
+                printf(" %s\n", p);
+                break;
+            }
+        }
+    }
+}
+
+int aept_show(const char *name)
+{
+    Pool *pool;
+    Id name_id, p;
+    Solvable *s, *best = NULL, *installed = NULL;
+    const char *str;
+    unsigned long long num;
+    unsigned int medianr;
+    int r = 1;
+
+    if (solver_init() < 0)
+        return 1;
+
+    status_load();
+    load_repos();
+
+    pool = solver_pool();
+
+    name_id = pool_str2id(pool, name, 0);
+    if (!name_id)
+        goto not_found;
+
+    FOR_POOL_SOLVABLES(p) {
+        s = pool_id2solvable(pool, p);
+        if (s->name != name_id)
+            continue;
+
+        if (s->repo == pool->installed) {
+            installed = s;
+        } else {
+            if (!best || pool_evrcmp_str(pool,
+                    pool_id2str(pool, s->evr),
+                    pool_id2str(pool, best->evr), EVRCMP_COMPARE) > 0)
+                best = s;
+        }
+    }
+
+    s = best ? best : installed;
+    if (!s)
+        goto not_found;
+
+    printf("Package: %s\n", pool_id2str(pool, s->name));
+    printf("Version: %s\n", pool_id2str(pool, s->evr));
+    printf("Architecture: %s\n", pool_id2str(pool, s->arch));
+
+    num = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
+    if (num)
+        printf("Installed-Size: %llu kB\n", num);
+
+    print_deparray(pool, s, SOLVABLE_REQUIRES, -SOLVABLE_PREREQMARKER,
+                   "Depends");
+    print_deparray(pool, s, SOLVABLE_REQUIRES, SOLVABLE_PREREQMARKER,
+                   "Pre-Depends");
+    print_deparray(pool, s, SOLVABLE_RECOMMENDS, 0, "Recommends");
+    print_deparray(pool, s, SOLVABLE_SUGGESTS, 0, "Suggests");
+    print_deparray(pool, s, SOLVABLE_PROVIDES, -SOLVABLE_FILEMARKER,
+                   "Provides");
+    print_deparray(pool, s, SOLVABLE_CONFLICTS, 0, "Conflicts");
+    print_deparray(pool, s, SOLVABLE_OBSOLETES, 0, "Replaces");
+
+    str = solvable_lookup_str(s, SOLVABLE_URL);
+    if (str)
+        printf("Homepage: %s\n", str);
+
+    str = solvable_lookup_location(s, &medianr);
+    if (str)
+        printf("Filename: %s\n", str);
+
+    print_description(pool, s);
+
+    if (installed)
+        printf("Status: install ok installed\n");
+
+    r = 0;
+    goto cleanup;
+
+not_found:
+    log_error("package '%s' not found", name);
+
+cleanup:
+    solver_fini();
+    return r;
 }
