@@ -30,7 +30,6 @@ int run_script(const char *script_dir, const char *pkg_name,
                const char *script, const char *args)
 {
     char *path = NULL;
-    char *cmd = NULL;
     int r;
 
     if (pkg_name)
@@ -49,16 +48,15 @@ int run_script(const char *script_dir, const char *pkg_name,
     if (cfg->offline_root)
         run_path = strip_offline_root(path);
 
-    if (args)
-        xasprintf(&cmd, "%s %s", run_path, args);
-    else
-        cmd = xstrdup(run_path);
-
-    const char *argv[] = {"/bin/sh", "-c", cmd, NULL};
-    r = xsystem_offline_root(argv);
+    if (args) {
+        const char *argv[] = {"/bin/sh", run_path, args, NULL};
+        r = xsystem_offline_root(argv);
+    } else {
+        const char *argv[] = {"/bin/sh", run_path, NULL};
+        r = xsystem_offline_root(argv);
+    }
 
     free(path);
-    free(cmd);
 
     if (r != 0) {
         log_error("%s script failed with exit code %d", script, r);
