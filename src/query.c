@@ -23,18 +23,32 @@ static const char *strip_leading(const char *p)
     return p;
 }
 
+/* Length excluding trailing slashes (but at least 1 for "/") */
+static size_t path_len(const char *p)
+{
+    size_t len = strlen(p);
+
+    while (len > 1 && p[len - 1] == '/')
+        len--;
+    return len;
+}
+
 int aept_search(const char *path)
 {
     DIR *dir;
     struct dirent *ent;
     const char *needle;
+    size_t needle_len;
     int found = 0;
 
-    needle = strip_leading(path);
-    if (*needle == '\0') {
+    if (*path == '\0') {
         log_error("empty search path");
         return 1;
     }
+    needle = strip_leading(path);
+    if (*needle == '\0')
+        needle = ".";
+    needle_len = path_len(needle);
 
     dir = opendir(cfg->info_dir);
     if (!dir)
@@ -67,9 +81,15 @@ int aept_search(const char *path)
             if (tab)
                 *tab = '\0';
 
-            entry = strip_leading(buf);
+            if (*buf == '\0')
+                continue;
 
-            if (strcmp(entry, needle) == 0) {
+            entry = strip_leading(buf);
+            if (*entry == '\0')
+                entry = ".";
+
+            if (path_len(entry) == needle_len &&
+                strncmp(entry, needle, needle_len) == 0) {
                 /* Print package name (filename minus .list suffix) */
                 size_t name_len = (size_t)(dot - ent->d_name);
                 printf("%.*s\n", (int)name_len, ent->d_name);
@@ -79,9 +99,6 @@ int aept_search(const char *path)
         }
 
         fclose(fp);
-
-        if (found)
-            break;
     }
 
     closedir(dir);
