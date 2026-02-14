@@ -28,14 +28,32 @@ static int conf_explicit;
 
 /* ── shared config helpers ─────────────────────────────────────────── */
 
+static const char *resolve_conf(const char *offline_root)
+{
+    char *path;
+
+    if (!offline_root || conf_explicit)
+        return conf_file;
+
+    xasprintf(&path, "%s%s", offline_root, DEFAULT_CONF);
+    return path;
+}
+
 static int setup_config(const char *offline_root)
 {
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        log_warning("config file '%s' not found, using defaults", conf_file);
+    const char *cf = resolve_conf(offline_root);
+
+    if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        log_warning("config file '%s' not found, using defaults", cf);
         config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
+    } else if (config_load(cf) < 0) {
+        if (cf != conf_file)
+            free((char *)cf);
         return -1;
     }
+
+    if (cf != conf_file)
+        free((char *)cf);
 
     if (offline_root) {
         free(cfg->offline_root);
@@ -485,10 +503,19 @@ static int cmd_list(int argc, char *argv[])
     if (optind < argc)
         pattern = argv[optind];
 
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
-        return 1;
+    {
+        const char *cf = resolve_conf(offline_root);
+
+        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+            config_set_defaults();
+        } else if (config_load(cf) < 0) {
+            if (cf != conf_file)
+                free((char *)cf);
+            return 1;
+        }
+
+        if (cf != conf_file)
+            free((char *)cf);
     }
 
     if (offline_root) {
@@ -522,10 +549,19 @@ static int cmd_show(int argc, char *argv[])
         return 1;
     }
 
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
-        return 1;
+    {
+        const char *cf = resolve_conf(offline_root);
+
+        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+            config_set_defaults();
+        } else if (config_load(cf) < 0) {
+            if (cf != conf_file)
+                free((char *)cf);
+            return 1;
+        }
+
+        if (cf != conf_file)
+            free((char *)cf);
     }
 
     if (offline_root) {
@@ -559,10 +595,19 @@ static int cmd_files(int argc, char *argv[])
         return 1;
     }
 
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
-        return 1;
+    {
+        const char *cf = resolve_conf(offline_root);
+
+        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+            config_set_defaults();
+        } else if (config_load(cf) < 0) {
+            if (cf != conf_file)
+                free((char *)cf);
+            return 1;
+        }
+
+        if (cf != conf_file)
+            free((char *)cf);
     }
 
     if (offline_root) {
@@ -596,10 +641,19 @@ static int cmd_owns(int argc, char *argv[])
         return 1;
     }
 
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
-        return 1;
+    {
+        const char *cf = resolve_conf(offline_root);
+
+        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+            config_set_defaults();
+        } else if (config_load(cf) < 0) {
+            if (cf != conf_file)
+                free((char *)cf);
+            return 1;
+        }
+
+        if (cf != conf_file)
+            free((char *)cf);
     }
 
     if (offline_root) {
