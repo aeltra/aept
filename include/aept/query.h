@@ -15,6 +15,14 @@ int aept_owns(const char *path);
  * Returns 0 on success. */
 int aept_print_architecture(void);
 
+/* List packages. If pattern is non-NULL, filter by glob on name.
+ * filter_installed: only installed. filter_upgradable: only upgradable. */
+int aept_list(const char *pattern, int filter_installed, int filter_upgradable);
+
+/* List files belonging to an installed package.
+ * Prints file paths to stdout. Returns 0 if found, 1 if not installed. */
+int aept_files(const char *name);
+
 /* Show package metadata from available repos (with installed fallback).
  * Prints metadata to stdout. Returns 0 if found, 1 if not. */
 int aept_show(const char *name);

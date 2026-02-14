@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -116,6 +117,41 @@ int aept_owns(const char *path)
     return found ? 0 : 1;
 }
 
+int aept_files(const char *name)
+{
+    char *list_path = NULL;
+    FILE *fp;
+    char buf[4096];
+
+    xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
+
+    fp = fopen(list_path, "r");
+    if (!fp) {
+        log_error("package '%s' is not installed", name);
+        free(list_path);
+        return 1;
+    }
+    free(list_path);
+
+    while (fgets(buf, sizeof(buf), fp)) {
+        char *tab;
+
+        buf[strcspn(buf, "\n")] = '\0';
+
+        tab = strchr(buf, '\t');
+        if (tab)
+            *tab = '\0';
+
+        if (*buf == '\0')
+            continue;
+
+        printf("%s\n", buf);
+    }
+
+    fclose(fp);
+    return 0;
+}
+
 int aept_print_architecture(void)
 {
     int i;
@@ -123,6 +159,157 @@ int aept_print_architecture(void)
     for (i = 0; i < cfg->narchs; i++)
         printf("%s\n", cfg->archs[i]);
 
+    return 0;
+}
+
+/* ── shared helpers ────────────────────────────────────────────────── */
+
+static int load_repos(void)
+{
+    int i;
+
+    for (i = 0; i < cfg->nsources; i++) {
+        char *list_path = NULL;
+        FILE *fp;
+
+        xasprintf(&list_path, "%s/%s", cfg->lists_dir, cfg->sources[i].name);
+
+        fp = fopen(list_path, "r");
+        if (!fp) {
+            log_debug("cannot open package list '%s': %s",
+                      list_path, strerror(errno));
+            free(list_path);
+            continue;
+        }
+
+        solver_load_repo(cfg->sources[i].name, fp, i);
+        fclose(fp);
+        free(list_path);
+    }
+
+    return 0;
+}
+
+/* ── list ──────────────────────────────────────────────────────────── */
+
+struct list_entry {
+    Id name_id;
+    Solvable *avail;
+    Solvable *installed;
+};
+
+static Pool *sort_pool;
+
+static int cmp_list_entry(const void *a, const void *b)
+{
+    const struct list_entry *ea = a;
+    const struct list_entry *eb = b;
+
+    return strcmp(pool_id2str(sort_pool, ea->name_id),
+                  pool_id2str(sort_pool, eb->name_id));
+}
+
+static struct list_entry *find_entry(struct list_entry *entries, int n, Id name_id)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (entries[i].name_id == name_id)
+            return &entries[i];
+    }
+    return NULL;
+}
+
+int aept_list(const char *pattern, int filter_installed, int filter_upgradable)
+{
+    Pool *pool;
+    Id p;
+    Solvable *s;
+    struct list_entry *entries = NULL;
+    int nentries = 0, alloc = 0;
+    int i;
+
+    if (solver_init() < 0)
+        return 1;
+
+    status_load();
+    load_repos();
+
+    pool = solver_pool();
+
+    /* Collect unique packages, tracking best available and installed */
+    FOR_POOL_SOLVABLES(p) {
+        struct list_entry *e;
+
+        s = pool_id2solvable(pool, p);
+        e = find_entry(entries, nentries, s->name);
+
+        if (!e) {
+            if (nentries >= alloc) {
+                alloc = alloc ? alloc * 2 : 256;
+                entries = xrealloc(entries, alloc * sizeof(*entries));
+            }
+            e = &entries[nentries++];
+            e->name_id = s->name;
+            e->avail = NULL;
+            e->installed = NULL;
+        }
+
+        if (s->repo == pool->installed) {
+            e->installed = s;
+        } else {
+            if (!e->avail || pool_evrcmp_str(pool,
+                    pool_id2str(pool, s->evr),
+                    pool_id2str(pool, e->avail->evr), EVRCMP_COMPARE) > 0)
+                e->avail = s;
+        }
+    }
+
+    sort_pool = pool;
+    qsort(entries, nentries, sizeof(*entries), cmp_list_entry);
+
+    for (i = 0; i < nentries; i++) {
+        struct list_entry *e = &entries[i];
+        const char *name = pool_id2str(pool, e->name_id);
+        const char *summary;
+        Solvable *show;
+        int upgradable;
+
+        if (pattern && fnmatch(pattern, name, 0) != 0)
+            continue;
+
+        if (filter_installed && !e->installed)
+            continue;
+
+        upgradable = e->installed && e->avail &&
+            pool_evrcmp_str(pool,
+                pool_id2str(pool, e->avail->evr),
+                pool_id2str(pool, e->installed->evr), EVRCMP_COMPARE) > 0;
+
+        if (filter_upgradable && !upgradable)
+            continue;
+
+        show = filter_installed ? e->installed :
+               (e->avail ? e->avail : e->installed);
+
+        printf("%s - %s", name, pool_id2str(pool, show->evr));
+
+        summary = solvable_lookup_str(show, SOLVABLE_SUMMARY);
+        if (summary)
+            printf(" - %s", summary);
+
+        if (e->installed) {
+            if (upgradable)
+                printf(" [installed,upgradable]");
+            else
+                printf(" [installed]");
+        }
+
+        printf("\n");
+    }
+
+    free(entries);
+    solver_fini();
     return 0;
 }
 
@@ -150,32 +337,6 @@ static void print_deparray(Pool *pool, Solvable *s, Id keyname, Id marker,
     }
     printf("\n");
     queue_free(&q);
-}
-
-static int load_repos(void)
-{
-    int i;
-
-    for (i = 0; i < cfg->nsources; i++) {
-        char *list_path = NULL;
-        FILE *fp;
-
-        xasprintf(&list_path, "%s/%s", cfg->lists_dir, cfg->sources[i].name);
-
-        fp = fopen(list_path, "r");
-        if (!fp) {
-            log_debug("cannot open package list '%s': %s",
-                      list_path, strerror(errno));
-            free(list_path);
-            continue;
-        }
-
-        solver_load_repo(cfg->sources[i].name, fp, i);
-        fclose(fp);
-        free(list_path);
-    }
-
-    return 0;
 }
 
 static void print_description(Pool *pool, Solvable *s)

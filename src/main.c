@@ -80,8 +80,10 @@ static void usage_main(FILE *out)
         "  install <pkgs...>   Install packages\n"
         "  remove <pkgs...>    Remove packages\n"
         "  upgrade             Upgrade all installed packages\n"
+        "  list [pattern]       List packages\n"
         "  show <pkg>           Show package information\n"
         "  clean               Remove cached package files\n"
+        "  files <pkg>          List files of an installed package\n"
         "  owns <path>         Find which package owns a file\n"
         "  print-architecture  Show configured architectures\n"
         "\n"
@@ -167,12 +169,42 @@ static void usage_clean(FILE *out)
     );
 }
 
+static void usage_list(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept list [options] [pattern]\n"
+        "\n"
+        "List packages. With no arguments, list all available packages.\n"
+        "An optional glob pattern filters by package name.\n"
+        "\n"
+        "Options:\n"
+        "  -o, --offline-root <dir>  Use an offline root directory\n"
+        "  -h, --help                Show this help\n"
+        "\n"
+        "  --installed               Only show installed packages\n"
+        "  --upgradable              Only show upgradable packages\n"
+    );
+}
+
 static void usage_owns(FILE *out)
 {
     fprintf(out,
         "Usage: aept owns [options] <path>\n"
         "\n"
         "Find which installed package owns a file.\n"
+        "\n"
+        "Options:\n"
+        "  -o, --offline-root <dir>  Use an offline root directory\n"
+        "  -h, --help                Show this help\n"
+    );
+}
+
+static void usage_files(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept files [options] <package>\n"
+        "\n"
+        "List files belonging to an installed package.\n"
         "\n"
         "Options:\n"
         "  -o, --offline-root <dir>  Use an offline root directory\n"
@@ -239,7 +271,21 @@ static struct option clean_options[] = {
     {NULL, 0, NULL, 0}
 };
 
+static struct option list_options[] = {
+    {"offline-root", required_argument, NULL, 'o'},
+    {"help",         no_argument,       NULL, 'h'},
+    {"installed",    no_argument,       NULL, 0x100},
+    {"upgradable",   no_argument,       NULL, 0x101},
+    {NULL, 0, NULL, 0}
+};
+
 static struct option show_options[] = {
+    {"offline-root", required_argument, NULL, 'o'},
+    {"help",         no_argument,       NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option files_options[] = {
     {"offline-root", required_argument, NULL, 'o'},
     {"help",         no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -390,6 +436,45 @@ static int cmd_clean(int argc, char *argv[])
     return r;
 }
 
+static int cmd_list(int argc, char *argv[])
+{
+    const char *offline_root = NULL;
+    const char *pattern = NULL;
+    int filter_installed = 0, filter_upgradable = 0;
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "o:h", list_options, NULL)) != -1) {
+        switch (opt) {
+        case 'o': offline_root = optarg; break;
+        case 0x100: filter_installed = 1; break;
+        case 0x101: filter_upgradable = 1; break;
+        case 'h': usage_list(stdout); return 0;
+        default:  usage_list(stderr); return 1;
+        }
+    }
+
+    if (optind < argc)
+        pattern = argv[optind];
+
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
+        return 1;
+    }
+
+    if (offline_root) {
+        free(cfg->offline_root);
+        cfg->offline_root = xstrdup(offline_root);
+    }
+
+    config_apply_offline_root();
+
+    r = aept_list(pattern, filter_installed, filter_upgradable);
+    config_free();
+    return r;
+}
+
 static int cmd_show(int argc, char *argv[])
 {
     const char *offline_root = NULL;
@@ -423,6 +508,43 @@ static int cmd_show(int argc, char *argv[])
     config_apply_offline_root();
 
     r = aept_show(argv[optind]);
+    config_free();
+    return r;
+}
+
+static int cmd_files(int argc, char *argv[])
+{
+    const char *offline_root = NULL;
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "o:h", files_options, NULL)) != -1) {
+        switch (opt) {
+        case 'o': offline_root = optarg; break;
+        case 'h': usage_files(stdout); return 0;
+        default:  usage_files(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        log_error("files requires a package name");
+        return 1;
+    }
+
+    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+        config_set_defaults();
+    } else if (config_load(conf_file) < 0) {
+        return 1;
+    }
+
+    if (offline_root) {
+        free(cfg->offline_root);
+        cfg->offline_root = xstrdup(offline_root);
+    }
+
+    config_apply_offline_root();
+
+    r = aept_files(argv[optind]);
     config_free();
     return r;
 }
@@ -529,8 +651,12 @@ int main(int argc, char *argv[])
         return cmd_upgrade(argc - optind, argv + optind);
     if (strcmp(command, "clean") == 0)
         return cmd_clean(argc - optind, argv + optind);
+    if (strcmp(command, "list") == 0)
+        return cmd_list(argc - optind, argv + optind);
     if (strcmp(command, "show") == 0)
         return cmd_show(argc - optind, argv + optind);
+    if (strcmp(command, "files") == 0)
+        return cmd_files(argc - optind, argv + optind);
     if (strcmp(command, "owns") == 0)
         return cmd_owns(argc - optind, argv + optind);
     if (strcmp(command, "print-architecture") == 0)
