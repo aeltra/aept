@@ -55,7 +55,7 @@ int aept_verify_signature(const char *file, const char *sigfile)
                   NULL);
         }
 
-        _exit(255);
+        _exit(AEPT_EXIT_EXEC_FAILED);
     }
 
     r = waitpid(pid, &status, 0);

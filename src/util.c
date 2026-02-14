@@ -162,7 +162,7 @@ int xsystem(const char *argv[])
         return -1;
     case 0:
         execvp(argv[0], (char *const *)argv);
-        _exit(255);
+        _exit(AEPT_EXIT_EXEC_FAILED);
     default:
         break;
     }
@@ -289,17 +289,17 @@ int xsystem_offline_root(const char *argv[])
         if (cfg->offline_root) {
             if (geteuid() != 0) {
                 if (unshare_and_map_user() != 0)
-                    _exit(255);
+                    _exit(AEPT_EXIT_SETUP_FAILED);
             }
 
             if (chroot(cfg->offline_root) != 0) {
                 log_error("failed to chroot to '%s': %s",
                           cfg->offline_root, strerror(errno));
-                _exit(255);
+                _exit(AEPT_EXIT_SETUP_FAILED);
             }
         }
         execvp(argv[0], (char *const *)argv);
-        _exit(255);
+        _exit(AEPT_EXIT_EXEC_FAILED);
     default:
         break;
     }

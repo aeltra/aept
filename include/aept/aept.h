@@ -41,4 +41,8 @@ typedef struct {
 
 extern aept_config_t *cfg;
 
+/* Child process exit codes */
+#define AEPT_EXIT_EXEC_FAILED  255
+#define AEPT_EXIT_SETUP_FAILED 254
+
 #endif
