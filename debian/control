@@ -1,0 +1,23 @@
+Source: aept
+Section: admin
+Priority: optional
+Maintainer: Tobias Koch <tobias.koch@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               autoconf,
+               automake,
+               pkg-config,
+               libarchive-dev,
+               libsolv-dev,
+               scdoc
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+
+Package: aept
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, usign, wget
+Description: Minimal package manager for .aeltra packages
+ aept is a minimal package manager with dependency resolution. It uses
+ libsolv for dependency solving, libarchive for archive extraction,
+ wget for downloads, and usign for signature verification.
+ .
+ Supported commands: update, install, remove, upgrade, clean.

@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	autoreconf -fi
+	dh_auto_configure
+
+override_dh_auto_build:
+	dh_auto_build
+	scdoc < aept.1.scd > debian/aept.1
+
+override_dh_auto_clean:
+	rm -f debian/aept.1
+	dh_auto_clean

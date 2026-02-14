@@ -1,0 +1,5 @@
+etc/aept
+etc/aept/usign/trustdb
+var/lib/aept/info
+var/lib/aept/lists
+var/cache/aept
