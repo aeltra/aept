@@ -23,3 +23,13 @@ Makefile
 *.tar.gz
 *.tar.bz2
 *.tar.xz
+
+/debian/.debhelper/
+/debian/aept.1
+/debian/*.debhelper.log
+/debian/*.substvars
+/debian/aept/
+/debian/autoreconf.after
+/debian/autoreconf.before
+/debian/debhelper-build-stamp
+/debian/files
