@@ -6,6 +6,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <libgen.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -267,7 +268,9 @@ static int lock_fd = -1;
 
 int config_lock(void)
 {
-    file_mkdir_hier(cfg->lock_file, 0755);
+    char *dir = xstrdup(cfg->lock_file);
+    file_mkdir_hier(dirname(dir), 0755);
+    free(dir);
 
     lock_fd = open(cfg->lock_file, O_CREAT | O_RDWR, 0644);
     if (lock_fd < 0) {
