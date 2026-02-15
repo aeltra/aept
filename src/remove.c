@@ -111,8 +111,11 @@ int aept_do_remove(const char *name, const char *new_version,
     /* Run prerm */
     r = run_script(cfg->info_dir, name, "prerm",
                    script_args ? script_args : "remove");
-    if (r != 0)
-        log_warning("prerm failed for '%s', continuing", name);
+    if (r != 0) {
+        log_error("prerm failed for '%s', aborting removal", name);
+        free(script_args);
+        return -1;
+    }
 
     /* Remove files */
     remove_files(name, protected);
