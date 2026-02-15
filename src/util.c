@@ -207,7 +207,9 @@ int file_copy(const char *src, const char *dst)
 
     if (fstat(fileno(in), &st) == 0) {
         fchmod(fileno(out), st.st_mode);
-        fchown(fileno(out), st.st_uid, st.st_gid);
+        /* Best effort — requires CAP_CHOWN, harmless if it fails. */
+        if (fchown(fileno(out), st.st_uid, st.st_gid) < 0)
+            (void)0;
     }
 
     fclose(in);
