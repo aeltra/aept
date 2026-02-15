@@ -16,6 +16,7 @@
 #include <solv/chksum.h>
 #include <solv/knownid.h>
 #include <solv/pool.h>
+#include <solv/queue.h>
 #include <solv/repo.h>
 #include <solv/solvable.h>
 #include <solv/transaction.h>
@@ -296,6 +297,230 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     return 0;
 }
 
+/* Return the name of the installed package that owns path, or NULL.
+ * path uses archive format (e.g. "./usr/bin/foo").  Caller must free. */
+static char *find_file_owner(const char *path)
+{
+    DIR *dir;
+    struct dirent *ent;
+    const char *needle;
+
+    needle = path;
+    while (needle[0] == '.' && needle[1] == '/')
+        needle += 2;
+    while (needle[0] == '/')
+        needle++;
+    if (needle[0] == '\0')
+        return NULL;
+
+    dir = opendir(cfg->info_dir);
+    if (!dir)
+        return NULL;
+
+    while ((ent = readdir(dir)) != NULL) {
+        const char *dot;
+        char *list_path = NULL;
+        FILE *fp;
+        char buf[4096];
+
+        dot = strrchr(ent->d_name, '.');
+        if (!dot || strcmp(dot, ".list") != 0)
+            continue;
+
+        xasprintf(&list_path, "%s/%s", cfg->info_dir, ent->d_name);
+        fp = fopen(list_path, "r");
+        free(list_path);
+
+        if (!fp)
+            continue;
+
+        while (fgets(buf, sizeof(buf), fp)) {
+            const char *entry;
+            char *tab;
+
+            buf[strcspn(buf, "\n")] = '\0';
+
+            tab = strchr(buf, '\t');
+            if (tab)
+                *tab = '\0';
+
+            entry = buf;
+            while (entry[0] == '.' && entry[1] == '/')
+                entry += 2;
+            while (entry[0] == '/')
+                entry++;
+
+            if (entry[0] != '\0' && strcmp(entry, needle) == 0) {
+                fclose(fp);
+                closedir(dir);
+
+                size_t name_len = (size_t)(dot - ent->d_name);
+                char *name = xmalloc(name_len + 1);
+                memcpy(name, ent->d_name, name_len);
+                name[name_len] = '\0';
+                return name;
+            }
+        }
+
+        fclose(fp);
+    }
+
+    closedir(dir);
+    return NULL;
+}
+
+/* Check whether solvable s declares Replaces for owner_name. */
+static int solvable_replaces(Pool *pool, Solvable *s, const char *owner_name)
+{
+    Queue q;
+    Id owner_id;
+    int i;
+
+    owner_id = pool_str2id(pool, owner_name, 0);
+    if (!owner_id)
+        return 0;
+
+    queue_init(&q);
+    solvable_lookup_deparray(s, SOLVABLE_OBSOLETES, &q, 0);
+
+    for (i = 0; i < q.count; i++) {
+        Id dep = q.elements[i];
+        Id name;
+
+        if (ISRELDEP(dep)) {
+            Reldep *rd = GETRELDEP(pool, dep);
+            name = rd->name;
+        } else {
+            name = dep;
+        }
+
+        if (name == owner_id) {
+            queue_free(&q);
+            return 1;
+        }
+    }
+
+    queue_free(&q);
+    return 0;
+}
+
+/* Check whether an on-disk symlink and an archive symlink point to the
+ * same target, and that target is a directory.  These are treated like
+ * shared directories and are not conflicts. */
+static int same_dir_symlink(const char *disk_path, const char *archive_target)
+{
+    char link_buf[4096];
+    ssize_t len;
+    char *resolved;
+    struct stat st;
+    int is_dir;
+
+    if (!archive_target)
+        return 0;
+
+    len = readlink(disk_path, link_buf, sizeof(link_buf) - 1);
+    if (len < 0)
+        return 0;
+    link_buf[len] = '\0';
+
+    if (strcmp(link_buf, archive_target) != 0)
+        return 0;
+
+    resolved = realpath(disk_path, NULL);
+    if (!resolved)
+        return 0;
+
+    is_dir = (lstat(resolved, &st) == 0 && S_ISDIR(st.st_mode));
+    free(resolved);
+    return is_dir;
+}
+
+/* Check for file clashes before extracting a package.
+ * old_files: fileset of old version (for upgrades), or NULL.
+ * Returns the number of clashes (0 = OK). */
+static int check_file_clashes(const char *ipk_path, Pool *pool, Id p,
+                               aept_fileset_t *old_files)
+{
+    Solvable *s = pool_id2solvable(pool, p);
+    const char *pkg_name = pool_id2str(pool, s->name);
+    ar_file_list_t new_files;
+    int clashes = 0;
+    int i;
+
+    ar_file_list_init(&new_files);
+
+    if (ar_list_data_paths(ipk_path, &new_files) < 0) {
+        ar_file_list_free(&new_files);
+        return -1;
+    }
+
+    for (i = 0; i < new_files.count; i++) {
+        const char *path = new_files.entries[i].path;
+        const char *link_target = new_files.entries[i].link_target;
+        const char *stripped = path;
+        char *disk_path = NULL;
+        struct stat st;
+        char *owner;
+
+        while (stripped[0] == '.' && stripped[1] == '/')
+            stripped += 2;
+        while (stripped[0] == '/')
+            stripped++;
+        if (stripped[0] == '\0')
+            continue;
+
+        xasprintf(&disk_path, "%s/%s",
+                  cfg->offline_root ? cfg->offline_root : "", stripped);
+
+        if (lstat(disk_path, &st) < 0) {
+            free(disk_path);
+            continue;
+        }
+
+        /* Both are symlinks to the same directory — shared like dirs */
+        if (S_ISLNK(st.st_mode) && link_target &&
+                same_dir_symlink(disk_path, link_target)) {
+            free(disk_path);
+            continue;
+        }
+
+        free(disk_path);
+
+        /* Expected from old version of this package */
+        if (old_files && fileset_contains(old_files, path))
+            continue;
+
+        owner = find_file_owner(path);
+
+        /* Same package (reinstall) */
+        if (owner && strcmp(owner, pkg_name) == 0) {
+            free(owner);
+            continue;
+        }
+
+        /* New package declares Replaces for the owner */
+        if (owner && solvable_replaces(pool, s, owner)) {
+            free(owner);
+            continue;
+        }
+
+        if (owner) {
+            log_error("package '%s' wants to install '%s'\n"
+                      "  but that file is already provided by package '%s'",
+                      pkg_name, stripped, owner);
+            free(owner);
+        } else {
+            log_error("package '%s' wants to install '%s'\n"
+                      "  but that file already exists on the filesystem",
+                      pkg_name, stripped);
+        }
+        clashes++;
+    }
+
+    ar_file_list_free(&new_files);
+    return clashes;
+}
+
 static int do_install_package(const char *ipk_path, Pool *pool, Id p,
                               const char *old_version)
 {
@@ -344,6 +569,13 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
                    old_version ? "upgrade" : "install", old_version);
     if (r != 0)
         goto cleanup;
+
+    /* Check for file conflicts before extraction */
+    r = check_file_clashes(ipk_path, pool, p, NULL);
+    if (r != 0) {
+        r = -1;
+        goto cleanup;
+    }
 
     /* Extract data archive to root */
     data_ar = ar_open_pkg_data_archive(ipk_path);
@@ -565,7 +797,14 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         }
     }
 
-    /* 5. Extract new data archive (overwrites shared files) */
+    /* 5. Check for file conflicts before extraction */
+    r = check_file_clashes(ipk_path, pool, p, &old_files);
+    if (r != 0) {
+        r = -1;
+        goto cleanup_filesets;
+    }
+
+    /* 6. Extract new data archive (overwrites shared files) */
     data_ar = ar_open_pkg_data_archive(ipk_path);
     if (!data_ar) {
         log_error("failed to open data archive in '%s'", ipk_path);

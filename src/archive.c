@@ -832,6 +832,80 @@ int ar_extract_paths_to_stream(struct aept_ar *ar, FILE *stream)
     return extract_paths_to_stream(ar->ar, stream);
 }
 
+void ar_file_list_init(ar_file_list_t *fl)
+{
+    fl->entries = NULL;
+    fl->count = 0;
+    fl->alloc = 0;
+}
+
+void ar_file_list_free(ar_file_list_t *fl)
+{
+    for (int i = 0; i < fl->count; i++) {
+        free(fl->entries[i].path);
+        free(fl->entries[i].link_target);
+    }
+    free(fl->entries);
+    ar_file_list_init(fl);
+}
+
+static void file_list_add(ar_file_list_t *fl, const char *path,
+                           const char *link_target)
+{
+    if (fl->count >= fl->alloc) {
+        fl->alloc = fl->alloc ? fl->alloc * 2 : 64;
+        fl->entries = xrealloc(fl->entries,
+                               fl->alloc * sizeof(ar_file_entry_t));
+    }
+
+    fl->entries[fl->count].path = xstrdup(path);
+    fl->entries[fl->count].link_target =
+        link_target ? xstrdup(link_target) : NULL;
+    fl->count++;
+}
+
+int ar_list_data_paths(const char *ipk_path, ar_file_list_t *out)
+{
+    struct aept_ar *ar;
+    struct archive_entry *entry;
+    int eof;
+
+    ar = ar_open_pkg_data_archive(ipk_path);
+    if (!ar)
+        return -1;
+
+    while (1) {
+        entry = read_header(ar->ar, &eof);
+        if (eof)
+            break;
+        if (!entry) {
+            ar_close(ar);
+            return -1;
+        }
+
+        const char *path = archive_entry_pathname(entry);
+        const struct stat *st = archive_entry_stat(entry);
+
+        if (S_ISDIR(st->st_mode))
+            continue;
+
+        if (!archive_path_is_safe(path)) {
+            log_error("refusing unsafe archive path '%s'", path);
+            ar_close(ar);
+            return -1;
+        }
+
+        const char *target = NULL;
+        if (S_ISLNK(st->st_mode))
+            target = archive_entry_symlink(entry);
+
+        file_list_add(out, path, target);
+    }
+
+    ar_close(ar);
+    return 0;
+}
+
 int ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size)
 {
     return extract_all(ar->ar, prefix, ar->extract_flags, size);

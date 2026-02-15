@@ -46,6 +46,25 @@ int ar_extract_all(struct aept_ar *ar, const char *prefix,
 int ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,
                         const char *prefix);
 
+typedef struct {
+    char *path;
+    char *link_target;  /* NULL if not a symlink */
+} ar_file_entry_t;
+
+typedef struct {
+    ar_file_entry_t *entries;
+    int count;
+    int alloc;
+} ar_file_list_t;
+
+void ar_file_list_init(ar_file_list_t *fl);
+void ar_file_list_free(ar_file_list_t *fl);
+
+/* List non-directory file paths from an IPK's data archive.
+ * Fills out with archive paths (e.g. "./usr/bin/foo") and symlink
+ * targets where applicable.  Returns 0 on success, -1 on error. */
+int ar_list_data_paths(const char *ipk_path, ar_file_list_t *out);
+
 /* Close and free archive handle. */
 void ar_close(struct aept_ar *ar);
 
