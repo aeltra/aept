@@ -26,6 +26,7 @@ typedef struct {
     char *lock_file;        /* default "/var/lib/aept/lock" */
     char *usign_keydir;     /* default "/etc/aept/usign/trustdb" */
     char *auto_file;        /* default "/var/lib/aept/auto-installed" */
+    char *pin_file;         /* default "/var/lib/aept/pinned-packages" */
 
     char **archs;
     int narchs;

@@ -11,14 +11,20 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <solv/pool.h>
+#include <solv/repo.h>
+#include <solv/solvable.h>
+
 #include "aept/aept.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"
 #include "aept/install.h"
 #include "aept/msg.h"
+#include "aept/pin.h"
 #include "aept/query.h"
 #include "aept/remove.h"
+#include "aept/solver.h"
 #include "aept/status.h"
 #include "aept/update.h"
 #include "aept/util.h"
@@ -113,6 +119,8 @@ static void usage_main(FILE *out)
         "  list [pattern]      List packages\n"
         "  show <pkg>          Show package information\n"
         "  mark <action>       Control auto-installed package marks\n"
+        "  pin <pkgs...>       Pin packages to a specific version\n"
+        "  unpin <pkgs...>     Remove version pins\n"
         "  clean               Remove cached package files\n"
         "  files <pkg>         List files of an installed package\n"
         "  owns <path>         Find which package owns a file\n"
@@ -287,6 +295,21 @@ static void usage_mark(FILE *out)
     );
 }
 
+static void usage_pin(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept pin <packages...>\n"
+        "       aept unpin <packages...>\n"
+        "\n"
+        "Pin packages to their currently installed version.\n"
+        "Use name=version to pin to a specific version.\n"
+        "Pinned packages are held back during upgrade.\n"
+        "\n"
+        "Options:\n"
+        "  -h, --help  Show this help\n"
+    );
+}
+
 static void usage_print_architecture(FILE *out)
 {
     fprintf(out,
@@ -376,6 +399,11 @@ static struct option mark_manual_options[] = {
 };
 
 static struct option mark_auto_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option pin_options[] = {
     {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
@@ -790,6 +818,134 @@ static int cmd_mark(int argc, char *argv[])
     return 1;
 }
 
+static int cmd_pin(int argc, char *argv[])
+{
+    int opt, i, r, need_solver = 0;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h': usage_pin(stdout); return 0;
+        default:  usage_pin(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        log_error("pin requires at least one package name");
+        usage_pin(stderr);
+        return 1;
+    }
+
+    if (load_config() < 0)
+        return 1;
+
+    /* check if any arg needs installed-version lookup */
+    for (i = optind; i < argc; i++) {
+        if (!strchr(argv[i], '=')) {
+            need_solver = 1;
+            break;
+        }
+    }
+
+    Pool *pool = NULL;
+    Repo *installed = NULL;
+
+    if (need_solver) {
+        if (solver_init() < 0 || status_load() < 0) {
+            solver_fini();
+            config_free();
+            return 1;
+        }
+        pool = solver_pool();
+        installed = pool->installed;
+    }
+
+    r = 0;
+    for (i = optind; i < argc; i++) {
+        char *eq = strchr(argv[i], '=');
+        const char *name;
+        const char *version;
+
+        if (eq) {
+            *eq = '\0';
+            name = argv[i];
+            version = eq + 1;
+
+            if (pin_add(name, version) < 0)
+                r = -1;
+            else
+                log_info("pinned %s at version %s", name, version);
+        } else {
+            name = argv[i];
+            const char *found_version = NULL;
+
+            if (installed) {
+                Id p;
+                Solvable *s;
+
+                FOR_REPO_SOLVABLES(installed, p, s) {
+                    if (strcmp(pool_id2str(pool, s->name), name) == 0) {
+                        found_version = pool_id2str(pool, s->evr);
+                        break;
+                    }
+                }
+            }
+
+            if (!found_version) {
+                log_warning("package '%s' is not installed, skipping",
+                            name);
+                continue;
+            }
+
+            char *ver_copy = xstrdup(found_version);
+            if (pin_add(name, ver_copy) < 0)
+                r = -1;
+            else
+                log_info("pinned %s at version %s", name, ver_copy);
+            free(ver_copy);
+        }
+    }
+
+    if (need_solver)
+        solver_fini();
+
+    config_free();
+    return r < 0 ? 1 : 0;
+}
+
+static int cmd_unpin(int argc, char *argv[])
+{
+    int opt, i, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h': usage_pin(stdout); return 0;
+        default:  usage_pin(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        log_error("unpin requires at least one package name");
+        usage_pin(stderr);
+        return 1;
+    }
+
+    if (load_config() < 0)
+        return 1;
+
+    r = 0;
+    for (i = optind; i < argc; i++) {
+        if (pin_remove(argv[i]) < 0)
+            r = -1;
+        else
+            log_info("unpinned %s", argv[i]);
+    }
+
+    config_free();
+    return r < 0 ? 1 : 0;
+}
+
 static int cmd_print_architecture(int argc, char *argv[])
 {
     int opt, r;
@@ -867,6 +1023,10 @@ int main(int argc, char *argv[])
         return cmd_owns(argc - optind, argv + optind);
     if (strcmp(command, "mark") == 0)
         return cmd_mark(argc - optind, argv + optind);
+    if (strcmp(command, "pin") == 0)
+        return cmd_pin(argc - optind, argv + optind);
+    if (strcmp(command, "unpin") == 0)
+        return cmd_unpin(argc - optind, argv + optind);
     if (strcmp(command, "print-architecture") == 0)
         return cmd_print_architecture(argc - optind, argv + optind);
 

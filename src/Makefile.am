@@ -17,7 +17,8 @@ aept_SOURCES = \
     update.c \
     status.c \
     util.c \
-    msg.c
+    msg.c \
+    pin.c
 
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
 aept_LDADD = $(SOLV_LIBS) $(ARCHIVE_LIBS)

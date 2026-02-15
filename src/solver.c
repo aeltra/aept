@@ -34,6 +34,14 @@ static int nrepos;
 static Solver *solv;
 static Transaction *trans;
 
+typedef struct {
+    char *name;
+    char *version;
+} pin_entry_t;
+
+static pin_entry_t *pins;
+static int npins;
+
 int solver_init(void)
 {
     pool = pool_create();
@@ -178,6 +186,18 @@ static int do_solve(Queue *job)
     return 0;
 }
 
+static const char *find_pin_version(const char *name)
+{
+    int i;
+
+    for (i = 0; i < npins; i++) {
+        if (strcmp(name, pins[i].name) == 0)
+            return pins[i].version;
+    }
+
+    return NULL;
+}
+
 int solver_resolve_install(const char **names, int count)
 {
     Queue job;
@@ -188,10 +208,54 @@ int solver_resolve_install(const char **names, int count)
     if (names == NULL || count == 0) {
         /* upgrade all */
         queue_push2(&job, SOLVER_UPDATE | SOLVER_SOLVABLE_ALL, 0);
+
+        /* lock pinned packages to prevent upgrade */
+        for (i = 0; i < npins; i++) {
+            Id nameid = pool_str2id(pool, pins[i].name, 0);
+            if (nameid)
+                queue_push2(&job,
+                            SOLVER_LOCK | SOLVER_SOLVABLE_NAME, nameid);
+        }
     } else {
         for (i = 0; i < count; i++) {
-            Id id = pool_str2id(pool, names[i], 1);
-            queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
+            const char *pin_ver = find_pin_version(names[i]);
+
+            if (pin_ver) {
+                Id nameid = pool_str2id(pool, names[i], 0);
+                Id target = 0;
+
+                if (nameid) {
+                    Id p, pp;
+                    FOR_PROVIDES(p, pp, nameid) {
+                        Solvable *s = pool_id2solvable(pool, p);
+                        if (s->repo == pool->installed)
+                            continue;
+                        if (pool_evrcmp_str(pool,
+                                pool_id2str(pool, s->evr),
+                                pin_ver, EVRCMP_COMPARE) == 0) {
+                            target = p;
+                            break;
+                        }
+                    }
+                }
+
+                if (target) {
+                    queue_push2(&job,
+                                SOLVER_INSTALL | SOLVER_SOLVABLE, target);
+                } else {
+                    log_warning("pinned version '%s' of '%s' not found "
+                                "in any repository, installing best "
+                                "available", pin_ver, names[i]);
+                    Id id = pool_str2id(pool, names[i], 1);
+                    queue_push2(&job,
+                                SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES,
+                                id);
+                }
+            } else {
+                Id id = pool_str2id(pool, names[i], 1);
+                queue_push2(&job,
+                            SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
+            }
         }
     }
 
@@ -268,8 +332,31 @@ Id solver_find_available(const char *name)
     return best;
 }
 
+void solver_add_pin(const char *name, const char *version)
+{
+    npins++;
+    pins = xrealloc(pins, npins * sizeof(pin_entry_t));
+    pins[npins - 1].name = xstrdup(name);
+    pins[npins - 1].version = xstrdup(version);
+}
+
+void solver_clear_pins(void)
+{
+    int i;
+
+    for (i = 0; i < npins; i++) {
+        free(pins[i].name);
+        free(pins[i].version);
+    }
+    free(pins);
+    pins = NULL;
+    npins = 0;
+}
+
 void solver_fini(void)
 {
+    solver_clear_pins();
+
     if (trans) {
         transaction_free(trans);
         trans = NULL;

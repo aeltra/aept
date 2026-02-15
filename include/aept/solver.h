@@ -41,6 +41,13 @@ int solver_solvable_source_index(Id p);
  * Returns the solvable Id, or 0 if not found. */
 Id solver_find_available(const char *name);
 
+/* Register a version pin. The solver will lock this package during
+ * upgrade-all, and install the exact pinned version during install. */
+void solver_add_pin(const char *name, const char *version);
+
+/* Clear all registered pins (called by solver_fini). */
+void solver_clear_pins(void);
+
 /* Free all solver state. */
 void solver_fini(void);
 

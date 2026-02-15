@@ -27,6 +27,7 @@
 #include "aept/config.h"
 #include "aept/download.h"
 #include "aept/msg.h"
+#include "aept/pin.h"
 #include "aept/remove.h"
 #include "aept/script.h"
 #include "aept/solver.h"
@@ -1084,6 +1085,8 @@ int aept_install(const char **names, int count)
     r = load_repos();
     if (r < 0)
         goto out;
+
+    pin_load_into_solver();
 
     r = solver_resolve_install(names, count);
     if (r < 0)
