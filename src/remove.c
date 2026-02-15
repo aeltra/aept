@@ -198,6 +198,9 @@ int aept_remove(const char **names, int count)
         goto out;
     }
 
+    int n_erase = 0;
+
+    printf("Actions:\n");
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
@@ -212,7 +215,10 @@ int aept_remove(const char **names, int count)
         const char *evr = pool_id2str(pool, s->evr);
 
         printf("  remove %s %s\n", pkg_name, evr);
+        n_erase++;
     }
+
+    printf("Summary:\n  %d to remove\n", n_erase);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");
