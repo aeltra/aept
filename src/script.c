@@ -42,7 +42,7 @@ int run_script(const char *script_dir, const char *pkg_name,
         return 0;
     }
 
-    log_info("running %s %s", script, args ? args : "");
+    log_info("running %s for %s %s", script, pkg_name, args ? args : "");
 
     const char *run_path = path;
     if (cfg->offline_root)
@@ -59,7 +59,8 @@ int run_script(const char *script_dir, const char *pkg_name,
     free(path);
 
     if (r != 0) {
-        log_error("%s script failed with exit code %d", script, r);
+        log_error("%s script for %s failed with exit code %d",
+                  script, pkg_name, r);
         return r;
     }
 

@@ -240,6 +240,8 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
         xasprintf(&postinst_args, "configure %s", old_version);
     }
 
+    log_info("installing %s", name);
+
     xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
 
     if (!mkdtemp(tmpdir)) {
@@ -433,6 +435,8 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     xasprintf(&postinst_args, "configure %s", old_version);
     xasprintf(&prerm_args, "upgrade %s", new_version);
     xasprintf(&postrm_args, "upgrade %s", new_version);
+
+    log_info("upgrading %s", name);
 
     xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
 
@@ -789,9 +793,6 @@ static int do_reinstall(const char **names, int count,
                         names[i]);
             continue;
         }
-
-        log_info("reinstalling %s %s", pkg_name,
-                 pool_id2str(pool, s->evr));
 
         char *ipk_path = NULL;
         r = download_package(avail, pool, &ipk_path);
