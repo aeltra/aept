@@ -34,6 +34,7 @@ void config_set_defaults(void)
     cfg->lock_file = xstrdup("/var/lib/aept/lock");
     cfg->usign_bin = xstrdup("usign");
     cfg->usign_keydir = xstrdup("/etc/aept/usign/trustdb");
+    cfg->auto_file = xstrdup("/var/lib/aept/auto-installed");
 
     cfg->check_signature = 1;
     cfg->verbosity = AEPT_INFO;
@@ -85,6 +86,8 @@ static void set_option(const char *key, const char *value)
         strp = &cfg->usign_bin;
     else if (strcmp(key, "usign_keydir") == 0)
         strp = &cfg->usign_keydir;
+    else if (strcmp(key, "auto_file") == 0)
+        strp = &cfg->auto_file;
     else if (strcmp(key, "check_signature") == 0) {
         cfg->check_signature = atoi(value);
         return;
@@ -130,6 +133,9 @@ void config_apply_offline_root(void)
     free(cfg->lock_file);
     cfg->lock_file = tmp;
 
+    xasprintf(&tmp, "%s%s", cfg->offline_root, cfg->auto_file);
+    free(cfg->auto_file);
+    cfg->auto_file = tmp;
 }
 
 int config_load(const char *filename)
@@ -255,6 +261,7 @@ void config_free(void)
     free(cfg->lock_file);
     free(cfg->usign_bin);
     free(cfg->usign_keydir);
+    free(cfg->auto_file);
 
     memset(cfg, 0, sizeof(*cfg));
 }

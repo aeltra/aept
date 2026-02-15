@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "aept/aept.h"
+#include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"
 #include "aept/install.h"
@@ -106,6 +107,7 @@ static void usage_main(FILE *out)
         "  update              Fetch package lists from repositories\n"
         "  install <pkgs...>   Install packages\n"
         "  remove <pkgs...>    Remove packages\n"
+        "  autoremove          Remove unneeded auto-installed packages\n"
         "  upgrade             Upgrade all installed packages\n"
         "  list [pattern]      List packages\n"
         "  show <pkg>          Show package information\n"
@@ -156,6 +158,20 @@ static void usage_remove(FILE *out)
         "Usage: aept remove [options] <packages...>\n"
         "\n"
         "Remove installed packages.\n"
+        "\n"
+        "Options:\n"
+        "  -f, --force-depends   Ignore dependency errors\n"
+        "  -n, --noaction        Dry run, show what would be done\n"
+        "  -h, --help            Show this help\n"
+    );
+}
+
+static void usage_autoremove(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept autoremove [options]\n"
+        "\n"
+        "Remove auto-installed packages that are no longer needed.\n"
         "\n"
         "Options:\n"
         "  -f, --force-depends   Ignore dependency errors\n"
@@ -276,6 +292,13 @@ static struct option install_options[] = {
     {NULL, 0, NULL, 0}
 };
 
+static struct option autoremove_options[] = {
+    {"force-depends", no_argument, NULL, 'f'},
+    {"noaction",      no_argument, NULL, 'n'},
+    {"help",          no_argument, NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
 static struct option remove_options[] = {
     {"force-depends", no_argument, NULL, 'f'},
     {"noaction",      no_argument, NULL, 'n'},
@@ -375,6 +398,32 @@ static int cmd_install(int argc, char *argv[])
     cfg->no_cache = no_cache;
 
     r = aept_install((const char **)&argv[optind], argc - optind);
+    teardown_config();
+    return r;
+}
+
+static int cmd_autoremove(int argc, char *argv[])
+{
+    int force_depends = 0, noaction = 0;
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "fnh", autoremove_options, NULL)) != -1) {
+        switch (opt) {
+        case 'f': force_depends = 1; break;
+        case 'n': noaction = 1; break;
+        case 'h': usage_autoremove(stdout); return 0;
+        default:  usage_autoremove(stderr); return 1;
+        }
+    }
+
+    if (setup_config() < 0)
+        return 1;
+
+    cfg->force_depends = force_depends;
+    cfg->noaction = noaction;
+
+    r = aept_autoremove();
     teardown_config();
     return r;
 }
@@ -626,6 +675,8 @@ int main(int argc, char *argv[])
         return cmd_install(argc - optind, argv + optind);
     if (strcmp(command, "remove") == 0)
         return cmd_remove(argc - optind, argv + optind);
+    if (strcmp(command, "autoremove") == 0)
+        return cmd_autoremove(argc - optind, argv + optind);
     if (strcmp(command, "upgrade") == 0)
         return cmd_upgrade(argc - optind, argv + optind);
     if (strcmp(command, "clean") == 0)

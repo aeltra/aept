@@ -146,3 +146,124 @@ int status_remove(const char *name)
     free(tmp_path);
     return 0;
 }
+
+int status_mark_auto(const char *name)
+{
+    if (status_is_auto(name))
+        return 0;
+
+    FILE *fp = fopen(cfg->auto_file, "a");
+    if (!fp) {
+        log_error("cannot open auto-installed file '%s': %s",
+                  cfg->auto_file, strerror(errno));
+        return -1;
+    }
+
+    fprintf(fp, "%s\n", name);
+
+    if (ferror(fp) || fclose(fp) != 0) {
+        log_error("failed to write auto-installed file '%s'",
+                  cfg->auto_file);
+        return -1;
+    }
+
+    return 0;
+}
+
+int status_unmark_auto(const char *name)
+{
+    FILE *fp, *tmp;
+    char *tmp_path = NULL;
+    char buf[256];
+    int found = 0;
+
+    fp = fopen(cfg->auto_file, "r");
+    if (!fp)
+        return 0;
+
+    xasprintf(&tmp_path, "%s.tmp", cfg->auto_file);
+    tmp = fopen(tmp_path, "w");
+    if (!tmp) {
+        fclose(fp);
+        free(tmp_path);
+        return -1;
+    }
+
+    while (fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        sscanf(buf, "%255s", pkg_name);
+        if (strcmp(pkg_name, name) == 0) {
+            found = 1;
+            continue;
+        }
+        fputs(buf, tmp);
+    }
+
+    fclose(fp);
+
+    if (!found) {
+        fclose(tmp);
+        unlink(tmp_path);
+        free(tmp_path);
+        return 0;
+    }
+
+    if (ferror(tmp) || fclose(tmp) != 0) {
+        log_error("failed to write auto-installed file '%s'", tmp_path);
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
+    if (rename(tmp_path, cfg->auto_file) < 0) {
+        log_error("cannot rename auto-installed file: %s", strerror(errno));
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
+    free(tmp_path);
+    return 0;
+}
+
+int status_is_auto(const char *name)
+{
+    FILE *fp;
+    char buf[256];
+
+    fp = fopen(cfg->auto_file, "r");
+    if (!fp)
+        return 0;
+
+    while (fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        sscanf(buf, "%255s", pkg_name);
+        if (strcmp(pkg_name, name) == 0) {
+            fclose(fp);
+            return 1;
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+int status_load_auto_set(aept_fileset_t *set)
+{
+    FILE *fp;
+    char buf[256];
+
+    fp = fopen(cfg->auto_file, "r");
+    if (!fp)
+        return 0;
+
+    while (fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        if (sscanf(buf, "%255s", pkg_name) == 1)
+            fileset_add(set, pkg_name);
+    }
+
+    fclose(fp);
+    fileset_sort(set);
+    return 0;
+}

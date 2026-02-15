@@ -2,6 +2,7 @@ bin_PROGRAMS = aept
 
 aept_SOURCES = \
     main.c \
+    autoremove.c \
     clean.c \
     config.c \
     download.c \

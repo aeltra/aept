@@ -130,6 +130,7 @@ int aept_do_remove(const char *name, const char *new_version,
 
     /* Update status */
     status_remove(name);
+    status_unmark_auto(name);
 
     log_info("removed %s", name);
 

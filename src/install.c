@@ -466,6 +466,12 @@ int aept_install(const char **names, int count)
     if (r < 0)
         goto out;
 
+    /* Explicitly named packages become manually installed */
+    if (names && !cfg->noaction) {
+        for (i = 0; i < count; i++)
+            status_unmark_auto(names[i]);
+    }
+
     trans = solver_transaction();
     pool = solver_pool();
 
@@ -584,6 +590,21 @@ int aept_install(const char **names, int count)
             r = do_install_package(ipk_paths[i], pool, p, old_ver);
             if (r < 0)
                 goto fileset_cleanup;
+
+            /* Mark as auto-installed if this is a fresh install
+             * of a dependency (not explicitly requested). */
+            if (names && !old_ver) {
+                int is_explicit = 0;
+                int j;
+                for (j = 0; j < count; j++) {
+                    if (strcmp(names[j], pkg_name) == 0) {
+                        is_explicit = 1;
+                        break;
+                    }
+                }
+                if (!is_explicit)
+                    status_mark_auto(pkg_name);
+            }
 
             /* Record installed files for removal protection */
             {
