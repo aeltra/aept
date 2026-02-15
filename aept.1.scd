@@ -6,7 +6,7 @@ aept - Aeltra Package Tool
 
 # SYNOPSIS
 
-*aept* [-c <file>] [-v] <command> [options] [args...]
+*aept* [-c <file>] [-o <dir>] [-v] <command> [options] [args...]
 
 # DESCRIPTION
 
@@ -20,6 +20,9 @@ verification is performed by usign.
 *-c*, *--conf* <file>
 	Use _file_ as the configuration file instead of the default
 	_/etc/aept/aept.conf_.
+
+*-o*, *--offline-root* <dir>
+	Use _dir_ as the package root directory. See *OFFLINE ROOT*.
 
 *-v*, *--verbose*
 	Increase verbosity. Can be specified multiple times.
@@ -35,20 +38,12 @@ Fetch package lists from all configured repositories. If signature checking
 is enabled, also downloads and verifies the _Packages.sig_ file for each
 source. Package lists are stored in the lists directory (see *FILES*).
 
-*-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. See
-	*OFFLINE ROOT*.
-
 ## install [options] <packages...>
 
 Install one or more packages by name. Dependencies are resolved automatically.
 Packages that are already installed at the requested version are skipped. The
 solver may also schedule removals if a package conflicts with or replaces an
 installed package.
-
-*-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. See
-	*OFFLINE ROOT*.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -77,9 +72,6 @@ Remove one or more installed packages. Reverse dependencies are resolved
 automatically, and any packages that depend on the removed packages will also
 be removed unless *--force-depends* is given.
 
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
-
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
 
@@ -90,10 +82,6 @@ be removed unless *--force-depends* is given.
 ## upgrade [options]
 
 Upgrade all installed packages to the latest available version.
-
-*-o*, *--offline-root* <dir>
-	Install packages into _dir_ instead of the filesystem root. See
-	*OFFLINE ROOT*.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -121,16 +109,10 @@ description. If a package is available in a repository and also installed,
 the repository version is shown and the install status is indicated. Returns
 exit code 1 if the package is not found.
 
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
-
 ## list [options] [pattern]
 
 List packages. With no arguments, all available packages are shown. An
 optional glob pattern filters by package name.
-
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
 
 *--installed*
 	Only show installed packages.
@@ -142,25 +124,16 @@ optional glob pattern filters by package name.
 
 Remove all cached package files from the cache directory.
 
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
-
 ## owns [options] <path>
 
 Find which installed package owns a file. Searches the _.list_ files in the
 info directory for a matching path. Returns exit code 1 if no package owns
 the file.
 
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
-
 ## files [options] <package>
 
 List files belonging to an installed package. Prints file paths to stdout.
 Returns exit code 1 if the package is not installed.
-
-*-o*, *--offline-root* <dir>
-	Use _dir_ as the offline root directory. See *OFFLINE ROOT*.
 
 ## print-architecture
 
@@ -258,8 +231,9 @@ option check_signature 1
 # OFFLINE ROOT
 
 When an offline root is set (via *--offline-root* or the *offline_root* config
-option), all state directories (lists, cache, info, status, lock) are
-automatically prefixed with the offline root path.
+option), the configuration file is read from _<dir>/etc/aept/aept.conf_
+(unless *--conf* is given explicitly) and all state directories (lists, cache,
+info, status, lock) are automatically prefixed with the offline root path.
 
 Maintainer scripts are executed inside the offline root using
 *unshare*(2) with *CLONE_NEWUSER* to set up a user namespace. UID and GID

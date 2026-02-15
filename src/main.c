@@ -24,11 +24,12 @@
 #define DEFAULT_CONF "/etc/aept/aept.conf"
 
 static const char *conf_file = DEFAULT_CONF;
+static const char *offline_root;
 static int conf_explicit;
 
 /* ── shared config helpers ─────────────────────────────────────────── */
 
-static const char *resolve_conf(const char *offline_root)
+static const char *resolve_conf(void)
 {
     char *path;
 
@@ -39,9 +40,9 @@ static const char *resolve_conf(const char *offline_root)
     return path;
 }
 
-static int setup_config(const char *offline_root)
+static int load_config(void)
 {
-    const char *cf = resolve_conf(offline_root);
+    const char *cf = resolve_conf();
 
     if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
         log_warning("config file '%s' not found, using defaults", cf);
@@ -61,6 +62,13 @@ static int setup_config(const char *offline_root)
     }
 
     config_apply_offline_root();
+    return 0;
+}
+
+static int setup_config(void)
+{
+    if (load_config() < 0)
+        return -1;
 
     if (config_validate() < 0) {
         config_free();
@@ -86,12 +94,13 @@ static void teardown_config(void)
 static void usage_main(FILE *out)
 {
     fprintf(out,
-        "Usage: aept [-c <file>] [-v] <command> [options] [args...]\n"
+        "Usage: aept [-c <file>] [-o <dir>] [-v] <command> [options] [args...]\n"
         "\n"
         "Global options:\n"
-        "  -c, --conf <file>   Configuration file (default: %s)\n"
-        "  -v, --verbose       Increase verbosity\n"
-        "  -h, --help          Show this help\n"
+        "  -c, --conf <file>         Configuration file (default: %s)\n"
+        "  -o, --offline-root <dir>  Use <dir> as the package root\n"
+        "  -v, --verbose             Increase verbosity\n"
+        "  -h, --help                Show this help\n"
         "\n"
         "Commands:\n"
         "  update              Fetch package lists from repositories\n"
@@ -118,8 +127,7 @@ static void usage_update(FILE *out)
         "Fetch package lists from repositories.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Install to an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
@@ -131,15 +139,14 @@ static void usage_install(FILE *out)
         "Install packages and their dependencies.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Install to an offline root directory\n"
-        "  -f, --force-depends       Ignore dependency errors\n"
-        "  -d, --download-only       Only download, do not install\n"
-        "  -n, --noaction            Dry run, show what would be done\n"
-        "  -h, --help                Show this help\n"
+        "  -f, --force-depends   Ignore dependency errors\n"
+        "  -d, --download-only   Only download, do not install\n"
+        "  -n, --noaction        Dry run, show what would be done\n"
+        "  -h, --help            Show this help\n"
         "\n"
-        "  --allow-downgrade         Allow package downgrades\n"
-        "  --reinstall               Reinstall already installed packages\n"
-        "  --no-cache                Download, install, and delete each package\n"
+        "  --allow-downgrade     Allow package downgrades\n"
+        "  --reinstall           Reinstall already installed packages\n"
+        "  --no-cache            Download, install, and delete each package\n"
     );
 }
 
@@ -151,10 +158,9 @@ static void usage_remove(FILE *out)
         "Remove installed packages.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Install to an offline root directory\n"
-        "  -f, --force-depends       Ignore dependency errors\n"
-        "  -n, --noaction            Dry run, show what would be done\n"
-        "  -h, --help                Show this help\n"
+        "  -f, --force-depends   Ignore dependency errors\n"
+        "  -n, --noaction        Dry run, show what would be done\n"
+        "  -h, --help            Show this help\n"
     );
 }
 
@@ -166,14 +172,13 @@ static void usage_upgrade(FILE *out)
         "Upgrade all installed packages.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Install to an offline root directory\n"
-        "  -f, --force-depends       Ignore dependency errors\n"
-        "  -d, --download-only       Only download, do not install\n"
-        "  -n, --noaction            Dry run, show what would be done\n"
-        "  -h, --help                Show this help\n"
+        "  -f, --force-depends   Ignore dependency errors\n"
+        "  -d, --download-only   Only download, do not install\n"
+        "  -n, --noaction        Dry run, show what would be done\n"
+        "  -h, --help            Show this help\n"
         "\n"
-        "  --allow-downgrade         Allow package downgrades\n"
-        "  --no-cache                Download, install, and delete each package\n"
+        "  --allow-downgrade     Allow package downgrades\n"
+        "  --no-cache            Download, install, and delete each package\n"
     );
 }
 
@@ -185,8 +190,7 @@ static void usage_clean(FILE *out)
         "Remove cached package files.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Install to an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
@@ -199,11 +203,10 @@ static void usage_list(FILE *out)
         "An optional glob pattern filters by package name.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Use an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help    Show this help\n"
         "\n"
-        "  --installed               Only show installed packages\n"
-        "  --upgradable              Only show upgradable packages\n"
+        "  --installed   Only show installed packages\n"
+        "  --upgradable  Only show upgradable packages\n"
     );
 }
 
@@ -215,8 +218,7 @@ static void usage_owns(FILE *out)
         "Find which installed package owns a file.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Use an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
@@ -228,8 +230,7 @@ static void usage_files(FILE *out)
         "List files belonging to an installed package.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Use an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
@@ -241,8 +242,7 @@ static void usage_show(FILE *out)
         "Show package information.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Use an offline root directory\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
@@ -254,76 +254,66 @@ static void usage_print_architecture(FILE *out)
         "Show configured architectures.\n"
         "\n"
         "Options:\n"
-        "  -o, --offline-root <dir>  Use <dir> as package root\n"
-        "  -h, --help                Show this help\n"
+        "  -h, --help  Show this help\n"
     );
 }
 
 /* ── per-command option tables ─────────────────────────────────────── */
 
 static struct option update_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 static struct option install_options[] = {
-    {"offline-root",    required_argument, NULL, 'o'},
-    {"force-depends",   no_argument,       NULL, 'f'},
-    {"download-only",   no_argument,       NULL, 'd'},
-    {"noaction",        no_argument,       NULL, 'n'},
-    {"help",            no_argument,       NULL, 'h'},
-    {"allow-downgrade", no_argument,       NULL, 0x100},
-    {"reinstall",       no_argument,       NULL, 0x101},
-    {"no-cache",        no_argument,       NULL, 0x102},
+    {"force-depends",   no_argument, NULL, 'f'},
+    {"download-only",   no_argument, NULL, 'd'},
+    {"noaction",        no_argument, NULL, 'n'},
+    {"help",            no_argument, NULL, 'h'},
+    {"allow-downgrade", no_argument, NULL, 0x100},
+    {"reinstall",       no_argument, NULL, 0x101},
+    {"no-cache",        no_argument, NULL, 0x102},
     {NULL, 0, NULL, 0}
 };
 
 static struct option remove_options[] = {
-    {"offline-root",  required_argument, NULL, 'o'},
-    {"force-depends", no_argument,       NULL, 'f'},
-    {"noaction",      no_argument,       NULL, 'n'},
-    {"help",          no_argument,       NULL, 'h'},
+    {"force-depends", no_argument, NULL, 'f'},
+    {"noaction",      no_argument, NULL, 'n'},
+    {"help",          no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 /* upgrade reuses install_options */
 
 static struct option clean_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 static struct option list_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
-    {"installed",    no_argument,       NULL, 0x100},
-    {"upgradable",   no_argument,       NULL, 0x101},
+    {"help",       no_argument, NULL, 'h'},
+    {"installed",  no_argument, NULL, 0x100},
+    {"upgradable", no_argument, NULL, 0x101},
     {NULL, 0, NULL, 0}
 };
 
 static struct option show_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 static struct option files_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 static struct option owns_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
 static struct option print_arch_options[] = {
-    {"offline-root", required_argument, NULL, 'o'},
-    {"help",         no_argument,       NULL, 'h'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
@@ -331,19 +321,17 @@ static struct option print_arch_options[] = {
 
 static int cmd_update(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", update_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", update_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_update(stdout); return 0;
         default:  usage_update(stderr); return 1;
         }
     }
 
-    if (setup_config(offline_root) < 0)
+    if (setup_config() < 0)
         return 1;
 
     r = aept_update();
@@ -353,15 +341,13 @@ static int cmd_update(int argc, char *argv[])
 
 static int cmd_install(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, reinstall = 0, no_cache = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:fdnh", install_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'f': force_depends = 1; break;
         case 'd': download_only = 1; break;
         case 'n': noaction = 1; break;
@@ -378,7 +364,7 @@ static int cmd_install(int argc, char *argv[])
         return 1;
     }
 
-    if (setup_config(offline_root) < 0)
+    if (setup_config() < 0)
         return 1;
 
     cfg->force_depends = force_depends;
@@ -395,14 +381,12 @@ static int cmd_install(int argc, char *argv[])
 
 static int cmd_remove(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int force_depends = 0, noaction = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:fnh", remove_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fnh", remove_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'f': force_depends = 1; break;
         case 'n': noaction = 1; break;
         case 'h': usage_remove(stdout); return 0;
@@ -415,7 +399,7 @@ static int cmd_remove(int argc, char *argv[])
         return 1;
     }
 
-    if (setup_config(offline_root) < 0)
+    if (setup_config() < 0)
         return 1;
 
     cfg->force_depends = force_depends;
@@ -428,15 +412,13 @@ static int cmd_remove(int argc, char *argv[])
 
 static int cmd_upgrade(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, no_cache = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:fdnh", install_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'f': force_depends = 1; break;
         case 'd': download_only = 1; break;
         case 'n': noaction = 1; break;
@@ -448,7 +430,7 @@ static int cmd_upgrade(int argc, char *argv[])
         }
     }
 
-    if (setup_config(offline_root) < 0)
+    if (setup_config() < 0)
         return 1;
 
     cfg->force_depends = force_depends;
@@ -464,19 +446,17 @@ static int cmd_upgrade(int argc, char *argv[])
 
 static int cmd_clean(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", clean_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", clean_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_clean(stdout); return 0;
         default:  usage_clean(stderr); return 1;
         }
     }
 
-    if (setup_config(offline_root) < 0)
+    if (setup_config() < 0)
         return 1;
 
     r = aept_clean();
@@ -486,15 +466,13 @@ static int cmd_clean(int argc, char *argv[])
 
 static int cmd_list(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     const char *pattern = NULL;
     int filter_installed = 0, filter_upgradable = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", list_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", list_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 0x100: filter_installed = 1; break;
         case 0x101: filter_upgradable = 1; break;
         case 'h': usage_list(stdout); return 0;
@@ -505,27 +483,8 @@ static int cmd_list(int argc, char *argv[])
     if (optind < argc)
         pattern = argv[optind];
 
-    {
-        const char *cf = resolve_conf(offline_root);
-
-        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-            config_set_defaults();
-        } else if (config_load(cf) < 0) {
-            if (cf != conf_file)
-                free((char *)cf);
-            return 1;
-        }
-
-        if (cf != conf_file)
-            free((char *)cf);
-    }
-
-    if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
-    }
-
-    config_apply_offline_root();
+    if (load_config() < 0)
+        return 1;
 
     r = aept_list(pattern, filter_installed, filter_upgradable);
     config_free();
@@ -534,13 +493,11 @@ static int cmd_list(int argc, char *argv[])
 
 static int cmd_show(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", show_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", show_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_show(stdout); return 0;
         default:  usage_show(stderr); return 1;
         }
@@ -551,27 +508,8 @@ static int cmd_show(int argc, char *argv[])
         return 1;
     }
 
-    {
-        const char *cf = resolve_conf(offline_root);
-
-        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-            config_set_defaults();
-        } else if (config_load(cf) < 0) {
-            if (cf != conf_file)
-                free((char *)cf);
-            return 1;
-        }
-
-        if (cf != conf_file)
-            free((char *)cf);
-    }
-
-    if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
-    }
-
-    config_apply_offline_root();
+    if (load_config() < 0)
+        return 1;
 
     r = aept_show(argv[optind]);
     config_free();
@@ -580,13 +518,11 @@ static int cmd_show(int argc, char *argv[])
 
 static int cmd_files(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", files_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", files_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_files(stdout); return 0;
         default:  usage_files(stderr); return 1;
         }
@@ -597,27 +533,8 @@ static int cmd_files(int argc, char *argv[])
         return 1;
     }
 
-    {
-        const char *cf = resolve_conf(offline_root);
-
-        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-            config_set_defaults();
-        } else if (config_load(cf) < 0) {
-            if (cf != conf_file)
-                free((char *)cf);
-            return 1;
-        }
-
-        if (cf != conf_file)
-            free((char *)cf);
-    }
-
-    if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
-    }
-
-    config_apply_offline_root();
+    if (load_config() < 0)
+        return 1;
 
     r = aept_files(argv[optind]);
     config_free();
@@ -626,13 +543,11 @@ static int cmd_files(int argc, char *argv[])
 
 static int cmd_owns(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", owns_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", owns_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_owns(stdout); return 0;
         default:  usage_owns(stderr); return 1;
         }
@@ -643,27 +558,8 @@ static int cmd_owns(int argc, char *argv[])
         return 1;
     }
 
-    {
-        const char *cf = resolve_conf(offline_root);
-
-        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-            config_set_defaults();
-        } else if (config_load(cf) < 0) {
-            if (cf != conf_file)
-                free((char *)cf);
-            return 1;
-        }
-
-        if (cf != conf_file)
-            free((char *)cf);
-    }
-
-    if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
-    }
-
-    config_apply_offline_root();
+    if (load_config() < 0)
+        return 1;
 
     r = aept_owns(argv[optind]);
     config_free();
@@ -672,39 +568,18 @@ static int cmd_owns(int argc, char *argv[])
 
 static int cmd_print_architecture(int argc, char *argv[])
 {
-    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "o:h", print_arch_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
         switch (opt) {
-        case 'o': offline_root = optarg; break;
         case 'h': usage_print_architecture(stdout); return 0;
         default:  usage_print_architecture(stderr); return 1;
         }
     }
 
-    {
-        const char *cf = resolve_conf(offline_root);
-
-        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-            config_set_defaults();
-        } else if (config_load(cf) < 0) {
-            if (cf != conf_file)
-                free((char *)cf);
-            return 1;
-        }
-
-        if (cf != conf_file)
-            free((char *)cf);
-    }
-
-    if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
-    }
-
-    config_apply_offline_root();
+    if (load_config() < 0)
+        return 1;
 
     r = aept_print_architecture();
     config_free();
@@ -714,9 +589,10 @@ static int cmd_print_architecture(int argc, char *argv[])
 /* ── main ──────────────────────────────────────────────────────────── */
 
 static struct option global_options[] = {
-    {"conf",    required_argument, NULL, 'c'},
-    {"verbose", no_argument,       NULL, 'v'},
-    {"help",    no_argument,       NULL, 'h'},
+    {"conf",         required_argument, NULL, 'c'},
+    {"offline-root", required_argument, NULL, 'o'},
+    {"verbose",      no_argument,       NULL, 'v'},
+    {"help",         no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
@@ -727,9 +603,10 @@ int main(int argc, char *argv[])
 
     aept_log_init();
 
-    while ((opt = getopt_long(argc, argv, "+c:vh", global_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "+c:o:vh", global_options, NULL)) != -1) {
         switch (opt) {
         case 'c': conf_file = optarg; conf_explicit = 1; break;
+        case 'o': offline_root = optarg; break;
         case 'v': cfg->verbosity++; break;
         case 'h': usage_main(stdout); return 0;
         default:  usage_main(stderr); return 1;
