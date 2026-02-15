@@ -23,8 +23,8 @@ static const char *level_name[] = {
 static const char *level_color[] = {
     [AEPT_ERROR]   = "\033[31m",
     [AEPT_WARNING] = "\033[33m",
-    [AEPT_INFO]    = "",
-    [AEPT_DEBUG]   = ""
+    [AEPT_INFO]    = "\033[32m",
+    [AEPT_DEBUG]   = "\033[34m"
 };
 
 void aept_log_init(void)
