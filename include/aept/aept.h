@@ -24,7 +24,6 @@ typedef struct {
     char *cache_dir;        /* default "/var/cache/aept" */
     char *tmp_dir;          /* default "/tmp" */
     char *lock_file;        /* default "/var/lib/aept/lock" */
-    char *usign_bin;        /* default "usign" */
     char *usign_keydir;     /* default "/etc/aept/usign/trustdb" */
     char *auto_file;        /* default "/var/lib/aept/auto-installed" */
 
@@ -46,6 +45,8 @@ typedef struct {
 } aept_config_t;
 
 extern aept_config_t *cfg;
+
+#define AEPT_USIGN_BIN "/usr/bin/usign"
 
 /* Child process exit codes */
 #define AEPT_EXIT_EXEC_FAILED  255

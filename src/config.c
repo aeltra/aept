@@ -32,7 +32,6 @@ void config_set_defaults(void)
     cfg->cache_dir = xstrdup("/var/cache/aept");
     cfg->tmp_dir = xstrdup("/tmp");
     cfg->lock_file = xstrdup("/var/lib/aept/lock");
-    cfg->usign_bin = xstrdup("usign");
     cfg->usign_keydir = xstrdup("/etc/aept/usign/trustdb");
     cfg->auto_file = xstrdup("/var/lib/aept/auto-installed");
 
@@ -82,8 +81,6 @@ static void set_option(const char *key, const char *value)
         strp = &cfg->tmp_dir;
     else if (strcmp(key, "lock_file") == 0)
         strp = &cfg->lock_file;
-    else if (strcmp(key, "usign_bin") == 0)
-        strp = &cfg->usign_bin;
     else if (strcmp(key, "usign_keydir") == 0)
         strp = &cfg->usign_keydir;
     else if (strcmp(key, "auto_file") == 0)
@@ -230,8 +227,8 @@ int config_validate(void)
     r |= validate_dir("tmp_dir", cfg->tmp_dir);
     r |= validate_dir("usign_keydir", cfg->usign_keydir);
 
-    if (file_exists(cfg->usign_bin) && file_is_dir(cfg->usign_bin)) {
-        log_error("usign_bin '%s' is a directory", cfg->usign_bin);
+    if (file_exists(AEPT_USIGN_BIN) && file_is_dir(AEPT_USIGN_BIN)) {
+        log_error("usign_bin '%s' is a directory", AEPT_USIGN_BIN);
         r = -1;
     }
 
@@ -259,7 +256,6 @@ void config_free(void)
     free(cfg->cache_dir);
     free(cfg->tmp_dir);
     free(cfg->lock_file);
-    free(cfg->usign_bin);
     free(cfg->usign_keydir);
     free(cfg->auto_file);
 

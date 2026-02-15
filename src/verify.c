@@ -7,7 +7,6 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -30,31 +29,11 @@ int aept_verify_signature(const char *file, const char *sigfile)
     }
 
     if (pid == 0) {
-        char *usign = NULL;
-        struct stat st;
-
-        /* Try configured path first, then search common locations */
-        char *usign_progs[] = {
-            cfg->usign_bin,
-            "/usr/bin/usign",
-            "/usr/local/bin/usign",
-            NULL
-        };
-
-        for (int i = 0; (usign = usign_progs[i]) != NULL; i++) {
-            if (lstat(usign, &st) == 0)
-                break;
-            usign = NULL;
-        }
-
-        if (usign) {
-            execl(usign, "usign", "-q", "-V",
-                  "-P", cfg->usign_keydir,
-                  "-m", file,
-                  "-x", sigfile,
-                  NULL);
-        }
-
+        execl(AEPT_USIGN_BIN, "usign", "-q", "-V",
+              "-P", cfg->usign_keydir,
+              "-m", file,
+              "-x", sigfile,
+              NULL);
         _exit(AEPT_EXIT_EXEC_FAILED);
     }
 
