@@ -114,6 +114,11 @@ static int display_transaction(Transaction *trans, Pool *pool,
     int n_erase = 0;
     int n_reinstall = 0;
 
+    if ((!trans || trans->steps.count == 0) && name_count == 0) {
+        log_info("nothing to do");
+        return 1;
+    }
+
     printf("Actions:\n");
     if (trans) {
         for (i = 0; i < trans->steps.count; i++) {
@@ -160,12 +165,6 @@ static int display_transaction(Transaction *trans, Pool *pool,
 
         printf("  reinstall %s (%s)\n", pkg_name, ver);
         n_reinstall++;
-    }
-
-    if (n_install == 0 && n_upgrade == 0 && n_erase == 0 &&
-            n_reinstall == 0) {
-        log_info("nothing to do");
-        return 1;
     }
 
     if (n_reinstall > 0)
@@ -1086,12 +1085,6 @@ int aept_install(const char **names, int count)
     if (r < 0)
         goto out;
 
-    for (i = 0; i < cfg->nsources; i++) {
-        if (strncmp(cfg->sources[i].url, "https://", 8) != 0)
-            log_warning("source '%s' uses insecure transport",
-                        cfg->sources[i].name);
-    }
-
     r = solver_resolve_install(names, count);
     if (r < 0)
         goto out;
@@ -1122,6 +1115,12 @@ int aept_install(const char **names, int count)
                            cfg->reinstall ? count : 0)) {
         r = 0;
         goto out;
+    }
+
+    for (i = 0; i < cfg->nsources; i++) {
+        if (strncmp(cfg->sources[i].url, "https://", 8) != 0)
+            log_warning("source '%s' uses insecure transport",
+                        cfg->sources[i].name);
     }
 
     if (cfg->noaction) {
