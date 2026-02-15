@@ -353,9 +353,11 @@ static int extract_paths_to_stream(struct archive *a, FILE *stream)
         path = archive_entry_pathname(entry);
         entry_stat = archive_entry_stat(entry);
         if (S_ISLNK(entry_stat->st_mode)) {
+            const char *target = archive_entry_symlink(entry);
+            if (!symlink_target_is_safe(target))
+                target = "<redacted>";
             r = fprintf(stream, "%s\t%#03o\t%s\n", path,
-                        (unsigned int)entry_stat->st_mode,
-                        archive_entry_symlink(entry));
+                        (unsigned int)entry_stat->st_mode, target);
         } else {
             r = fprintf(stream, "%s\t%#03o\n", path,
                         (unsigned int)entry_stat->st_mode);

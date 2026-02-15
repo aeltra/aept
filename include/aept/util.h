@@ -24,6 +24,7 @@ int xasprintf(char **strp, const char *fmt, ...)
 	__attribute__((format(printf, 2, 3)));
 
 int pkg_name_is_safe(const char *name);
+int symlink_target_is_safe(const char *target);
 int file_exists(const char *path);
 int file_is_dir(const char *path);
 int file_copy(const char *src, const char *dst);

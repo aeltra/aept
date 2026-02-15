@@ -90,6 +90,17 @@ int pkg_name_is_safe(const char *name)
     return 1;
 }
 
+int symlink_target_is_safe(const char *target)
+{
+    if (!target)
+        return 0;
+    for (const char *p = target; *p; p++) {
+        if (*p == '\n' || *p == '\t')
+            return 0;
+    }
+    return 1;
+}
+
 int file_exists(const char *path)
 {
     struct stat st;
