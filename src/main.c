@@ -254,7 +254,8 @@ static void usage_print_architecture(FILE *out)
         "Show configured architectures.\n"
         "\n"
         "Options:\n"
-        "  -h, --help  Show this help\n"
+        "  -o, --offline-root <dir>  Use <dir> as package root\n"
+        "  -h, --help                Show this help\n"
     );
 }
 
@@ -321,7 +322,8 @@ static struct option owns_options[] = {
 };
 
 static struct option print_arch_options[] = {
-    {"help", no_argument, NULL, 'h'},
+    {"offline-root", required_argument, NULL, 'o'},
+    {"help",         no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
@@ -670,21 +672,39 @@ static int cmd_owns(int argc, char *argv[])
 
 static int cmd_print_architecture(int argc, char *argv[])
 {
+    const char *offline_root = NULL;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "o:h", print_arch_options, NULL)) != -1) {
         switch (opt) {
+        case 'o': offline_root = optarg; break;
         case 'h': usage_print_architecture(stdout); return 0;
         default:  usage_print_architecture(stderr); return 1;
         }
     }
 
-    if (access(conf_file, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        config_set_defaults();
-    } else if (config_load(conf_file) < 0) {
-        return 1;
+    {
+        const char *cf = resolve_conf(offline_root);
+
+        if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
+            config_set_defaults();
+        } else if (config_load(cf) < 0) {
+            if (cf != conf_file)
+                free((char *)cf);
+            return 1;
+        }
+
+        if (cf != conf_file)
+            free((char *)cf);
     }
+
+    if (offline_root) {
+        free(cfg->offline_root);
+        cfg->offline_root = xstrdup(offline_root);
+    }
+
+    config_apply_offline_root();
 
     r = aept_print_architecture();
     config_free();
