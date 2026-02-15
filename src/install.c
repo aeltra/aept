@@ -225,9 +225,6 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
     char *tmpdir = NULL;
-    char *preinst_args = NULL;
-    char *postinst_args = NULL;
-
     if (!pkg_name_is_safe(name)) {
         log_error("refusing to install package with unsafe name '%s'", name);
         return -1;
@@ -235,11 +232,6 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     char *ctrl_path = NULL;
     char *list_path = NULL;
     int r = -1;
-
-    if (old_version) {
-        xasprintf(&preinst_args, "upgrade %s", old_version);
-        xasprintf(&postinst_args, "configure %s", old_version);
-    }
 
     log_info("installing %s", name);
 
@@ -270,7 +262,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
 
     /* Run preinst */
     r = run_script(tmpdir, NULL, "preinst",
-                   preinst_args ? preinst_args : "install");
+                   old_version ? "upgrade" : "install", old_version);
     if (r != 0)
         goto cleanup;
 
@@ -360,7 +352,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     const char *state = "installed";
 
     r = run_script(cfg->info_dir, name, "postinst",
-                   postinst_args ? postinst_args : "configure");
+                   "configure", old_version);
     if (r != 0) {
         log_error("postinst failed for '%s'", name);
         state = "unpacked";
@@ -379,8 +371,6 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     r = 0;
 
 cleanup:
-    free(preinst_args);
-    free(postinst_args);
     free(list_path);
 
     /* Clean up tmpdir */
@@ -417,10 +407,6 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
     char *tmpdir = NULL;
-    char *preinst_args = NULL;
-    char *postinst_args = NULL;
-    char *prerm_args = NULL;
-    char *postrm_args = NULL;
     char *ctrl_path = NULL;
     char *list_path = NULL;
     aept_conffile_set_t old_cf;
@@ -431,11 +417,6 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         log_error("refusing to upgrade package with unsafe name '%s'", name);
         return -1;
     }
-
-    xasprintf(&preinst_args, "upgrade %s", old_version);
-    xasprintf(&postinst_args, "configure %s", old_version);
-    xasprintf(&prerm_args, "upgrade %s", new_version);
-    xasprintf(&postrm_args, "upgrade %s", new_version);
 
     log_info("upgrading %s", name);
 
@@ -466,14 +447,14 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     }
 
     /* 2. Run old-prerm */
-    r = run_script(cfg->info_dir, name, "prerm", prerm_args);
+    r = run_script(cfg->info_dir, name, "prerm", "upgrade", new_version);
     if (r != 0) {
         log_error("prerm failed for '%s', aborting upgrade", name);
         goto cleanup;
     }
 
     /* 3. Run new-preinst */
-    r = run_script(tmpdir, NULL, "preinst", preinst_args);
+    r = run_script(tmpdir, NULL, "preinst", "upgrade", old_version);
     if (r != 0)
         goto cleanup;
 
@@ -653,7 +634,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     fileset_free(&old_files);
 
     /* 7. Run old-postrm (info_dir still has old scripts) */
-    r = run_script(cfg->info_dir, name, "postrm", postrm_args);
+    r = run_script(cfg->info_dir, name, "postrm", "upgrade", new_version);
     if (r != 0)
         log_warning("postrm failed for '%s', continuing", name);
 
@@ -688,7 +669,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     /* 9. Run new-postinst */
     const char *state = "installed";
 
-    r = run_script(cfg->info_dir, name, "postinst", postinst_args);
+    r = run_script(cfg->info_dir, name, "postinst", "configure", old_version);
     if (r != 0) {
         log_error("postinst failed for '%s'", name);
         state = "unpacked";
@@ -713,10 +694,6 @@ cleanup_filesets:
 cleanup:
     if (have_old_cf)
         conffile_set_free(&old_cf);
-    free(preinst_args);
-    free(postinst_args);
-    free(prerm_args);
-    free(postrm_args);
     free(list_path);
 
     if (tmpdir) {

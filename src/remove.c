@@ -126,7 +126,6 @@ static void remove_info_files(const char *name)
 int aept_do_remove(const char *name, const char *new_version,
                    const aept_fileset_t *protected)
 {
-    char *script_args = NULL;
     int r;
 
     if (!pkg_name_is_safe(name)) {
@@ -134,17 +133,13 @@ int aept_do_remove(const char *name, const char *new_version,
         return -1;
     }
 
-    if (new_version)
-        xasprintf(&script_args, "upgrade %s", new_version);
-
     log_info("removing %s", name);
 
     /* Run prerm */
     r = run_script(cfg->info_dir, name, "prerm",
-                   script_args ? script_args : "remove");
+                   new_version ? "upgrade" : "remove", new_version);
     if (r != 0) {
         log_error("prerm failed for '%s', aborting removal", name);
-        free(script_args);
         return -1;
     }
 
@@ -153,11 +148,9 @@ int aept_do_remove(const char *name, const char *new_version,
 
     /* Run postrm */
     r = run_script(cfg->info_dir, name, "postrm",
-                   script_args ? script_args : "remove");
+                   new_version ? "upgrade" : "remove", new_version);
     if (r != 0)
         log_warning("postrm failed for '%s', continuing", name);
-
-    free(script_args);
 
     /* Remove info files */
     remove_info_files(name);

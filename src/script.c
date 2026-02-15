@@ -27,7 +27,8 @@ static const char *strip_offline_root(const char *path)
 }
 
 int run_script(const char *script_dir, const char *pkg_name,
-               const char *script, const char *args)
+               const char *script, const char *action,
+               const char *version)
 {
     char *path = NULL;
     int r;
@@ -42,14 +43,20 @@ int run_script(const char *script_dir, const char *pkg_name,
         return 0;
     }
 
-    log_info("running %s for %s %s", script, pkg_name, args ? args : "");
+    log_info("running %s for %s %s %s", script,
+             pkg_name ? pkg_name : "(none)",
+             action ? action : "",
+             version ? version : "");
 
     const char *run_path = path;
     if (cfg->offline_root)
         run_path = strip_offline_root(path);
 
-    if (args) {
-        const char *argv[] = {"/bin/sh", run_path, args, NULL};
+    if (action && version) {
+        const char *argv[] = {"/bin/sh", run_path, action, version, NULL};
+        r = xsystem_offline_root(argv);
+    } else if (action) {
+        const char *argv[] = {"/bin/sh", run_path, action, NULL};
         r = xsystem_offline_root(argv);
     } else {
         const char *argv[] = {"/bin/sh", run_path, NULL};
@@ -60,7 +67,7 @@ int run_script(const char *script_dir, const char *pkg_name,
 
     if (r != 0) {
         log_error("%s script for %s failed with exit code %d",
-                  script, pkg_name, r);
+                  script, pkg_name ? pkg_name : "(none)", r);
         return r;
     }
 
