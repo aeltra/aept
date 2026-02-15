@@ -134,11 +134,11 @@ int aept_autoremove(void)
         goto out_needed;
     }
 
+    printf("Actions:\n");
     for (i = 0; i < ncandidates; i++)
         printf("  remove %s\n", candidates[i]);
 
-    printf("\n%d auto-installed package%s to remove\n",
-           ncandidates, ncandidates == 1 ? "" : "s");
+    printf("Summary:\n  0 to install, %d to remove\n", ncandidates);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");

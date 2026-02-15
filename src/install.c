@@ -67,6 +67,7 @@ static int display_transaction(Transaction *trans, Pool *pool)
     int n_install = 0;
     int n_erase = 0;
 
+    printf("Actions:\n");
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
@@ -91,7 +92,7 @@ static int display_transaction(Transaction *trans, Pool *pool)
         return 1;
     }
 
-    printf("\n%d to install, %d to remove\n", n_install, n_erase);
+    printf("Summary:\n  %d to install, %d to remove\n", n_install, n_erase);
 
     return 0;
 }
