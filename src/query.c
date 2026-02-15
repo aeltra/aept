@@ -123,6 +123,11 @@ int aept_files(const char *name)
     FILE *fp;
     char buf[4096];
 
+    if (!pkg_name_is_safe(name)) {
+        log_error("invalid package name '%s'", name);
+        return 1;
+    }
+
     xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
 
     fp = fopen(list_path, "r");
