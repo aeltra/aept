@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <solv/chksum.h>
@@ -21,6 +22,7 @@
 
 #include "aept/aept.h"
 #include "aept/archive.h"
+#include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/download.h"
 #include "aept/msg.h"
@@ -304,6 +306,27 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
         data_ar = NULL;
     }
 
+    /* Save conffile metadata */
+    {
+        aept_conffile_set_t new_cf;
+        conffile_set_init(&new_cf);
+
+        if (conffile_parse_list(tmpdir, &new_cf) == 0 && new_cf.count > 0) {
+            for (int ci = 0; ci < new_cf.count; ci++) {
+                char *cf_path = config_root_path(new_cf.entries[ci].path);
+                char *md5 = conffile_md5(cf_path);
+                free(cf_path);
+                if (md5) {
+                    free(new_cf.entries[ci].md5);
+                    new_cf.entries[ci].md5 = md5;
+                }
+            }
+            conffile_save(name, &new_cf);
+        }
+
+        conffile_set_free(&new_cf);
+    }
+
     /* Copy control files to info_dir */
     xasprintf(&ctrl_path, "%s/control", tmpdir);
     if (file_exists(ctrl_path)) {
@@ -370,7 +393,8 @@ cleanup:
 static void remove_info_files(const char *name)
 {
     const char *exts[] = {
-        "list", "control", "preinst", "postinst", "prerm", "postrm", NULL
+        "list", "control", "conffiles",
+        "preinst", "postinst", "prerm", "postrm", NULL
     };
 
     for (int i = 0; exts[i]; i++) {
@@ -396,6 +420,8 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     char *postrm_args = NULL;
     char *ctrl_path = NULL;
     char *list_path = NULL;
+    aept_conffile_set_t old_cf;
+    int have_old_cf = 0;
     int r = -1;
 
     if (!pkg_name_is_safe(name)) {
@@ -493,6 +519,41 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         goto cleanup_filesets;
     }
 
+    /* 5b. Handle conffile conflicts */
+    {
+        aept_conffile_set_t new_cf;
+
+        conffile_set_init(&old_cf);
+        conffile_set_init(&new_cf);
+        conffile_load(name, &old_cf);
+        have_old_cf = 1;
+        conffile_parse_list(tmpdir, &new_cf);
+
+        if (new_cf.count > 0) {
+            char *cf_tmpdir = NULL;
+            xasprintf(&cf_tmpdir, "%s/conffiles-new", tmpdir);
+            mkdir(cf_tmpdir, 0700);
+
+            aept_fileset_t cf_paths;
+            fileset_init(&cf_paths);
+            for (int ci = 0; ci < new_cf.count; ci++)
+                fileset_add(&cf_paths, new_cf.entries[ci].path);
+            fileset_sort(&cf_paths);
+
+            struct aept_ar *cf_ar = ar_open_pkg_data_archive(ipk_path);
+            if (cf_ar) {
+                ar_extract_selected(cf_ar, &cf_paths, cf_tmpdir);
+                ar_close(cf_ar);
+            }
+            fileset_free(&cf_paths);
+
+            conffile_resolve_upgrade(name, &old_cf, &new_cf, cf_tmpdir);
+            free(cf_tmpdir);
+        }
+
+        conffile_set_free(&new_cf);
+    }
+
     /* 6. Record new file list */
     data_ar = ar_open_pkg_data_archive(ipk_path);
     if (data_ar) {
@@ -547,6 +608,27 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
             char *full_path = NULL;
             xasprintf(&full_path, "%s/%s",
                       cfg->offline_root ? cfg->offline_root : "", path);
+
+            /* Skip modified conffiles from old package */
+            if (old_cf.count > 0) {
+                char *abs_path = NULL;
+                xasprintf(&abs_path, "/%s", path);
+                const char *saved_md5 = conffile_set_lookup(&old_cf,
+                                                            abs_path);
+                if (saved_md5) {
+                    char *cur_md5 = conffile_md5(full_path);
+                    if (cur_md5 && strcmp(saved_md5, cur_md5) != 0) {
+                        log_info("not removing modified conffile '%s'",
+                                 abs_path);
+                        free(cur_md5);
+                        free(abs_path);
+                        free(full_path);
+                        continue;
+                    }
+                    free(cur_md5);
+                }
+                free(abs_path);
+            }
 
             if (unlink(full_path) < 0 && errno != ENOENT)
                 log_debug("cannot remove '%s': %s",
@@ -624,6 +706,8 @@ cleanup_filesets:
     fileset_free(&old_files);
 
 cleanup:
+    if (have_old_cf)
+        conffile_set_free(&old_cf);
     free(preinst_args);
     free(postinst_args);
     free(prerm_args);

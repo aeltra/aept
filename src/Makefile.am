@@ -4,6 +4,7 @@ aept_SOURCES = \
     main.c \
     autoremove.c \
     clean.c \
+    conffile.c \
     config.c \
     download.c \
     verify.c \

@@ -829,6 +829,68 @@ int ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size)
     return extract_all(ar->ar, prefix, ar->extract_flags, size);
 }
 
+int ar_extract_selected(struct aept_ar *ar, const aept_fileset_t *selected,
+                        const char *prefix)
+{
+    struct archive *disk;
+    struct archive_entry *entry;
+    int r;
+    int eof;
+    int flags;
+
+    flags = ar->extract_flags & ~ARCHIVE_EXTRACT_NO_OVERWRITE;
+
+    disk = open_disk(flags);
+    if (!disk)
+        return -1;
+
+    while (1) {
+        entry = read_header(ar->ar, &eof);
+        if (eof)
+            break;
+        if (!entry) {
+            r = -1;
+            goto err_cleanup;
+        }
+
+        if (!fileset_contains(selected, archive_entry_pathname(entry)))
+            continue;
+
+        r = transform_all_paths(entry, prefix);
+        if (r == 1)
+            continue;
+        if (r < 0) {
+            log_error("failed to transform path");
+            goto err_cleanup;
+        }
+
+        log_debug("extracting conffile '%s'",
+                  archive_entry_pathname(entry));
+
+        r = archive_read_extract2(ar->ar, entry, disk);
+        switch (r) {
+        case ARCHIVE_OK:
+            break;
+        case ARCHIVE_WARN:
+            log_debug("warning extracting '%s': %s",
+                      archive_entry_pathname(entry),
+                      archive_error_string(ar->ar));
+            break;
+        default:
+            log_error("failed to extract '%s': %s",
+                      archive_entry_pathname(entry),
+                      archive_error_string(ar->ar));
+            r = -1;
+            goto err_cleanup;
+        }
+    }
+
+    r = ARCHIVE_OK;
+err_cleanup:
+    archive_write_free(disk);
+    return (r == ARCHIVE_OK) ? 0 : -1;
+}
+
 void ar_close(struct aept_ar *ar)
 {
     archive_read_free(ar->ar);

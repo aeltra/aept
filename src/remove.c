@@ -15,6 +15,7 @@
 #include <solv/transaction.h>
 
 #include "aept/aept.h"
+#include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/msg.h"
 #include "aept/remove.h"
@@ -28,14 +29,21 @@ int remove_files(const char *name, const aept_fileset_t *protected)
     char *list_path = NULL;
     FILE *fp;
     char buf[4096];
+    aept_conffile_set_t conffiles;
+
+    conffile_set_init(&conffiles);
+    if (!cfg->purge)
+        conffile_load(name, &conffiles);
 
     xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
 
     fp = fopen(list_path, "r");
     free(list_path);
 
-    if (!fp)
+    if (!fp) {
+        conffile_set_free(&conffiles);
         return 0;
+    }
 
     while (fgets(buf, sizeof(buf), fp)) {
         char *path;
@@ -66,6 +74,27 @@ int remove_files(const char *name, const aept_fileset_t *protected)
         xasprintf(&full_path, "%s/%s",
                   cfg->offline_root ? cfg->offline_root : "", path);
 
+        /* Skip modified conffiles unless purging */
+        if (conffiles.count > 0) {
+            char *abs_path = NULL;
+            xasprintf(&abs_path, "/%s", path);
+            const char *saved_md5 = conffile_set_lookup(&conffiles,
+                                                        abs_path);
+            if (saved_md5) {
+                char *cur_md5 = conffile_md5(full_path);
+                if (cur_md5 && strcmp(saved_md5, cur_md5) != 0) {
+                    log_info("not removing modified conffile '%s'",
+                             abs_path);
+                    free(cur_md5);
+                    free(abs_path);
+                    free(full_path);
+                    continue;
+                }
+                free(cur_md5);
+            }
+            free(abs_path);
+        }
+
         if (unlink(full_path) < 0 && errno != ENOENT)
             log_debug("cannot remove '%s': %s",
                       full_path, strerror(errno));
@@ -74,6 +103,7 @@ int remove_files(const char *name, const aept_fileset_t *protected)
     }
 
     fclose(fp);
+    conffile_set_free(&conffiles);
 
     return 0;
 }
@@ -81,7 +111,8 @@ int remove_files(const char *name, const aept_fileset_t *protected)
 static void remove_info_files(const char *name)
 {
     const char *exts[] = {
-        "list", "control", "preinst", "postinst", "prerm", "postrm", NULL
+        "list", "control", "conffiles",
+        "preinst", "postinst", "prerm", "postrm", NULL
     };
 
     for (int i = 0; exts[i]; i++) {

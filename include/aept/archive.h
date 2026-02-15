@@ -11,6 +11,8 @@
 
 #include <stdio.h>
 
+#include "aept/util.h"
+
 struct aept_ar {
     struct archive *ar;
     int extract_flags;
@@ -38,6 +40,11 @@ int ar_extract_paths_to_stream(struct aept_ar *ar, FILE *stream);
 /* Extract all files to a directory. */
 int ar_extract_all(struct aept_ar *ar, const char *prefix,
                    unsigned long *size);
+
+/* Extract only files whose paths are in the given set.
+ * Clears NO_OVERWRITE so that existing files are replaced. */
+int ar_extract_selected(struct aept_ar *ar, const aept_fileset_t *selected,
+                        const char *prefix);
 
 /* Close and free archive handle. */
 void ar_close(struct aept_ar *ar);

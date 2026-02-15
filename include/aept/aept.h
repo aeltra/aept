@@ -39,6 +39,9 @@ typedef struct {
     int download_only;
     int reinstall;
     int no_cache;
+    int force_confnew;
+    int force_confold;
+    int purge;
     int verbosity;
 } aept_config_t;
 
