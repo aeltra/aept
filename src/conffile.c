@@ -113,6 +113,10 @@ int conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
         buf[strcspn(buf, "\n")] = '\0';
         if (buf[0] == '\0')
             continue;
+        if (!archive_path_is_safe(buf)) {
+            log_warning("ignoring unsafe conffile path '%s'", buf);
+            continue;
+        }
         conffile_set_add(cs, buf, NULL);
     }
 
