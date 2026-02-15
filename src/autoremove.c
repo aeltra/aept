@@ -63,6 +63,7 @@ int aept_autoremove(void)
     aept_fileset_t auto_set;
     char *needed = NULL;
     const char **candidates = NULL;
+    const char **candidates_evr = NULL;
     int ncandidates = 0;
     int ninstalled;
     Id p;
@@ -125,7 +126,10 @@ int aept_autoremove(void)
         ncandidates++;
         candidates = xrealloc(candidates,
                               ncandidates * sizeof(const char *));
+        candidates_evr = xrealloc(candidates_evr,
+                                  ncandidates * sizeof(const char *));
         candidates[ncandidates - 1] = name;
+        candidates_evr[ncandidates - 1] = pool_id2str(pool, s->evr);
     }
 
     if (ncandidates == 0) {
@@ -136,9 +140,9 @@ int aept_autoremove(void)
 
     printf("Actions:\n");
     for (i = 0; i < ncandidates; i++)
-        printf("  remove %s\n", candidates[i]);
+        printf("  remove %s (%s)\n", candidates[i], candidates_evr[i]);
 
-    printf("Summary:\n  0 to install, %d to remove\n", ncandidates);
+    printf("Summary:\n  0 to install, 0 to upgrade, %d to remove\n", ncandidates);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");
@@ -155,6 +159,7 @@ int aept_autoremove(void)
     r = 0;
 
 out_needed:
+    free(candidates_evr);
     free(candidates);
     free(needed);
 out_fileset:

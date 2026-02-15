@@ -24,7 +24,7 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-int remove_files(const char *name, const aept_fileset_t *protected)
+int remove_files(const char *name, aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -127,7 +127,7 @@ static void remove_info_files(const char *name)
 }
 
 int aept_do_remove(const char *name, const char *new_version,
-                   const aept_fileset_t *protected)
+                   aept_fileset_t *protected)
 {
     int r;
 
@@ -210,11 +210,11 @@ int aept_remove(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
         const char *evr = pool_id2str(pool, s->evr);
 
-        printf("  remove %s %s\n", pkg_name, evr);
+        printf("  remove %s (%s)\n", pkg_name, evr);
         n_erase++;
     }
 
-    printf("Summary:\n  %d to remove\n", n_erase);
+    printf("Summary:\n  0 to install, 0 to upgrade, %d to remove\n", n_erase);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");

@@ -67,6 +67,7 @@ static int display_transaction(Transaction *trans, Pool *pool)
 {
     int i;
     int n_install = 0;
+    int n_upgrade = 0;
     int n_erase = 0;
 
     printf("Actions:\n");
@@ -80,21 +81,29 @@ static int display_transaction(Transaction *trans, Pool *pool)
         const char *name = pool_id2str(pool, s->name);
         const char *evr = pool_id2str(pool, s->evr);
 
-        if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
-            printf("  install %s %s\n", name, evr);
+        if (type == SOLVER_TRANSACTION_UPGRADE ||
+                type == SOLVER_TRANSACTION_DOWNGRADE) {
+            printf("  upgrade %s (%s)\n", name, evr);
+            n_upgrade++;
+        } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
+            printf("  install %s (%s)\n", name, evr);
             n_install++;
+        } else if (type == SOLVER_TRANSACTION_UPGRADED ||
+                type == SOLVER_TRANSACTION_DOWNGRADED) {
+            /* old version being replaced — skip display */
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            printf("  remove  %s %s\n", name, evr);
+            printf("  remove  %s (%s)\n", name, evr);
             n_erase++;
         }
     }
 
-    if (n_install == 0 && n_erase == 0) {
+    if (n_install == 0 && n_upgrade == 0 && n_erase == 0) {
         log_info("nothing to do");
         return 1;
     }
 
-    printf("Summary:\n  %d to install, %d to remove\n", n_install, n_erase);
+    printf("Summary:\n  %d to install, %d to upgrade, %d to remove\n",
+           n_install, n_upgrade, n_erase);
 
     return 0;
 }

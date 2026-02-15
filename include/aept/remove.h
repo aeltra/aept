@@ -11,7 +11,7 @@
 
 /* Remove package files listed in {info_dir}/{name}.list.
  * Files present in protected are skipped. */
-int remove_files(const char *name, const aept_fileset_t *protected);
+int remove_files(const char *name, aept_fileset_t *protected);
 
 /* Remove packages by name. Resolves reverse dependencies via solver. */
 int aept_remove(const char **names, int count);
@@ -22,6 +22,6 @@ int aept_remove(const char **names, int count);
  * protected: files installed earlier in the same transaction (skipped
  * during removal). May be NULL. */
 int aept_do_remove(const char *name, const char *new_version,
-                   const aept_fileset_t *protected);
+                   aept_fileset_t *protected);
 
 #endif
