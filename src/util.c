@@ -74,10 +74,19 @@ int xasprintf(char **strp, const char *fmt, ...)
 
 int pkg_name_is_safe(const char *name)
 {
-    if (!name || name[0] == '\0' || name[0] == '.')
+    if (!name || name[0] == '\0')
         return 0;
-    if (strchr(name, '/'))
+
+    /* Debian policy: [a-z0-9][a-z0-9.+\-]+ */
+    for (const char *p = name; *p; p++) {
+        char c = *p;
+        if (c >= 'a' && c <= 'z') continue;
+        if (c >= '0' && c <= '9') continue;
+        if (p != name && (c == '.' || c == '+' || c == '-'))
+            continue;
         return 0;
+    }
+
     return 1;
 }
 
