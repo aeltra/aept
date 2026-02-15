@@ -133,6 +133,7 @@ int status_remove(const char *name)
     char *tmp_path = NULL;
     char buf[4096];
     int skip = 0;
+    int continuation = 0;
 
     fp = fopen(cfg->status_file, "r");
     if (!fp)
@@ -147,17 +148,21 @@ int status_remove(const char *name)
     }
 
     while (fgets(buf, sizeof(buf), fp)) {
-        if (strncmp(buf, "Package: ", 9) == 0) {
-            char pkg_name[256];
-            sscanf(buf + 9, "%255s", pkg_name);
-            skip = (strcmp(pkg_name, name) == 0);
-        }
+        if (!continuation) {
+            if (strncmp(buf, "Package: ", 9) == 0) {
+                char pkg_name[256];
+                sscanf(buf + 9, "%255s", pkg_name);
+                skip = (strcmp(pkg_name, name) == 0);
+            }
 
-        if (buf[0] == '\n' || buf[0] == '\0')
-            skip = 0;
+            if (buf[0] == '\n' || buf[0] == '\0')
+                skip = 0;
+        }
 
         if (!skip)
             fputs(buf, tmp);
+
+        continuation = fgets_is_truncated(buf, sizeof(buf));
     }
 
     fclose(fp);
@@ -223,6 +228,10 @@ int status_unmark_auto(const char *name)
     }
 
     while (fgets(buf, sizeof(buf), fp)) {
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         char pkg_name[256];
         sscanf(buf, "%255s", pkg_name);
         if (strcmp(pkg_name, name) == 0) {
@@ -269,6 +278,10 @@ int status_is_auto(const char *name)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         char pkg_name[256];
         sscanf(buf, "%255s", pkg_name);
         if (strcmp(pkg_name, name) == 0) {
@@ -291,6 +304,10 @@ int status_load_auto_set(aept_fileset_t *set)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         char pkg_name[256];
         if (sscanf(buf, "%255s", pkg_name) == 1)
             fileset_add(set, pkg_name);

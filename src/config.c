@@ -153,6 +153,12 @@ int config_load(const char *filename)
         char *line = buf;
         char *token;
 
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            log_warning("config line too long, skipping");
+            fgets_drain_line(fp);
+            continue;
+        }
+
         /* strip trailing newline */
         line[strcspn(line, "\n")] = '\0';
 

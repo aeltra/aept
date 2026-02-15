@@ -25,6 +25,8 @@ int xasprintf(char **strp, const char *fmt, ...)
 
 int pkg_name_is_safe(const char *name);
 int symlink_target_is_safe(const char *target);
+int fgets_is_truncated(const char *buf, size_t bufsize);
+void fgets_drain_line(FILE *fp);
 int file_exists(const char *path);
 int file_is_dir(const char *path);
 int file_copy(const char *src, const char *dst);

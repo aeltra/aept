@@ -101,6 +101,19 @@ int symlink_target_is_safe(const char *target)
     return 1;
 }
 
+int fgets_is_truncated(const char *buf, size_t bufsize)
+{
+    size_t len = strlen(buf);
+    return len > 0 && len == bufsize - 1 && buf[len - 1] != '\n';
+}
+
+void fgets_drain_line(FILE *fp)
+{
+    int c;
+    while ((c = fgetc(fp)) != EOF && c != '\n')
+        ;
+}
+
 int file_exists(const char *path)
 {
     struct stat st;
