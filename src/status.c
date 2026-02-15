@@ -299,6 +299,18 @@ int status_is_auto(const char *name)
     return 0;
 }
 
+int status_clear_auto(void)
+{
+    FILE *fp = fopen(cfg->auto_file, "w");
+    if (!fp) {
+        log_error("cannot open auto-installed file '%s': %s",
+                  cfg->auto_file, strerror(errno));
+        return -1;
+    }
+    fclose(fp);
+    return 0;
+}
+
 int status_load_auto_set(aept_fileset_t *set)
 {
     FILE *fp;

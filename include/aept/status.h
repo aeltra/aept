@@ -28,6 +28,9 @@ int status_unmark_auto(const char *name);
 /* Check whether a package is marked auto-installed. */
 int status_is_auto(const char *name);
 
+/* Clear all auto-installed marks. */
+int status_clear_auto(void);
+
 /* Load the set of auto-installed package names into a fileset. */
 int status_load_auto_set(aept_fileset_t *set);
 

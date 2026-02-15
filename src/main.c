@@ -19,6 +19,7 @@
 #include "aept/msg.h"
 #include "aept/query.h"
 #include "aept/remove.h"
+#include "aept/status.h"
 #include "aept/update.h"
 #include "aept/util.h"
 
@@ -111,6 +112,7 @@ static void usage_main(FILE *out)
         "  upgrade             Upgrade all installed packages\n"
         "  list [pattern]      List packages\n"
         "  show <pkg>          Show package information\n"
+        "  mark <action>       Control auto-installed package marks\n"
         "  clean               Remove cached package files\n"
         "  files <pkg>         List files of an installed package\n"
         "  owns <path>         Find which package owns a file\n"
@@ -270,6 +272,21 @@ static void usage_show(FILE *out)
     );
 }
 
+static void usage_mark(FILE *out)
+{
+    fprintf(out,
+        "Usage: aept mark manual [--all] <packages...>\n"
+        "       aept mark auto <packages...>\n"
+        "\n"
+        "Control auto-installed package marks.\n"
+        "\n"
+        "Options:\n"
+        "  -h, --help  Show this help\n"
+        "\n"
+        "  --all       Mark all packages as manually installed\n"
+    );
+}
+
 static void usage_print_architecture(FILE *out)
 {
     fprintf(out,
@@ -344,6 +361,12 @@ static struct option files_options[] = {
 
 static struct option owns_options[] = {
     {"help", no_argument, NULL, 'h'},
+    {NULL, 0, NULL, 0}
+};
+
+static struct option mark_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {"all",  no_argument, NULL, 0x100},
     {NULL, 0, NULL, 0}
 };
 
@@ -641,6 +664,95 @@ static int cmd_owns(int argc, char *argv[])
     return r;
 }
 
+static int cmd_mark(int argc, char *argv[])
+{
+    const char *action;
+    int all = 0;
+    int opt, i, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "h", mark_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h':   usage_mark(stdout); return 0;
+        case 0x100: all = 1; break;
+        default:    usage_mark(stderr); return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        usage_mark(stderr);
+        return 1;
+    }
+
+    action = argv[optind++];
+
+    if (strcmp(action, "manual") == 0) {
+        if (!all && optind >= argc) {
+            log_error("mark manual requires package names or --all");
+            return 1;
+        }
+
+        if (load_config() < 0)
+            return 1;
+
+        if (all) {
+            r = status_clear_auto();
+        } else {
+            r = 0;
+            for (i = optind; i < argc; i++) {
+                char *list_path = NULL;
+                xasprintf(&list_path, "%s/%s.list",
+                          cfg->info_dir, argv[i]);
+                if (!file_exists(list_path)) {
+                    log_warning("package '%s' is not installed, skipping",
+                                argv[i]);
+                    free(list_path);
+                    continue;
+                }
+                free(list_path);
+                if (status_unmark_auto(argv[i]) < 0)
+                    r = -1;
+            }
+        }
+
+        config_free();
+        return r < 0 ? 1 : 0;
+    }
+
+    if (strcmp(action, "auto") == 0) {
+        if (optind >= argc) {
+            log_error("mark auto requires package names");
+            return 1;
+        }
+
+        if (load_config() < 0)
+            return 1;
+
+        r = 0;
+        for (i = optind; i < argc; i++) {
+            char *list_path = NULL;
+            xasprintf(&list_path, "%s/%s.list",
+                      cfg->info_dir, argv[i]);
+            if (!file_exists(list_path)) {
+                log_warning("package '%s' is not installed, skipping",
+                            argv[i]);
+                free(list_path);
+                continue;
+            }
+            free(list_path);
+            if (status_mark_auto(argv[i]) < 0)
+                r = -1;
+        }
+
+        config_free();
+        return r < 0 ? 1 : 0;
+    }
+
+    log_error("unknown mark action '%s'", action);
+    usage_mark(stderr);
+    return 1;
+}
+
 static int cmd_print_architecture(int argc, char *argv[])
 {
     int opt, r;
@@ -716,6 +828,8 @@ int main(int argc, char *argv[])
         return cmd_files(argc - optind, argv + optind);
     if (strcmp(command, "owns") == 0)
         return cmd_owns(argc - optind, argv + optind);
+    if (strcmp(command, "mark") == 0)
+        return cmd_mark(argc - optind, argv + optind);
     if (strcmp(command, "print-architecture") == 0)
         return cmd_print_architecture(argc - optind, argv + optind);
 
