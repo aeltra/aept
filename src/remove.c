@@ -23,7 +23,7 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-static int remove_files(const char *name, const aept_fileset_t *protected)
+int remove_files(const char *name, const aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;

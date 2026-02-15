@@ -331,11 +331,13 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     }
 
     /* Run postinst */
+    const char *state = "installed";
+
     r = run_script(cfg->info_dir, name, "postinst",
                    postinst_args ? postinst_args : "configure");
     if (r != 0) {
         log_error("postinst failed for '%s'", name);
-        /* Continue despite postinst failure — package is installed */
+        state = "unpacked";
         r = 0;
     }
 
@@ -343,7 +345,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     ctrl_path = NULL;
     xasprintf(&ctrl_path, "%s/%s.control", cfg->info_dir, name);
     status_remove(name);
-    status_add(ctrl_path);
+    status_add(ctrl_path, state);
     free(ctrl_path);
     ctrl_path = NULL;
 
@@ -362,6 +364,278 @@ cleanup:
     }
 
     free(tmpdir);
+    return r;
+}
+
+static void remove_info_files(const char *name)
+{
+    const char *exts[] = {
+        "list", "control", "preinst", "postinst", "prerm", "postrm", NULL
+    };
+
+    for (int i = 0; exts[i]; i++) {
+        char *path = NULL;
+        xasprintf(&path, "%s/%s.%s", cfg->info_dir, name, exts[i]);
+        unlink(path);
+        free(path);
+    }
+}
+
+static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
+                              const char *old_version, const char *new_version,
+                              aept_fileset_t *installed_files)
+{
+    Solvable *s = pool_id2solvable(pool, p);
+    const char *name = pool_id2str(pool, s->name);
+    struct aept_ar *ctrl_ar = NULL;
+    struct aept_ar *data_ar = NULL;
+    char *tmpdir = NULL;
+    char *preinst_args = NULL;
+    char *postinst_args = NULL;
+    char *prerm_args = NULL;
+    char *postrm_args = NULL;
+    char *ctrl_path = NULL;
+    char *list_path = NULL;
+    int r = -1;
+
+    if (!pkg_name_is_safe(name)) {
+        log_error("refusing to upgrade package with unsafe name '%s'", name);
+        return -1;
+    }
+
+    xasprintf(&preinst_args, "upgrade %s", old_version);
+    xasprintf(&postinst_args, "configure %s", old_version);
+    xasprintf(&prerm_args, "upgrade %s", new_version);
+    xasprintf(&postrm_args, "upgrade %s", new_version);
+
+    xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
+
+    if (!mkdtemp(tmpdir)) {
+        log_error("failed to create temp directory: %s",
+                  strerror(errno));
+        free(tmpdir);
+        tmpdir = NULL;
+        goto cleanup;
+    }
+
+    /* 1. Extract new control archive */
+    ctrl_ar = ar_open_pkg_control_archive(ipk_path);
+    if (!ctrl_ar) {
+        log_error("failed to open control archive in '%s'", ipk_path);
+        goto cleanup;
+    }
+
+    r = ar_extract_all(ctrl_ar, tmpdir, NULL);
+    ar_close(ctrl_ar);
+    ctrl_ar = NULL;
+
+    if (r < 0) {
+        log_error("failed to extract control archive");
+        goto cleanup;
+    }
+
+    /* 2. Run old-prerm */
+    r = run_script(cfg->info_dir, name, "prerm", prerm_args);
+    if (r != 0) {
+        log_error("prerm failed for '%s', aborting upgrade", name);
+        goto cleanup;
+    }
+
+    /* 3. Run new-preinst */
+    r = run_script(tmpdir, NULL, "preinst", preinst_args);
+    if (r != 0)
+        goto cleanup;
+
+    /* 4. Save old file list before overwriting */
+    aept_fileset_t old_files;
+    aept_fileset_t new_files;
+    int have_old_files = 0;
+
+    fileset_init(&old_files);
+    fileset_init(&new_files);
+
+    file_mkdir_hier(cfg->info_dir, 0755);
+    xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
+
+    {
+        FILE *lfp = fopen(list_path, "r");
+        if (lfp) {
+            char lbuf[4096];
+            while (fgets(lbuf, sizeof(lbuf), lfp)) {
+                char *tab;
+                lbuf[strcspn(lbuf, "\n")] = '\0';
+                tab = strchr(lbuf, '\t');
+                if (tab)
+                    *tab = '\0';
+                fileset_add(&old_files, lbuf);
+            }
+            fclose(lfp);
+            have_old_files = 1;
+        }
+    }
+
+    /* 5. Extract new data archive (overwrites shared files) */
+    data_ar = ar_open_pkg_data_archive(ipk_path);
+    if (!data_ar) {
+        log_error("failed to open data archive in '%s'", ipk_path);
+        r = -1;
+        goto cleanup_filesets;
+    }
+
+    char *extract_root = config_root_path("/");
+    r = ar_extract_all(data_ar, extract_root, NULL);
+    free(extract_root);
+    ar_close(data_ar);
+    data_ar = NULL;
+
+    if (r < 0) {
+        log_error("failed to extract data archive");
+        goto cleanup_filesets;
+    }
+
+    /* 6. Record new file list */
+    data_ar = ar_open_pkg_data_archive(ipk_path);
+    if (data_ar) {
+        FILE *list_fp = fopen(list_path, "w");
+        if (list_fp) {
+            ar_extract_paths_to_stream(data_ar, list_fp);
+            if (ferror(list_fp) || fclose(list_fp) != 0)
+                log_warning("failed to write file list '%s'", list_path);
+        }
+        ar_close(data_ar);
+        data_ar = NULL;
+
+        /* Re-read the list to build new fileset */
+        FILE *lfp = fopen(list_path, "r");
+        if (lfp) {
+            char lbuf[4096];
+            while (fgets(lbuf, sizeof(lbuf), lfp)) {
+                char *tab;
+                lbuf[strcspn(lbuf, "\n")] = '\0';
+                tab = strchr(lbuf, '\t');
+                if (tab)
+                    *tab = '\0';
+                fileset_add(&new_files, lbuf);
+            }
+            fclose(lfp);
+        }
+    }
+
+    fileset_sort(&new_files);
+
+    /* 7. Remove old files not in new package */
+    if (have_old_files) {
+        for (int i = 0; i < old_files.count; i++) {
+            char *path = old_files.paths[i];
+
+            /* Skip leading ./ */
+            while (path[0] == '.' && path[1] == '/')
+                path += 2;
+            while (path[0] == '/')
+                path++;
+
+            if (path[0] == '\0')
+                continue;
+
+            if (fileset_contains(&new_files, old_files.paths[i]))
+                continue;
+
+            if (installed_files && fileset_contains(installed_files,
+                                                    old_files.paths[i]))
+                continue;
+
+            char *full_path = NULL;
+            xasprintf(&full_path, "%s/%s",
+                      cfg->offline_root ? cfg->offline_root : "", path);
+
+            if (unlink(full_path) < 0 && errno != ENOENT)
+                log_debug("cannot remove '%s': %s",
+                          full_path, strerror(errno));
+
+            free(full_path);
+        }
+    }
+
+    /* Add new files to installed_files for cross-package protection */
+    if (installed_files) {
+        for (int i = 0; i < new_files.count; i++)
+            fileset_add(installed_files, new_files.paths[i]);
+    }
+
+    fileset_free(&new_files);
+    fileset_free(&old_files);
+
+    /* 7. Run old-postrm (info_dir still has old scripts) */
+    r = run_script(cfg->info_dir, name, "postrm", postrm_args);
+    if (r != 0)
+        log_warning("postrm failed for '%s', continuing", name);
+
+    /* 8. Replace info files with new versions */
+    remove_info_files(name);
+
+    xasprintf(&ctrl_path, "%s/control", tmpdir);
+    if (file_exists(ctrl_path)) {
+        char *dest = NULL;
+        xasprintf(&dest, "%s/%s.control", cfg->info_dir, name);
+        if (rename(ctrl_path, dest) < 0 && file_copy(ctrl_path, dest) < 0)
+            log_warning("failed to install control file for '%s'", name);
+        free(dest);
+    }
+    free(ctrl_path);
+    ctrl_path = NULL;
+
+    const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", NULL};
+    for (int i = 0; scripts[i]; i++) {
+        char *src = NULL, *dst = NULL;
+        xasprintf(&src, "%s/%s", tmpdir, scripts[i]);
+        if (file_exists(src)) {
+            xasprintf(&dst, "%s/%s.%s", cfg->info_dir, name, scripts[i]);
+            if (rename(src, dst) < 0 && file_copy(src, dst) < 0)
+                log_warning("failed to install %s script for '%s'",
+                            scripts[i], name);
+            free(dst);
+        }
+        free(src);
+    }
+
+    /* 9. Run new-postinst */
+    const char *state = "installed";
+
+    r = run_script(cfg->info_dir, name, "postinst", postinst_args);
+    if (r != 0) {
+        log_error("postinst failed for '%s'", name);
+        state = "unpacked";
+        r = 0;
+    }
+
+    /* 10. Update status */
+    xasprintf(&ctrl_path, "%s/%s.control", cfg->info_dir, name);
+    status_remove(name);
+    status_add(ctrl_path, state);
+    free(ctrl_path);
+    ctrl_path = NULL;
+
+    log_info("upgraded %s", name);
+    r = 0;
+    goto cleanup;
+
+cleanup_filesets:
+    fileset_free(&new_files);
+    fileset_free(&old_files);
+
+cleanup:
+    free(preinst_args);
+    free(postinst_args);
+    free(prerm_args);
+    free(postrm_args);
+    free(list_path);
+
+    if (tmpdir) {
+        const char *rm_argv[] = {"rm", "-rf", tmpdir, NULL};
+        xsystem(rm_argv);
+        free(tmpdir);
+    }
+
     return r;
 }
 
@@ -572,23 +846,18 @@ int aept_install(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
 
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            const char *new_ver = NULL;
+            /* Skip upgrades/downgrades — handled by do_upgrade_package()
+             * when the INSTALL side of the transaction is processed. */
+            if (type == SOLVER_TRANSACTION_UPGRADED ||
+                    type == SOLVER_TRANSACTION_DOWNGRADED)
+                continue;
 
             if (!fileset_sorted) {
                 fileset_sort(&installed_files);
                 fileset_sorted = 1;
             }
 
-            if (type == SOLVER_TRANSACTION_UPGRADED ||
-                    type == SOLVER_TRANSACTION_DOWNGRADED) {
-                Id op = transaction_obs_pkg(trans, p);
-                if (op) {
-                    Solvable *os = pool_id2solvable(pool, op);
-                    new_ver = pool_id2str(pool, os->evr);
-                }
-            }
-
-            r = aept_do_remove(pkg_name, new_ver, &installed_files);
+            r = aept_do_remove(pkg_name, NULL, &installed_files);
             if (r < 0 && !cfg->force_depends)
                 goto fileset_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
@@ -601,18 +870,29 @@ int aept_install(const char **names, int count)
             if (!ipk_paths[i])
                 continue;
 
-            const char *old_ver = NULL;
-
             if (type == SOLVER_TRANSACTION_UPGRADE ||
                     type == SOLVER_TRANSACTION_DOWNGRADE) {
+                const char *old_ver = NULL;
+                const char *new_ver = pool_id2str(pool, s->evr);
                 Id op = transaction_obs_pkg(trans, p);
                 if (op) {
                     Solvable *os = pool_id2solvable(pool, op);
                     old_ver = pool_id2str(pool, os->evr);
                 }
+
+                if (!fileset_sorted) {
+                    fileset_sort(&installed_files);
+                    fileset_sorted = 1;
+                }
+
+                r = do_upgrade_package(ipk_paths[i], pool, p,
+                                       old_ver, new_ver,
+                                       &installed_files);
+                fileset_sorted = 0;
+            } else {
+                r = do_install_package(ipk_paths[i], pool, p, NULL);
             }
 
-            r = do_install_package(ipk_paths[i], pool, p, old_ver);
             if (r < 0)
                 goto fileset_cleanup;
 
@@ -620,7 +900,8 @@ int aept_install(const char **names, int count)
              * of a dependency (not explicitly requested).
              * Also check provides so that e.g. installing "python"
              * does not auto-mark the providing "python3.9". */
-            if (names && !old_ver) {
+            if (names && type != SOLVER_TRANSACTION_UPGRADE &&
+                    type != SOLVER_TRANSACTION_DOWNGRADE) {
                 int is_explicit = 0;
                 int j;
                 for (j = 0; j < count; j++) {
@@ -645,8 +926,11 @@ int aept_install(const char **names, int count)
                     status_mark_auto(pkg_name);
             }
 
-            /* Record installed files for removal protection */
-            {
+            /* Record installed files for removal protection.
+             * Upgrades already update installed_files in
+             * do_upgrade_package(). */
+            if (type != SOLVER_TRANSACTION_UPGRADE &&
+                    type != SOLVER_TRANSACTION_DOWNGRADE) {
                 char *list_path = NULL;
                 FILE *lfp;
                 char lbuf[4096];

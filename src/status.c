@@ -18,7 +18,14 @@
 
 int status_load(void)
 {
-    FILE *fp;
+    FILE *fp, *mem;
+    char *buf = NULL;
+    size_t buf_size = 0;
+    char line[4096];
+    int r;
+
+    static const char unpacked_status[] = "Status: install ok unpacked";
+    static const char installed_status[] = "Status: install ok installed";
 
     if (!file_exists(cfg->status_file))
         return 0;
@@ -30,14 +37,40 @@ int status_load(void)
         return -1;
     }
 
-    int r = solver_load_installed(fp);
+    /* Read status file into memory, normalizing "unpacked" to
+     * "installed" so libsolv treats all packages as present. */
+    mem = open_memstream(&buf, &buf_size);
+    if (!mem) {
+        fclose(fp);
+        return -1;
+    }
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (strncmp(line, unpacked_status, sizeof(unpacked_status) - 1) == 0)
+            fprintf(mem, "%s\n", installed_status);
+        else
+            fputs(line, mem);
+    }
+
     fclose(fp);
+    fflush(mem);
+    fclose(mem);
+
+    fp = fmemopen(buf, buf_size, "r");
+    if (!fp) {
+        free(buf);
+        return -1;
+    }
+
+    r = solver_load_installed(fp);
+    fclose(fp);
+    free(buf);
 
     return r;
 }
 
 
-int status_add(const char *control_path)
+int status_add(const char *control_path, const char *state)
 {
     FILE *src, *old, *dst;
     char *tmp_path = NULL;
@@ -72,7 +105,7 @@ int status_add(const char *control_path)
     while (fgets(buf, sizeof(buf), src))
         fputs(buf, dst);
 
-    fprintf(dst, "Status: install ok installed\n\n");
+    fprintf(dst, "Status: install ok %s\n\n", state);
 
     fclose(src);
 

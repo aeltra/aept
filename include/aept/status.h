@@ -12,8 +12,9 @@
 /* Load the status file into the solver as the installed repo. */
 int status_load(void);
 
-/* Append a package entry to the status file. */
-int status_add(const char *control_path);
+/* Append a package entry to the status file.
+ * state: "installed" or "unpacked" (postinst failed). */
+int status_add(const char *control_path, const char *state);
 
 /* Remove a package entry from the status file by name. */
 int status_remove(const char *name);
