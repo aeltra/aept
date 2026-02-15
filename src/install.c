@@ -63,47 +63,117 @@ static int load_repos(void)
     return 0;
 }
 
-static int display_transaction(Transaction *trans, Pool *pool)
+/* Look up the installed version of a package by name.
+ * Returns a pool string pointer (valid until solver_fini), or NULL. */
+static const char *installed_version(Pool *pool, const char *name)
+{
+    Repo *installed = pool->installed;
+    Id p;
+    Solvable *s;
+
+    if (!installed)
+        return NULL;
+
+    FOR_REPO_SOLVABLES(installed, p, s) {
+        if (strcmp(pool_id2str(pool, s->name), name) == 0)
+            return pool_id2str(pool, s->evr);
+    }
+
+    return NULL;
+}
+
+/* Check whether name was covered by an INSTALL step in the transaction. */
+static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
 {
     int i;
-    int n_install = 0;
-    int n_upgrade = 0;
-    int n_erase = 0;
 
-    printf("Actions:\n");
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
             SOLVER_TRANSACTION_SHOW_ACTIVE |
             SOLVER_TRANSACTION_SHOW_ALL);
 
-        Solvable *s = pool_id2solvable(pool, p);
-        const char *name = pool_id2str(pool, s->name);
-        const char *evr = pool_id2str(pool, s->evr);
+        if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
+            continue;
 
-        if (type == SOLVER_TRANSACTION_UPGRADE ||
-                type == SOLVER_TRANSACTION_DOWNGRADE) {
-            printf("  upgrade %s (%s)\n", name, evr);
-            n_upgrade++;
-        } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
-            printf("  install %s (%s)\n", name, evr);
-            n_install++;
-        } else if (type == SOLVER_TRANSACTION_UPGRADED ||
-                type == SOLVER_TRANSACTION_DOWNGRADED) {
-            /* old version being replaced — skip display */
-        } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            printf("  remove  %s (%s)\n", name, evr);
-            n_erase++;
+        Solvable *s = pool_id2solvable(pool, p);
+        if (strcmp(pool_id2str(pool, s->name), name) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+static int display_transaction(Transaction *trans, Pool *pool,
+                               const char **names, int name_count)
+{
+    int i;
+    int n_install = 0;
+    int n_upgrade = 0;
+    int n_erase = 0;
+    int n_reinstall = 0;
+
+    printf("Actions:\n");
+    if (trans) {
+        for (i = 0; i < trans->steps.count; i++) {
+            Id p = trans->steps.elements[i];
+            int type = transaction_type(trans, p,
+                SOLVER_TRANSACTION_SHOW_ACTIVE |
+                SOLVER_TRANSACTION_SHOW_ALL);
+
+            Solvable *s = pool_id2solvable(pool, p);
+            const char *name = pool_id2str(pool, s->name);
+            const char *evr = pool_id2str(pool, s->evr);
+
+            if (type == SOLVER_TRANSACTION_UPGRADE ||
+                    type == SOLVER_TRANSACTION_DOWNGRADE) {
+                printf("  upgrade %s (%s)\n", name, evr);
+                n_upgrade++;
+            } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
+                printf("  install %s (%s)\n", name, evr);
+                n_install++;
+            } else if (type == SOLVER_TRANSACTION_UPGRADED ||
+                    type == SOLVER_TRANSACTION_DOWNGRADED) {
+                /* old version being replaced — skip display */
+            } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
+                printf("  remove  %s (%s)\n", name, evr);
+                n_erase++;
+            }
         }
     }
 
-    if (n_install == 0 && n_upgrade == 0 && n_erase == 0) {
+    for (i = 0; i < name_count; i++) {
+        Id avail = solver_find_available(names[i]);
+        if (!avail)
+            continue;
+
+        Solvable *s = pool_id2solvable(pool, avail);
+        const char *pkg_name = pool_id2str(pool, s->name);
+
+        if (trans && name_in_transaction(pkg_name, trans, pool))
+            continue;
+
+        const char *ver = installed_version(pool, pkg_name);
+        if (!ver)
+            continue;
+
+        printf("  reinstall %s (%s)\n", pkg_name, ver);
+        n_reinstall++;
+    }
+
+    if (n_install == 0 && n_upgrade == 0 && n_erase == 0 &&
+            n_reinstall == 0) {
         log_info("nothing to do");
         return 1;
     }
 
-    printf("Summary:\n  %d to install, %d to upgrade, %d to remove\n",
-           n_install, n_upgrade, n_erase);
+    if (n_reinstall > 0)
+        printf("Summary:\n  %d to install, %d to upgrade, "
+               "%d to remove, %d to reinstall\n",
+               n_install, n_upgrade, n_erase, n_reinstall);
+    else
+        printf("Summary:\n  %d to install, %d to upgrade, %d to remove\n",
+               n_install, n_upgrade, n_erase);
 
     return 0;
 }
@@ -717,47 +787,6 @@ cleanup:
     return r;
 }
 
-/* Look up the installed version of a package by name.
- * Returns a pool string pointer (valid until solver_fini), or NULL. */
-static const char *installed_version(Pool *pool, const char *name)
-{
-    Repo *installed = pool->installed;
-    Id p;
-    Solvable *s;
-
-    if (!installed)
-        return NULL;
-
-    FOR_REPO_SOLVABLES(installed, p, s) {
-        if (strcmp(pool_id2str(pool, s->name), name) == 0)
-            return pool_id2str(pool, s->evr);
-    }
-
-    return NULL;
-}
-
-/* Check whether name was covered by an INSTALL step in the transaction. */
-static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
-{
-    int i;
-
-    for (i = 0; i < trans->steps.count; i++) {
-        Id p = trans->steps.elements[i];
-        int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
-
-        if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
-            continue;
-
-        Solvable *s = pool_id2solvable(pool, p);
-        if (strcmp(pool_id2str(pool, s->name), name) == 0)
-            return 1;
-    }
-
-    return 0;
-}
-
 static int do_reinstall(const char **names, int count,
                         Transaction *trans, Pool *pool)
 {
@@ -849,19 +878,11 @@ int aept_install(const char **names, int count)
         }
     }
 
-    if (!trans || trans->steps.count == 0) {
-        if (!cfg->reinstall) {
-            log_info("nothing to do");
-            r = 0;
-            goto out;
-        }
-    } else {
-        if (display_transaction(trans, pool)) {
-            if (!cfg->reinstall) {
-                r = 0;
-                goto out;
-            }
-        }
+    if (display_transaction(trans, pool,
+                           cfg->reinstall ? names : NULL,
+                           cfg->reinstall ? count : 0)) {
+        r = 0;
+        goto out;
     }
 
     if (cfg->noaction) {
