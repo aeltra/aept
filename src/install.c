@@ -584,6 +584,9 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
             if (path[0] == '\0')
                 continue;
 
+            if (!archive_path_is_safe(path))
+                continue;
+
             if (fileset_contains(&new_files, old_files.paths[i]))
                 continue;
 

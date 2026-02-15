@@ -101,6 +101,32 @@ int symlink_target_is_safe(const char *target)
     return 1;
 }
 
+/*
+ * Check that an archive entry pathname is safe for recording in a
+ * .list file and later consumption by remove/upgrade.  Rejects:
+ *   - empty paths
+ *   - consecutive dots  (directory traversal)
+ *   - newlines          (line injection in .list)
+ *   - tabs              (field injection in .list)
+ */
+int archive_path_is_safe(const char *path)
+{
+    int prev_dot = 0;
+
+    if (!path || path[0] == '\0')
+        return 0;
+
+    for (const char *p = path; *p; p++) {
+        if (*p == '\n' || *p == '\t')
+            return 0;
+        if (*p == '.' && prev_dot)
+            return 0;
+        prev_dot = (*p == '.');
+    }
+
+    return 1;
+}
+
 int fgets_is_truncated(const char *buf, size_t bufsize)
 {
     size_t len = strlen(buf);

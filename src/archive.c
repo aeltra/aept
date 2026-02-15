@@ -351,6 +351,12 @@ static int extract_paths_to_stream(struct archive *a, FILE *stream)
             return -1;
 
         path = archive_entry_pathname(entry);
+
+        if (!archive_path_is_safe(path)) {
+            log_error("refusing unsafe archive path '%s'", path);
+            return -1;
+        }
+
         entry_stat = archive_entry_stat(entry);
         if (S_ISLNK(entry_stat->st_mode)) {
             const char *target = archive_entry_symlink(entry);

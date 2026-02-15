@@ -67,6 +67,9 @@ int remove_files(const char *name, const aept_fileset_t *protected)
         if (path[0] == '\0')
             continue;
 
+        if (!archive_path_is_safe(path))
+            continue;
+
         if (protected && fileset_contains(protected, path))
             continue;
 
