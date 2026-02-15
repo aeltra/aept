@@ -370,6 +370,10 @@ int xsystem_offline_root(const char *argv[])
                           cfg->offline_root, strerror(errno));
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
+            if (chdir("/") != 0) {
+                log_error("failed to chdir to '/': %s", strerror(errno));
+                _exit(AEPT_EXIT_SETUP_FAILED);
+            }
         }
         execvp(argv[0], (char *const *)argv);
         _exit(AEPT_EXIT_EXEC_FAILED);
