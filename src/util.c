@@ -157,6 +157,7 @@ int file_copy(const char *src, const char *dst)
     FILE *in, *out;
     char buf[4096];
     size_t n;
+    struct stat st;
 
     in = fopen(src, "r");
     if (!in)
@@ -175,6 +176,11 @@ int file_copy(const char *src, const char *dst)
             unlink(dst);
             return -1;
         }
+    }
+
+    if (fstat(fileno(in), &st) == 0) {
+        fchmod(fileno(out), st.st_mode);
+        fchown(fileno(out), st.st_uid, st.st_gid);
     }
 
     fclose(in);
