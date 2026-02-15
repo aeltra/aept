@@ -35,7 +35,7 @@ int xsystem_offline_root(const char *argv[]);
 void fileset_init(aept_fileset_t *fs);
 void fileset_add(aept_fileset_t *fs, const char *path);
 void fileset_sort(aept_fileset_t *fs);
-int fileset_contains(const aept_fileset_t *fs, const char *path);
+int fileset_contains(aept_fileset_t *fs, const char *path);
 void fileset_free(aept_fileset_t *fs);
 
 #endif

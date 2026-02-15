@@ -336,11 +336,12 @@ void fileset_sort(aept_fileset_t *fs)
     fs->sorted = 1;
 }
 
-int fileset_contains(const aept_fileset_t *fs, const char *path)
+int fileset_contains(aept_fileset_t *fs, const char *path)
 {
     path = normalize_path(path);
     if (fs->count == 0 || path[0] == '\0')
         return 0;
+    fileset_sort(fs);
     return bsearch(&path, fs->paths, fs->count, sizeof(char *),
                    path_cmp) != NULL;
 }
