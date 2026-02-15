@@ -12,11 +12,11 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
-int aept_download(const char *url, const char *dest)
+int aept_download(const char *url, const char *dest, const char *name)
 {
     const char *argv[] = {"wget", "-q", "-O", dest, url, NULL};
 
-    log_info("downloading %s", url);
+    log_info("downloading %s", name);
 
     unlink(dest);
 

@@ -71,7 +71,7 @@ int aept_update(void)
             xasprintf(&url, "%s/Packages.gz", src->url);
             xasprintf(&gz_path, "%s.gz", list_path);
 
-            r = aept_download(url, gz_path);
+            r = aept_download(url, gz_path, src->name);
             if (r < 0) {
                 errors++;
                 goto next;
@@ -90,7 +90,7 @@ int aept_update(void)
         } else {
             xasprintf(&url, "%s/Packages", src->url);
 
-            r = aept_download(url, list_path);
+            r = aept_download(url, list_path, src->name);
             if (r < 0) {
                 errors++;
                 goto next;
@@ -104,7 +104,7 @@ int aept_update(void)
             xasprintf(&sig_url, "%s/Packages.sig", src->url);
             xasprintf(&sig_path, "%s.sig", list_path);
 
-            r = aept_download(sig_url, sig_path);
+            r = aept_download(sig_url, sig_path, src->name);
             if (r < 0) {
                 log_error("failed to download signature for '%s'",
                           src->name);

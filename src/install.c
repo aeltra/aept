@@ -182,7 +182,6 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     location_copy = xstrdup(location);
     base = basename(location_copy);
     xasprintf(&dest, "%s/%s", cfg->cache_dir, base);
-    free(location_copy);
 
     file_mkdir_hier(cfg->cache_dir, 0755);
 
@@ -192,14 +191,16 @@ static int download_package(Id p, Pool *pool, char **dest_out)
             log_info("using cached %s",
                      pool_id2str(pool, s->name));
             free(url);
+            free(location_copy);
             *dest_out = dest;
             return 0;
         }
         /* checksum failed — verify_checksum already deleted the file */
     }
 
-    r = aept_download(url, dest);
+    r = aept_download(url, dest, base);
     free(url);
+    free(location_copy);
 
     if (r < 0) {
         free(dest);
