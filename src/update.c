@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +43,56 @@ static int decompress_gz(const char *gz_path, const char *out_path)
     ar_close(ar);
 
     return r;
+}
+
+static int is_active_source(const char *name)
+{
+    int i;
+
+    for (i = 0; i < cfg->nsources; i++) {
+        if (strcmp(name, cfg->sources[i].name) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+static void prune_stale_lists(void)
+{
+    DIR *d;
+    struct dirent *ent;
+
+    d = opendir(cfg->lists_dir);
+    if (!d)
+        return;
+
+    while ((ent = readdir(d)) != NULL) {
+        char *path = NULL;
+        const char *name = ent->d_name;
+        char *base;
+        char *copy;
+
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+            continue;
+
+        /* Strip .sig suffix to get the source name */
+        copy = xstrdup(name);
+        base = copy;
+
+        size_t len = strlen(base);
+        if (len > 4 && strcmp(base + len - 4, ".sig") == 0)
+            base[len - 4] = '\0';
+
+        if (!is_active_source(base)) {
+            xasprintf(&path, "%s/%s", cfg->lists_dir, name);
+            unlink(path);
+            free(path);
+        }
+
+        free(copy);
+    }
+
+    closedir(d);
 }
 
 int aept_update(void)
@@ -136,6 +188,8 @@ int aept_update(void)
         free(dest);
         free(list_path);
     }
+
+    prune_stale_lists();
 
     return errors ? -1 : 0;
 }
