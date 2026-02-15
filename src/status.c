@@ -53,7 +53,12 @@ int status_load(void)
     }
 
     fclose(fp);
-    fflush(mem);
+
+    if (fflush(mem) != 0 || ferror(mem)) {
+        fclose(mem);
+        free(buf);
+        return -1;
+    }
     fclose(mem);
 
     fp = fmemopen(buf, buf_size, "r");
