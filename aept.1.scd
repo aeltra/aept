@@ -66,6 +66,14 @@ installed package.
 *--reinstall*
 	Reinstall packages that are already installed at the requested version.
 
+*--force-confnew*
+	During upgrades, always install the package maintainer's version of
+	conffiles without prompting, even if the file has been locally modified.
+
+*--force-confold*
+	During upgrades, always keep the currently installed version of conffiles
+	without prompting, even if the package ships a new version.
+
 ## remove [options] <packages...>
 
 Remove one or more installed packages. Reverse dependencies are resolved
@@ -79,9 +87,30 @@ be removed unless *--force-depends* is given.
 	Dry run. Show which packages would be removed, but do not actually
 	perform any changes.
 
+*--purge*
+	Also remove conffiles that have been modified since installation. Without
+	this option, modified conffiles are preserved on disk.
+
+## autoremove [options]
+
+Remove auto-installed packages that are no longer needed. A package is
+considered unneeded if it was automatically installed as a dependency and no
+manually installed package depends on it.
+
+*-f*, *--force-depends*
+	Ignore dependency errors and proceed anyway.
+
+*-n*, *--noaction*
+	Dry run. Show which packages would be removed, but do not actually
+	perform any changes.
+
+*--purge*
+	Also remove conffiles that have been modified since installation.
+
 ## upgrade [options]
 
-Upgrade all installed packages to the latest available version.
+Upgrade all installed packages to the latest available version. Packages
+that have been pinned (see *pin*) are held back and not upgraded.
 
 *-f*, *--force-depends*
 	Ignore dependency errors from the solver and proceed anyway.
@@ -100,6 +129,40 @@ Upgrade all installed packages to the latest available version.
 	Download, install, and immediately delete each package instead of
 	downloading all packages first. Useful on devices with limited storage.
 	Ignored when *--download-only* is also specified.
+
+*--force-confnew*
+	Always install the package maintainer's version of conffiles without
+	prompting, even if the file has been locally modified.
+
+*--force-confold*
+	Always keep the currently installed version of conffiles without
+	prompting, even if the package ships a new version.
+
+## mark manual [--all] <packages...>
+
+Mark one or more installed packages as manually installed. Manually installed
+packages are never candidates for removal by *autoremove*.
+
+*--all*
+	Mark all installed packages as manually installed.
+
+## mark auto <packages...>
+
+Mark one or more installed packages as automatically installed. Auto-installed
+packages become candidates for removal by *autoremove* once no manually
+installed package depends on them.
+
+## pin <packages...>
+
+Pin one or more packages to their currently installed version. Pinned packages
+are held back during *upgrade*. To pin to a specific version, use the
+_name_=_version_ syntax:
+
+	aept pin mypackage=1.2.3
+
+## unpin <packages...>
+
+Remove version pins for one or more packages.
 
 ## show [options] <package>
 
@@ -196,18 +259,23 @@ The following keys are recognized:
 |  lock_file
 :  /var/lib/aept/lock
 :  Path to the lock file
-|  usign_bin
-:  usign
-:  Path to the usign binary
 |  usign_keydir
 :  /etc/aept/usign/trustdb
 :  Directory containing trusted public keys
+|  auto_file
+:  /var/lib/aept/auto-installed
+:  Path to the auto-installed packages tracking file
+|  pin_file
+:  /var/lib/aept/pinned-packages
+:  Path to the version pins file
 |  check_signature
 :  1
 :  Set to 0 to disable signature verification
 |  ignore_uid
 :  0
-:  Set to 1 to skip the root/UID check
+:  Set to 1 to not preserve file ownership during extraction.
+   Files will be owned by the calling user instead of the
+   uid/gid recorded in the package.
 |  allow_downgrade
 :  0
 :  Set to 1 to allow package downgrades
@@ -234,6 +302,8 @@ When an offline root is set (via *--offline-root* or the *offline_root* config
 option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 (unless *--conf* is given explicitly) and all state directories (lists, cache,
 info, status, lock) are automatically prefixed with the offline root path.
+The signature trust directory (_usign_keydir_) is *not* prefixed — signature
+verification always uses the host's trusted keys.
 
 Maintainer scripts are executed inside the offline root using
 *unshare*(2) with *CLONE_NEWUSER* to set up a user namespace. UID and GID
@@ -242,7 +312,8 @@ the current user appears as root inside the namespace. The script then
 chroots into the offline root directory.
 
 This allows non-root users to build root filesystems or install packages into
-an alternate directory tree.
+an alternate directory tree. This functionality is required by the build-box
+tool.
 
 # MAINTAINER SCRIPTS
 
@@ -265,6 +336,22 @@ performed:
 *postrm* upgrade <new-version>
 	Removal of old version during upgrade to _new-version_.
 
+# PACKAGE FORMAT
+
+Aeltra packages (.aeltra) use the same structure as Debian binary packages: an
+AR archive containing a _control.tar_ and a _data.tar_ member, each with a
+compression suffix (.gz, .xz, .bz2, .lz4, or .zst). The control archive holds
+package metadata and maintainer scripts; the data archive holds the installable
+file tree.
+
+Because the format is compatible, standard Debian tools can be used to inspect
+packages:
+
+```
+dpkg -c package.aeltra   # list data archive contents
+dpkg -I package.aeltra   # show control information
+```
+
 # FILES
 
 _/etc/aept/aept.conf_
@@ -282,10 +369,19 @@ _/var/lib/aept/info/_
 
 	- _pkg.control_ — control metadata
 	- _pkg.list_ — list of installed files
+	- _pkg.conffiles_ — conffile paths and MD5 checksums
 	- _pkg.preinst_, _pkg.postinst_, _pkg.prerm_, _pkg.postrm_ — maintainer scripts
 
 _/var/lib/aept/lists/_
 	Downloaded package lists, one file per source.
+
+_/var/lib/aept/auto-installed_
+	Tracks which packages were pulled in automatically as dependencies.
+	Used by *autoremove* to decide removal candidates.
+
+_/var/lib/aept/pinned-packages_
+	Version pins, one _name version_ pair per line. Pinned packages are
+	held back during *upgrade*. Managed by the *pin* and *unpin* commands.
 
 _/var/cache/aept/_
 	Downloaded .aeltra package files.
