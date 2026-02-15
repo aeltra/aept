@@ -831,7 +831,7 @@ int ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size)
     return extract_all(ar->ar, prefix, ar->extract_flags, size);
 }
 
-int ar_extract_selected(struct aept_ar *ar, const aept_fileset_t *selected,
+int ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,
                         const char *prefix)
 {
     struct archive *disk;
