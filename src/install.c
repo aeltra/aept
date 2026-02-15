@@ -114,8 +114,8 @@ static int verify_checksum(const char *path, Pool *pool, Solvable *s)
     expected = solvable_lookup_bin_checksum(s, SOLVABLE_CHECKSUM,
                                             &checksum_type);
     if (!expected) {
-        log_warning("no checksum for '%s', skipping verification", name);
-        return 0;
+        log_error("no checksum for '%s'", name);
+        return -1;
     }
 
     chk = solv_chksum_create(checksum_type);
