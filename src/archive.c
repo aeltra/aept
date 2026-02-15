@@ -602,7 +602,7 @@ static struct archive *open_inner(struct archive *outer)
     if (r != ARCHIVE_OK) {
         log_error("failed to open inner archive: %s",
                  archive_error_string(inner));
-        return NULL;
+        goto err_cleanup;
     }
 
     return inner;
