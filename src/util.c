@@ -172,11 +172,11 @@ int xsystem(const char *argv[])
     pid_t pid;
     int r;
 
-    pid = vfork();
+    pid = fork();
 
     switch (pid) {
     case -1:
-        log_error("%s: vfork: %s", argv[0], strerror(errno));
+        log_error("%s: fork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
         execvp(argv[0], (char *const *)argv);
