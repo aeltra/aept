@@ -912,6 +912,12 @@ int aept_install(const char **names, int count)
     fileset_init(&installed_files);
 
     for (i = 0; i < trans->steps.count; i++) {
+        if (signal_was_interrupted()) {
+            log_warning("interrupted, stopping");
+            r = -1;
+            goto fileset_cleanup;
+        }
+
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
             SOLVER_TRANSACTION_SHOW_ACTIVE |

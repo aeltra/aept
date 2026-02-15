@@ -151,6 +151,12 @@ int aept_autoremove(void)
     }
 
     for (i = 0; i < ncandidates; i++) {
+        if (signal_was_interrupted()) {
+            log_warning("interrupted, stopping");
+            r = -1;
+            goto out_needed;
+        }
+
         r = aept_do_remove(candidates[i], NULL, NULL);
         if (r < 0 && !cfg->force_depends)
             goto out_needed;

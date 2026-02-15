@@ -677,6 +677,7 @@ int main(int argc, char *argv[])
     int opt;
 
     aept_log_init();
+    signal_setup();
 
     while ((opt = getopt_long(argc, argv, "+c:o:vh", global_options, NULL)) != -1) {
         switch (opt) {

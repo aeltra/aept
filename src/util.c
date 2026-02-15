@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,32 @@ int xasprintf(char **strp, const char *fmt, ...)
     }
 
     return r;
+}
+
+static volatile sig_atomic_t interrupted;
+
+static void signal_handler(int sig)
+{
+    (void)sig;
+    interrupted = 1;
+}
+
+void signal_setup(void)
+{
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+}
+
+int signal_was_interrupted(void)
+{
+    return interrupted;
 }
 
 int pkg_name_is_safe(const char *name)

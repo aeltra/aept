@@ -223,6 +223,12 @@ int aept_remove(const char **names, int count)
     }
 
     for (i = 0; i < trans->steps.count; i++) {
+        if (signal_was_interrupted()) {
+            log_warning("interrupted, stopping");
+            r = -1;
+            goto out;
+        }
+
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
             SOLVER_TRANSACTION_SHOW_ACTIVE |

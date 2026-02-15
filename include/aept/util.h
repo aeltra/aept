@@ -33,6 +33,9 @@ int file_is_dir(const char *path);
 int file_copy(const char *src, const char *dst);
 int file_mkdir_hier(const char *path, mode_t mode);
 
+void signal_setup(void);
+int signal_was_interrupted(void);
+
 int xsystem(const char *argv[]);
 int xsystem_offline_root(const char *argv[]);
 
