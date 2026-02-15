@@ -479,14 +479,26 @@ int aept_install(const char **names, int count)
     if (r < 0)
         goto out;
 
-    /* Explicitly named packages become manually installed */
-    if (names && !cfg->noaction) {
-        for (i = 0; i < count; i++)
-            status_unmark_auto(names[i]);
-    }
-
     trans = solver_transaction();
     pool = solver_pool();
+
+    /* Explicitly named packages become manually installed.
+     * Resolve through provides so that e.g. "python" correctly
+     * unmarks "python3.9" when python3.9 provides python. */
+    if (names && !cfg->noaction) {
+        for (i = 0; i < count; i++) {
+            status_unmark_auto(names[i]);
+            Id nameid = pool_str2id(pool, names[i], 0);
+            if (nameid) {
+                Id p2, pp2;
+                FOR_PROVIDES(p2, pp2, nameid) {
+                    Solvable *s2 = pool_id2solvable(pool, p2);
+                    if (s2->repo == pool->installed)
+                        status_unmark_auto(pool_id2str(pool, s2->name));
+                }
+            }
+        }
+    }
 
     if (!trans || trans->steps.count == 0) {
         if (!cfg->reinstall) {
@@ -605,7 +617,9 @@ int aept_install(const char **names, int count)
                 goto fileset_cleanup;
 
             /* Mark as auto-installed if this is a fresh install
-             * of a dependency (not explicitly requested). */
+             * of a dependency (not explicitly requested).
+             * Also check provides so that e.g. installing "python"
+             * does not auto-mark the providing "python3.9". */
             if (names && !old_ver) {
                 int is_explicit = 0;
                 int j;
@@ -613,6 +627,18 @@ int aept_install(const char **names, int count)
                     if (strcmp(names[j], pkg_name) == 0) {
                         is_explicit = 1;
                         break;
+                    }
+                    Id nameid = pool_str2id(pool, names[j], 0);
+                    if (nameid) {
+                        Id p2, pp2;
+                        FOR_PROVIDES(p2, pp2, nameid) {
+                            if (p2 == p) {
+                                is_explicit = 1;
+                                break;
+                            }
+                        }
+                        if (is_explicit)
+                            break;
                     }
                 }
                 if (!is_explicit)
