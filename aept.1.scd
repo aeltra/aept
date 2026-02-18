@@ -397,6 +397,3 @@ _/var/lib/aept/lock_
 
 Tobias Koch
 
-# SEE ALSO
-
-*usign*(1), *libsolv*(3), *libarchive*(3)
