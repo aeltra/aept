@@ -317,12 +317,10 @@ int conffile_resolve_upgrade(const char *name,
         }
         /* install_new < 0: leave .aept-new for admin review */
 
-        /* Record the resulting MD5 for saving */
+        /* Record the package's conffile hash so future upgrades
+         * can detect user modifications against the shipped version. */
         {
-            const char *save_md5 = install_new ? new_md5 : current_md5;
-            if (!save_md5)
-                save_md5 = new_md5;
-            conffile_set_add(&result, cf_path, save_md5);
+            conffile_set_add(&result, cf_path, new_md5);
         }
 
         free(disk_path);

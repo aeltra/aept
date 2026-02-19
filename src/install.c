@@ -697,7 +697,7 @@ cleanup:
 static void remove_info_files(const char *name)
 {
     const char *exts[] = {
-        "list", "control", "conffiles",
+        "list", "control",
         "preinst", "postinst", "prerm", "postrm", NULL
     };
 
@@ -993,27 +993,6 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         }
         ar_close(data_ar);
         data_ar = NULL;
-    }
-
-    /* Save conffile metadata */
-    {
-        aept_conffile_set_t save_cf;
-        conffile_set_init(&save_cf);
-
-        if (conffile_parse_list(tmpdir, &save_cf) == 0 && save_cf.count > 0) {
-            for (int ci = 0; ci < save_cf.count; ci++) {
-                char *cf_path = config_root_path(save_cf.entries[ci].path);
-                char *md5 = conffile_md5(cf_path);
-                free(cf_path);
-                if (md5) {
-                    free(save_cf.entries[ci].md5);
-                    save_cf.entries[ci].md5 = md5;
-                }
-            }
-            conffile_save(name, &save_cf);
-        }
-
-        conffile_set_free(&save_cf);
     }
 
     /* 9. Run new-postinst */
