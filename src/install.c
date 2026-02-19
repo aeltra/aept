@@ -199,6 +199,9 @@ static int display_transaction(Transaction *trans, Pool *pool,
         print_heading("%d to install, %d to upgrade, %d to remove.",
                       n_install, n_upgrade, n_erase);
 
+    if (n_erase > 0 && !confirm_continue())
+        return -1;
+
     return 0;
 }
 

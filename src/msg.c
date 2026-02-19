@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "aept/aept.h"
@@ -62,6 +63,35 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
         fprintf(out, " (%s:%d)", file, line);
 
     fputc('\n', out);
+}
+
+int confirm_continue(void)
+{
+    struct termios old_tio, new_tio;
+    int ch;
+
+    if (cfg->assume_yes)
+        return 1;
+
+    printf("Do you want to continue? [Y/n] ");
+    fflush(stdout);
+
+    tcgetattr(STDIN_FILENO, &old_tio);
+    new_tio = old_tio;
+    new_tio.c_lflag &= ~(ICANON | ECHO);
+    new_tio.c_cc[VMIN] = 1;
+    new_tio.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
+
+    ch = getchar();
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+    putchar('\n');
+
+    if (ch == 'n' || ch == 'N')
+        return 0;
+
+    return 1;
 }
 
 void print_heading(const char *fmt, ...)

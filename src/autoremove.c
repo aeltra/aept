@@ -142,6 +142,11 @@ int aept_autoremove(void)
     print_names(candidates, ncandidates);
     print_heading("0 to install, 0 to upgrade, %d to remove.", ncandidates);
 
+    if (!confirm_continue()) {
+        r = 0;
+        goto out_needed;
+    }
+
     if (cfg->noaction) {
         log_info("dry run, not removing");
         r = 0;
