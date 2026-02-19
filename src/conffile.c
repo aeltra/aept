@@ -202,14 +202,9 @@ static int conffile_prompt(const char *cf_path,
         return 0;
 
     if (!isatty(STDIN_FILENO)) {
-        char *backup = NULL;
-
         log_warning("'%s' has been modified; "
                     "keeping old version (non-interactive)", cf_path);
-        xasprintf(&backup, "%s.aept-new", disk_path);
-        file_copy(new_path, backup);
-        free(backup);
-        return 0;
+        return -1;
     }
 
     struct termios old_tio, new_tio;
@@ -314,12 +309,13 @@ int conffile_resolve_upgrade(const char *name,
             install_new = conffile_prompt(cf_path, disk_path, new_path);
         }
 
-        if (install_new && new_md5) {
+        if (install_new > 0 && new_md5) {
             if (rename(new_path, disk_path) < 0)
                 log_warning("failed to install new conffile '%s'", cf_path);
-        } else {
+        } else if (install_new == 0) {
             unlink(new_path);
         }
+        /* install_new < 0: leave .aept-new for admin review */
 
         /* Record the resulting MD5 for saving */
         {
