@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <solv/chksum.h>
@@ -211,8 +212,16 @@ static int conffile_prompt(const char *cf_path,
         return 0;
     }
 
+    struct termios old_tio, new_tio;
+
+    tcgetattr(STDIN_FILENO, &old_tio);
+    new_tio = old_tio;
+    new_tio.c_lflag &= ~(ICANON | ECHO);
+    new_tio.c_cc[VMIN] = 1;
+    new_tio.c_cc[VTIME] = 0;
+
     for (;;) {
-        char answer[32];
+        int ch;
 
         printf("\nConfiguration file '%s'\n", cf_path);
         printf(" ==> Modified (by you or by a script) since installation.\n");
@@ -226,26 +235,30 @@ static int conffile_prompt(const char *cf_path,
         printf("*** %s (Y/I/N/O/D/Z) [default=N] ? ", cf_path);
         fflush(stdout);
 
-        if (!fgets(answer, sizeof(answer), stdin))
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
+        ch = getchar();
+        tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+
+        if (ch == EOF || ch == '\n' || ch == 'n' || ch == 'N' ||
+            ch == 'o' || ch == 'O') {
+            putchar('\n');
             return 0;
+        }
 
-        answer[strcspn(answer, "\n")] = '\0';
-
-        if (answer[0] == '\0' || answer[0] == 'n' || answer[0] == 'N' ||
-            answer[0] == 'o' || answer[0] == 'O')
-            return 0;
-
-        if (answer[0] == 'y' || answer[0] == 'Y' ||
-            answer[0] == 'i' || answer[0] == 'I')
+        if (ch == 'y' || ch == 'Y' || ch == 'i' || ch == 'I') {
+            putchar('\n');
             return 1;
+        }
 
-        if (answer[0] == 'd' || answer[0] == 'D') {
+        if (ch == 'd' || ch == 'D') {
+            putchar('\n');
             const char *argv[] = {"diff", "-u", disk_path, new_path, NULL};
             xsystem(argv);
             continue;
         }
 
-        if (answer[0] == 'z' || answer[0] == 'Z') {
+        if (ch == 'z' || ch == 'Z') {
+            putchar('\n');
             const char *shell = getenv("SHELL");
             if (!shell)
                 shell = "/bin/sh";
