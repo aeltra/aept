@@ -157,10 +157,11 @@ static int display_transaction(Transaction *trans, Pool *pool,
                     type == SOLVER_TRANSACTION_DOWNGRADE) {
                 upgrade_names[n_upgrade++] = name;
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
-                install_names[n_install++] = name;
                 if (!user_names ||
                         !is_user_named(name, user_names, user_count))
                     extra_names[n_extra++] = name;
+                else
+                    install_names[n_install++] = name;
             } else if (type == SOLVER_TRANSACTION_UPGRADED ||
                     type == SOLVER_TRANSACTION_DOWNGRADED) {
                 /* old version being replaced — skip */
@@ -218,10 +219,10 @@ static int display_transaction(Transaction *trans, Pool *pool,
     if (n_reinstall > 0)
         print_heading("%d to install, %d to upgrade, "
                       "%d to remove, %d to reinstall.",
-                      n_install, n_upgrade, n_erase, n_reinstall);
+                      n_install + n_extra, n_upgrade, n_erase, n_reinstall);
     else
         print_heading("%d to install, %d to upgrade, %d to remove.",
-                      n_install, n_upgrade, n_erase);
+                      n_install + n_extra, n_upgrade, n_erase);
 
     if (n_erase > 0 && !confirm_continue())
         return -1;
