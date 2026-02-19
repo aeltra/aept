@@ -27,4 +27,8 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
 #define log_debug(fmt, ...) \
     aept_log(AEPT_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
+void print_heading(const char *fmt, ...)
+    __attribute__((format(printf, 1, 2)));
+void print_names(const char **list, int count);
+
 #endif

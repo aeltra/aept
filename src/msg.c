@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "aept/aept.h"
@@ -60,4 +62,60 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
         fprintf(out, " (%s:%d)", file, line);
 
     fputc('\n', out);
+}
+
+void print_heading(const char *fmt, ...)
+{
+    va_list ap;
+
+    if (use_color)
+        printf("\033[1m");
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+
+    if (use_color)
+        printf("\033[0m");
+
+    putchar('\n');
+}
+
+static int terminal_width(void)
+{
+    struct winsize ws;
+
+    if (isatty(STDOUT_FILENO) && ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0
+            && ws.ws_col > 0)
+        return ws.ws_col;
+
+    return 80;
+}
+
+#define INDENT 2
+
+void print_names(const char **list, int count)
+{
+    int i, col, width, len;
+
+    width = terminal_width();
+    col = INDENT;
+    printf("%*s", INDENT, "");
+
+    for (i = 0; i < count; i++) {
+        len = strlen(list[i]);
+
+        if (i > 0 && col + 1 + len > width) {
+            printf("\n%*s", INDENT, "");
+            col = INDENT;
+        } else if (i > 0) {
+            putchar(' ');
+            col++;
+        }
+
+        printf("%s", list[i]);
+        col += len;
+    }
+
+    putchar('\n');
 }

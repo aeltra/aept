@@ -197,8 +197,8 @@ int aept_remove(const char **names, int count)
     }
 
     int n_erase = 0;
+    const char **erase_names = xmalloc(trans->steps.count * sizeof(char *));
 
-    printf("Actions:\n");
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
@@ -209,14 +209,17 @@ int aept_remove(const char **names, int count)
             continue;
 
         Solvable *s = pool_id2solvable(pool, p);
-        const char *pkg_name = pool_id2str(pool, s->name);
-        const char *evr = pool_id2str(pool, s->evr);
-
-        printf("  remove %s (%s)\n", pkg_name, evr);
-        n_erase++;
+        erase_names[n_erase++] = pool_id2str(pool, s->name);
     }
 
-    printf("Summary:\n  0 to install, 0 to upgrade, %d to remove\n", n_erase);
+    if (n_erase > 0) {
+        print_heading("The following packages will be REMOVED:");
+        print_names(erase_names, n_erase);
+    }
+
+    free(erase_names);
+
+    print_heading("0 to install, 0 to upgrade, %d to remove.", n_erase);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");

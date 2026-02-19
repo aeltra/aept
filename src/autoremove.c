@@ -138,11 +138,9 @@ int aept_autoremove(void)
         goto out_needed;
     }
 
-    printf("Actions:\n");
-    for (i = 0; i < ncandidates; i++)
-        printf("  remove %s (%s)\n", candidates[i], candidates_evr[i]);
-
-    printf("Summary:\n  0 to install, 0 to upgrade, %d to remove\n", ncandidates);
+    print_heading("The following packages will be REMOVED:");
+    print_names(candidates, ncandidates);
+    print_heading("0 to install, 0 to upgrade, %d to remove.", ncandidates);
 
     if (cfg->noaction) {
         log_info("dry run, not removing");

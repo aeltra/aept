@@ -114,13 +114,19 @@ static int display_transaction(Transaction *trans, Pool *pool,
     int n_upgrade = 0;
     int n_erase = 0;
     int n_reinstall = 0;
+    int total;
 
     if ((!trans || trans->steps.count == 0) && name_count == 0) {
         log_info("nothing to do");
         return 1;
     }
 
-    printf("Actions:\n");
+    total = (trans ? trans->steps.count : 0) + name_count;
+    const char **install_names = xmalloc(total * sizeof(char *));
+    const char **upgrade_names = xmalloc(total * sizeof(char *));
+    const char **erase_names = xmalloc(total * sizeof(char *));
+    const char **reinstall_names = xmalloc(total * sizeof(char *));
+
     if (trans) {
         for (i = 0; i < trans->steps.count; i++) {
             Id p = trans->steps.elements[i];
@@ -130,21 +136,17 @@ static int display_transaction(Transaction *trans, Pool *pool,
 
             Solvable *s = pool_id2solvable(pool, p);
             const char *name = pool_id2str(pool, s->name);
-            const char *evr = pool_id2str(pool, s->evr);
 
             if (type == SOLVER_TRANSACTION_UPGRADE ||
                     type == SOLVER_TRANSACTION_DOWNGRADE) {
-                printf("  upgrade %s (%s)\n", name, evr);
-                n_upgrade++;
+                upgrade_names[n_upgrade++] = name;
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
-                printf("  install %s (%s)\n", name, evr);
-                n_install++;
+                install_names[n_install++] = name;
             } else if (type == SOLVER_TRANSACTION_UPGRADED ||
                     type == SOLVER_TRANSACTION_DOWNGRADED) {
-                /* old version being replaced — skip display */
+                /* old version being replaced — skip */
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-                printf("  remove  %s (%s)\n", name, evr);
-                n_erase++;
+                erase_names[n_erase++] = name;
             }
         }
     }
@@ -164,17 +166,38 @@ static int display_transaction(Transaction *trans, Pool *pool,
         if (!ver)
             continue;
 
-        printf("  reinstall %s (%s)\n", pkg_name, ver);
-        n_reinstall++;
+        reinstall_names[n_reinstall++] = pkg_name;
     }
 
+    if (n_install > 0) {
+        print_heading("The following NEW packages will be installed:");
+        print_names(install_names, n_install);
+    }
+    if (n_upgrade > 0) {
+        print_heading("The following packages will be UPGRADED:");
+        print_names(upgrade_names, n_upgrade);
+    }
+    if (n_reinstall > 0) {
+        print_heading("The following packages will be REINSTALLED:");
+        print_names(reinstall_names, n_reinstall);
+    }
+    if (n_erase > 0) {
+        print_heading("The following packages will be REMOVED:");
+        print_names(erase_names, n_erase);
+    }
+
+    free(install_names);
+    free(upgrade_names);
+    free(erase_names);
+    free(reinstall_names);
+
     if (n_reinstall > 0)
-        printf("Summary:\n  %d to install, %d to upgrade, "
-               "%d to remove, %d to reinstall\n",
-               n_install, n_upgrade, n_erase, n_reinstall);
+        print_heading("%d to install, %d to upgrade, "
+                      "%d to remove, %d to reinstall.",
+                      n_install, n_upgrade, n_erase, n_reinstall);
     else
-        printf("Summary:\n  %d to install, %d to upgrade, %d to remove\n",
-               n_install, n_upgrade, n_erase);
+        print_heading("%d to install, %d to upgrade, %d to remove.",
+                      n_install, n_upgrade, n_erase);
 
     return 0;
 }
