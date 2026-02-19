@@ -37,9 +37,13 @@ int ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,
 /* Write file paths from the archive to a stream. */
 int ar_extract_paths_to_stream(struct aept_ar *ar, FILE *stream);
 
-/* Extract all files to a directory. */
+/* Extract all files to a directory.
+ * If conffiles is non-NULL, entries whose paths match the set are
+ * extracted with cf_suffix appended to the destination pathname
+ * (e.g. ".aept-new") instead of overwriting the original. */
 int ar_extract_all(struct aept_ar *ar, const char *prefix,
-                   unsigned long *size);
+                   unsigned long *size, aept_fileset_t *conffiles,
+                   const char *cf_suffix);
 
 /* Extract only files whose paths are in the given set.
  * Clears NO_OVERWRITE so that existing files are replaced. */

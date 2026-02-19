@@ -259,8 +259,7 @@ static int conffile_prompt(const char *cf_path,
 
 int conffile_resolve_upgrade(const char *name,
                              const aept_conffile_set_t *old_conffiles,
-                             const aept_conffile_set_t *new_conffiles,
-                             const char *new_tmpdir)
+                             const aept_conffile_set_t *new_conffiles)
 {
     aept_conffile_set_t result;
 
@@ -275,7 +274,7 @@ int conffile_resolve_upgrade(const char *name,
         char *new_md5;
         int install_new = 0;
 
-        xasprintf(&new_path, "%s%s", new_tmpdir, cf_path);
+        xasprintf(&new_path, "%s.aept-new", disk_path);
 
         old_md5 = old_conffiles ?
             conffile_set_lookup(old_conffiles, cf_path) : NULL;
@@ -303,8 +302,10 @@ int conffile_resolve_upgrade(const char *name,
         }
 
         if (install_new && new_md5) {
-            if (file_copy(new_path, disk_path) < 0)
+            if (rename(new_path, disk_path) < 0)
                 log_warning("failed to install new conffile '%s'", cf_path);
+        } else {
+            unlink(new_path);
         }
 
         /* Record the resulting MD5 for saving */

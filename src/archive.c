@@ -416,18 +416,32 @@ err_cleanup:
 }
 
 static int extract_all(struct archive *a, const char *dest, int flags,
-                       unsigned long *size)
+                       unsigned long *size, aept_fileset_t *conffiles,
+                       const char *cf_suffix)
 {
     struct archive *disk;
+    struct archive *cf_disk = NULL;
     struct archive_entry *entry;
     int r;
     int eof;
+    int cf_flags;
 
     disk = open_disk(flags);
     if (!disk)
         return -1;
 
+    if (conffiles && conffiles->count > 0) {
+        cf_flags = flags & ~ARCHIVE_EXTRACT_NO_OVERWRITE;
+        cf_disk = open_disk(cf_flags);
+        if (!cf_disk) {
+            archive_write_free(disk);
+            return -1;
+        }
+    }
+
     while (1) {
+        int is_conffile = 0;
+
         entry = read_header(a, &eof);
         if (eof)
             break;
@@ -435,6 +449,10 @@ static int extract_all(struct archive *a, const char *dest, int flags,
             r = -1;
             goto err_cleanup;
         }
+
+        if (conffiles && conffiles->count > 0)
+            is_conffile = fileset_contains(conffiles,
+                                           archive_entry_pathname(entry));
 
         r = transform_all_paths(entry, dest);
         if (r == 1)
@@ -444,10 +462,19 @@ static int extract_all(struct archive *a, const char *dest, int flags,
             goto err_cleanup;
         }
 
+        if (is_conffile && cf_suffix) {
+            const char *pathname = archive_entry_pathname(entry);
+            char *suffixed = NULL;
+            xasprintf(&suffixed, "%s%s", pathname, cf_suffix);
+            archive_entry_set_pathname(entry, suffixed);
+            free(suffixed);
+        }
+
         log_debug("extracting '%s'",
                  archive_entry_pathname(entry));
 
-        r = archive_read_extract2(a, entry, disk);
+        r = archive_read_extract2(a, entry,
+                                  is_conffile ? cf_disk : disk);
         switch (r) {
         case ARCHIVE_OK:
             break;
@@ -470,6 +497,8 @@ static int extract_all(struct archive *a, const char *dest, int flags,
 
     r = ARCHIVE_OK;
 err_cleanup:
+    if (cf_disk)
+        archive_write_free(cf_disk);
     archive_write_free(disk);
     return (r == ARCHIVE_OK) ? 0 : -1;
 }
@@ -906,9 +935,11 @@ int ar_list_data_paths(const char *ipk_path, ar_file_list_t *out)
     return 0;
 }
 
-int ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size)
+int ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size,
+                   aept_fileset_t *conffiles, const char *cf_suffix)
 {
-    return extract_all(ar->ar, prefix, ar->extract_flags, size);
+    return extract_all(ar->ar, prefix, ar->extract_flags, size,
+                       conffiles, cf_suffix);
 }
 
 int ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,

@@ -555,7 +555,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
         goto cleanup;
     }
 
-    r = ar_extract_all(ctrl_ar, tmpdir, NULL);
+    r = ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL);
     ar_close(ctrl_ar);
     ctrl_ar = NULL;
 
@@ -586,7 +586,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     }
 
     char *extract_root = config_root_path("/");
-    r = ar_extract_all(data_ar, extract_root, NULL);
+    r = ar_extract_all(data_ar, extract_root, NULL, NULL, NULL);
     free(extract_root);
     ar_close(data_ar);
     data_ar = NULL;
@@ -748,7 +748,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         goto cleanup;
     }
 
-    r = ar_extract_all(ctrl_ar, tmpdir, NULL);
+    r = ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL);
     ar_close(ctrl_ar);
     ctrl_ar = NULL;
 
@@ -804,56 +804,52 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         goto cleanup_filesets;
     }
 
-    /* 6. Extract new data archive (overwrites shared files) */
-    data_ar = ar_open_pkg_data_archive(ipk_path);
-    if (!data_ar) {
-        log_error("failed to open data archive in '%s'", ipk_path);
-        r = -1;
-        goto cleanup_filesets;
-    }
-
-    char *extract_root = config_root_path("/");
-    r = ar_extract_all(data_ar, extract_root, NULL);
-    free(extract_root);
-    ar_close(data_ar);
-    data_ar = NULL;
-
-    if (r < 0) {
-        log_error("failed to extract data archive");
-        goto cleanup_filesets;
-    }
-
-    /* 5b. Handle conffile conflicts */
+    /* 5b. Prepare conffile set before extraction */
     {
         aept_conffile_set_t new_cf;
 
         conffile_set_init(&old_cf);
         conffile_set_init(&new_cf);
-        conffile_load(name, &old_cf);
+        if (!cfg->reinstall)
+            conffile_load(name, &old_cf);
         have_old_cf = 1;
         conffile_parse_list(tmpdir, &new_cf);
 
-        if (new_cf.count > 0) {
-            char *cf_tmpdir = NULL;
-            xasprintf(&cf_tmpdir, "%s/conffiles-new", tmpdir);
-            mkdir(cf_tmpdir, 0700);
+        /* Build fileset for conffile-aware extraction */
+        aept_fileset_t cf_paths;
+        fileset_init(&cf_paths);
+        for (int ci = 0; ci < new_cf.count; ci++)
+            fileset_add(&cf_paths, new_cf.entries[ci].path);
+        fileset_sort(&cf_paths);
 
-            aept_fileset_t cf_paths;
-            fileset_init(&cf_paths);
-            for (int ci = 0; ci < new_cf.count; ci++)
-                fileset_add(&cf_paths, new_cf.entries[ci].path);
-            fileset_sort(&cf_paths);
-
-            struct aept_ar *cf_ar = ar_open_pkg_data_archive(ipk_path);
-            if (cf_ar) {
-                ar_extract_selected(cf_ar, &cf_paths, cf_tmpdir);
-                ar_close(cf_ar);
-            }
+        /* 6. Extract new data archive — conffiles get .aept-new suffix */
+        data_ar = ar_open_pkg_data_archive(ipk_path);
+        if (!data_ar) {
+            log_error("failed to open data archive in '%s'", ipk_path);
             fileset_free(&cf_paths);
-
-            conffile_resolve_upgrade(name, &old_cf, &new_cf, cf_tmpdir);
-            free(cf_tmpdir);
+            conffile_set_free(&new_cf);
+            r = -1;
+            goto cleanup_filesets;
         }
+
+        char *extract_root = config_root_path("/");
+        r = ar_extract_all(data_ar, extract_root, NULL,
+                           cf_paths.count > 0 ? &cf_paths : NULL,
+                           ".aept-new");
+        free(extract_root);
+        ar_close(data_ar);
+        data_ar = NULL;
+        fileset_free(&cf_paths);
+
+        if (r < 0) {
+            log_error("failed to extract data archive");
+            conffile_set_free(&new_cf);
+            goto cleanup_filesets;
+        }
+
+        /* Resolve conffile conflicts */
+        if (new_cf.count > 0)
+            conffile_resolve_upgrade(name, &old_cf, &new_cf);
 
         conffile_set_free(&new_cf);
     }
@@ -987,6 +983,40 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         free(src);
     }
 
+    /* Record file list (remove_info_files deleted the earlier copy) */
+    data_ar = ar_open_pkg_data_archive(ipk_path);
+    if (data_ar) {
+        FILE *list_fp = fopen(list_path, "w");
+        if (list_fp) {
+            ar_extract_paths_to_stream(data_ar, list_fp);
+            if (ferror(list_fp) || fclose(list_fp) != 0)
+                log_warning("failed to write file list '%s'", list_path);
+        }
+        ar_close(data_ar);
+        data_ar = NULL;
+    }
+
+    /* Save conffile metadata */
+    {
+        aept_conffile_set_t save_cf;
+        conffile_set_init(&save_cf);
+
+        if (conffile_parse_list(tmpdir, &save_cf) == 0 && save_cf.count > 0) {
+            for (int ci = 0; ci < save_cf.count; ci++) {
+                char *cf_path = config_root_path(save_cf.entries[ci].path);
+                char *md5 = conffile_md5(cf_path);
+                free(cf_path);
+                if (md5) {
+                    free(save_cf.entries[ci].md5);
+                    save_cf.entries[ci].md5 = md5;
+                }
+            }
+            conffile_save(name, &save_cf);
+        }
+
+        conffile_set_free(&save_cf);
+    }
+
     /* 9. Run new-postinst */
     const char *state = "installed";
 
@@ -1057,7 +1087,7 @@ static int do_reinstall(const char **names, int count,
         if (r < 0)
             return r;
 
-        r = do_install_package(ipk_path, pool, avail, old_ver);
+        r = do_upgrade_package(ipk_path, pool, avail, old_ver, old_ver, NULL);
         if (cfg->no_cache)
             unlink(ipk_path);
         free(ipk_path);

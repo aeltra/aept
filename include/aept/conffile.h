@@ -40,13 +40,13 @@ int conffile_load(const char *name, aept_conffile_set_t *cs);
  * Returns 0 on success, -1 on error. */
 int conffile_save(const char *name, const aept_conffile_set_t *cs);
 
-/* Handle conffile conflicts during upgrade. Compares old metadata with
- * new conffiles extracted to new_tmpdir and the on-disk versions.
- * Applies decisions (copy new / keep old / prompt) and saves metadata.
+/* Handle conffile conflicts during upgrade. For each new conffile,
+ * compares the on-disk version against the ".aept-new" version placed
+ * next to it during extraction and the saved old metadata.
+ * Applies decisions (rename new / keep old / prompt) and saves metadata.
  * Returns 0 on success, -1 on error. */
 int conffile_resolve_upgrade(const char *name,
                              const aept_conffile_set_t *old_conffiles,
-                             const aept_conffile_set_t *new_conffiles,
-                             const char *new_tmpdir);
+                             const aept_conffile_set_t *new_conffiles);
 
 #endif
