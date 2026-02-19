@@ -70,6 +70,13 @@ static int load_config(void)
     }
 
     config_apply_offline_root();
+
+    if (!cfg->offline_root && !file_exists("/etc/aeltra_version")) {
+        log_error("not running on Aeltra OS; use -o to set an offline root");
+        config_free();
+        return -1;
+    }
+
     return 0;
 }
 
