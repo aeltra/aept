@@ -106,23 +106,39 @@ static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
     return 0;
 }
 
+static int is_user_named(const char *name,
+                         const char **user_names, int user_count)
+{
+    int i;
+
+    for (i = 0; i < user_count; i++) {
+        if (strcmp(name, user_names[i]) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
 static int display_transaction(Transaction *trans, Pool *pool,
-                               const char **names, int name_count)
+                               const char **user_names, int user_count,
+                               const char **ri_names, int ri_count)
 {
     int i;
     int n_install = 0;
+    int n_extra = 0;
     int n_upgrade = 0;
     int n_erase = 0;
     int n_reinstall = 0;
     int total;
 
-    if ((!trans || trans->steps.count == 0) && name_count == 0) {
+    if ((!trans || trans->steps.count == 0) && ri_count == 0) {
         log_info("nothing to do");
         return 1;
     }
 
-    total = (trans ? trans->steps.count : 0) + name_count;
+    total = (trans ? trans->steps.count : 0) + ri_count;
     const char **install_names = xmalloc(total * sizeof(char *));
+    const char **extra_names = xmalloc(total * sizeof(char *));
     const char **upgrade_names = xmalloc(total * sizeof(char *));
     const char **erase_names = xmalloc(total * sizeof(char *));
     const char **reinstall_names = xmalloc(total * sizeof(char *));
@@ -142,6 +158,9 @@ static int display_transaction(Transaction *trans, Pool *pool,
                 upgrade_names[n_upgrade++] = name;
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
                 install_names[n_install++] = name;
+                if (!user_names ||
+                        !is_user_named(name, user_names, user_count))
+                    extra_names[n_extra++] = name;
             } else if (type == SOLVER_TRANSACTION_UPGRADED ||
                     type == SOLVER_TRANSACTION_DOWNGRADED) {
                 /* old version being replaced — skip */
@@ -151,8 +170,8 @@ static int display_transaction(Transaction *trans, Pool *pool,
         }
     }
 
-    for (i = 0; i < name_count; i++) {
-        Id avail = solver_find_available(names[i]);
+    for (i = 0; i < ri_count; i++) {
+        Id avail = solver_find_available(ri_names[i]);
         if (!avail)
             continue;
 
@@ -169,6 +188,10 @@ static int display_transaction(Transaction *trans, Pool *pool,
         reinstall_names[n_reinstall++] = pkg_name;
     }
 
+    if (n_extra > 0) {
+        print_heading("The following extra packages will be installed:");
+        print_names(extra_names, n_extra);
+    }
     if (n_install > 0) {
         print_heading("The following NEW packages will be installed:");
         print_names(install_names, n_install);
@@ -187,6 +210,7 @@ static int display_transaction(Transaction *trans, Pool *pool,
     }
 
     free(install_names);
+    free(extra_names);
     free(upgrade_names);
     free(erase_names);
     free(reinstall_names);
@@ -1147,7 +1171,7 @@ int aept_install(const char **names, int count)
         }
     }
 
-    if (display_transaction(trans, pool,
+    if (display_transaction(trans, pool, names, count,
                            cfg->reinstall ? names : NULL,
                            cfg->reinstall ? count : 0)) {
         r = 0;
