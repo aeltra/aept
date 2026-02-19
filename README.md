@@ -62,6 +62,10 @@ conflicts with or replaces an installed package.
 > Dry run. Show which packages would be installed or removed, but do not
 > actually perform any changes.
 
+**-y**, **--yes**
+
+> Assume yes to all prompts and run non-interactively.
+
 **--allow-downgrade**
 
 > Allow the solver to downgrade installed packages.
@@ -103,6 +107,10 @@ also be removed unless **--force-depends** is given.
 > Dry run. Show which packages would be removed, but do not actually
 > perform any changes.
 
+**-y**, **--yes**
+
+> Assume yes to all prompts and run non-interactively.
+
 **--purge**
 
 > Also remove conffiles that have been modified since installation.
@@ -122,6 +130,10 @@ and no manually installed package depends on it.
 
 > Dry run. Show which packages would be removed, but do not actually
 > perform any changes.
+
+**-y**, **--yes**
+
+> Assume yes to all prompts and run non-interactively.
 
 **--purge**
 
@@ -144,6 +156,10 @@ that have been pinned (see **pin**) are held back and not upgraded.
 
 > Dry run. Show which packages would be installed or removed, but do not
 > actually perform any changes.
+
+**-y**, **--yes**
+
+> Assume yes to all prompts and run non-interactively.
 
 **--allow-downgrade**
 
@@ -306,10 +322,10 @@ The following keys are recognized:
 When an offline root is set (via **--offline-root** or the
 **offline_root** config option), the configuration file is read from
 *\<dir\>/etc/aept/aept.conf* (unless **--conf** is given explicitly) and
-all state directories (lists, cache, info, status, lock) are
-automatically prefixed with the offline root path. The signature trust
-directory (*usign_keydir*) is **not** prefixed — signature verification
-always uses the host's trusted keys.
+all state directories (lists, cache, info, status, lock, auto-installed,
+pinned-packages) are automatically prefixed with the offline root path.
+The signature trust directory (*usign_keydir*) is **not** prefixed —
+signature verification always uses the host's trusted keys.
 
 Maintainer scripts are executed inside the offline root using
 **unshare**(2) with **CLONE_NEWUSER** to set up a user namespace. UID

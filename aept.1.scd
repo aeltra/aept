@@ -55,6 +55,9 @@ installed package.
 	Dry run. Show which packages would be installed or removed, but do not
 	actually perform any changes.
 
+*-y*, *--yes*
+	Assume yes to all prompts and run non-interactively.
+
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
 
@@ -87,6 +90,9 @@ be removed unless *--force-depends* is given.
 	Dry run. Show which packages would be removed, but do not actually
 	perform any changes.
 
+*-y*, *--yes*
+	Assume yes to all prompts and run non-interactively.
+
 *--purge*
 	Also remove conffiles that have been modified since installation. Without
 	this option, modified conffiles are preserved on disk.
@@ -103,6 +109,9 @@ manually installed package depends on it.
 *-n*, *--noaction*
 	Dry run. Show which packages would be removed, but do not actually
 	perform any changes.
+
+*-y*, *--yes*
+	Assume yes to all prompts and run non-interactively.
 
 *--purge*
 	Also remove conffiles that have been modified since installation.
@@ -121,6 +130,9 @@ that have been pinned (see *pin*) are held back and not upgraded.
 *-n*, *--noaction*
 	Dry run. Show which packages would be installed or removed, but do not
 	actually perform any changes.
+
+*-y*, *--yes*
+	Assume yes to all prompts and run non-interactively.
 
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
@@ -301,7 +313,8 @@ option check_signature 1
 When an offline root is set (via *--offline-root* or the *offline_root* config
 option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 (unless *--conf* is given explicitly) and all state directories (lists, cache,
-info, status, lock) are automatically prefixed with the offline root path.
+info, status, lock, auto-installed, pinned-packages) are automatically
+prefixed with the offline root path.
 The signature trust directory (_usign_keydir_) is *not* prefixed — signature
 verification always uses the host's trusted keys.
 
