@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -124,10 +125,16 @@ static int terminal_width(void)
 
 #define INDENT 2
 
+static int cmp_str(const void *a, const void *b)
+{
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
 void print_names(const char **list, int count)
 {
     int i, col, width, len;
 
+    qsort(list, count, sizeof(char *), cmp_str);
     width = terminal_width();
     col = INDENT;
     printf("%*s", INDENT, "");
