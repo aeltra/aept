@@ -189,7 +189,7 @@ static int display_transaction(Transaction *trans, Pool *pool,
     }
 
     if (n_extra > 0) {
-        print_heading("The following extra packages will be installed:");
+        print_heading("The following EXTRA packages will be installed:");
         print_names(extra_names, n_extra);
     }
     if (n_install > 0) {
