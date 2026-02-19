@@ -810,8 +810,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
 
         conffile_set_init(&old_cf);
         conffile_set_init(&new_cf);
-        if (!cfg->reinstall)
-            conffile_load(name, &old_cf);
+        conffile_load(name, &old_cf);
         have_old_cf = 1;
         conffile_parse_list(tmpdir, &new_cf);
 
