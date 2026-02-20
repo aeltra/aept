@@ -683,7 +683,7 @@ static struct archive *extract_outer(const char *filename, const char *arname)
 
     inner = open_inner(outer);
     if (!inner)
-        return NULL;
+        goto err_cleanup;
 
     return inner;
 

@@ -86,6 +86,10 @@ int aept_owns(const char *path)
             const char *entry;
             char *tab;
 
+            if (fgets_is_truncated(buf, sizeof(buf))) {
+                fgets_drain_line(fp);
+                continue;
+            }
             buf[strcspn(buf, "\n")] = '\0';
 
             tab = strchr(buf, '\t');
@@ -141,6 +145,10 @@ int aept_files(const char *name)
     while (fgets(buf, sizeof(buf), fp)) {
         char *tab;
 
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         buf[strcspn(buf, "\n")] = '\0';
 
         tab = strchr(buf, '\t');

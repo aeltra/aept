@@ -111,6 +111,10 @@ int conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         buf[strcspn(buf, "\n")] = '\0';
         if (buf[0] == '\0')
             continue;
@@ -141,6 +145,10 @@ int conffile_load(const char *name, aept_conffile_set_t *cs)
     while (fgets(buf, sizeof(buf), fp)) {
         char *sep;
 
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
         buf[strcspn(buf, "\n")] = '\0';
         if (buf[0] == '\0')
             continue;

@@ -368,6 +368,10 @@ static char *find_file_owner(const char *path)
             const char *entry;
             char *tab;
 
+            if (fgets_is_truncated(buf, sizeof(buf))) {
+                fgets_drain_line(fp);
+                continue;
+            }
             buf[strcspn(buf, "\n")] = '\0';
 
             tab = strchr(buf, '\t');
@@ -818,6 +822,10 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
             char lbuf[4096];
             while (fgets(lbuf, sizeof(lbuf), lfp)) {
                 char *tab;
+                if (fgets_is_truncated(lbuf, sizeof(lbuf))) {
+                    fgets_drain_line(lfp);
+                    continue;
+                }
                 lbuf[strcspn(lbuf, "\n")] = '\0';
                 tab = strchr(lbuf, '\t');
                 if (tab)
@@ -903,6 +911,10 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
             char lbuf[4096];
             while (fgets(lbuf, sizeof(lbuf), lfp)) {
                 char *tab;
+                if (fgets_is_truncated(lbuf, sizeof(lbuf))) {
+                    fgets_drain_line(lfp);
+                    continue;
+                }
                 lbuf[strcspn(lbuf, "\n")] = '\0';
                 tab = strchr(lbuf, '\t');
                 if (tab)
@@ -1326,6 +1338,10 @@ int aept_install(const char **names, int count)
                 if (lfp) {
                     while (fgets(lbuf, sizeof(lbuf), lfp)) {
                         char *tab;
+                        if (fgets_is_truncated(lbuf, sizeof(lbuf))) {
+                            fgets_drain_line(lfp);
+                            continue;
+                        }
                         lbuf[strcspn(lbuf, "\n")] = '\0';
                         tab = strchr(lbuf, '\t');
                         if (tab)

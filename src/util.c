@@ -28,7 +28,8 @@
 
 void *xmalloc(size_t size)
 {
-    void *p = malloc(size);
+    /* malloc(0) may return NULL on some libc implementations */
+    void *p = malloc(size ? size : 1);
     if (!p) {
         fprintf(stderr, "aept: out of memory\n");
         exit(EXIT_FAILURE);
@@ -319,8 +320,8 @@ static int unshare_and_map_user(void)
     free(content);
     content = NULL;
 
-    if (ret == -1) {
-        log_error("failed to write uid_map");
+    if (ret < 0) {
+        log_error("failed to write uid_map: %s", strerror(errno));
         goto error;
     }
 
@@ -338,7 +339,7 @@ static int unshare_and_map_user(void)
     ret = write(fd, "deny", 4);
     close(fd);
 
-    if (ret == -1) {
+    if (ret != 4) {
         log_error("failed to disable setgroups");
         goto error;
     }
@@ -360,8 +361,8 @@ static int unshare_and_map_user(void)
     free(content);
     content = NULL;
 
-    if (ret == -1) {
-        log_error("failed to write gid_map");
+    if (ret < 0) {
+        log_error("failed to write gid_map: %s", strerror(errno));
         goto error;
     }
 

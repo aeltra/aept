@@ -50,6 +50,11 @@ int remove_files(const char *name, aept_fileset_t *protected)
         char *path;
         char *tab;
 
+        if (fgets_is_truncated(buf, sizeof(buf))) {
+            fgets_drain_line(fp);
+            continue;
+        }
+
         /* Format: path\tmode[\tsymlink_target]\n */
         buf[strcspn(buf, "\n")] = '\0';
 
