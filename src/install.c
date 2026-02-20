@@ -708,7 +708,7 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     free(ctrl_path);
     ctrl_path = NULL;
 
-    log_info("installed %s", name);
+    log_debug("installed %s", name);
     r = 0;
 
 cleanup:
@@ -752,6 +752,8 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     char *list_path = NULL;
     aept_conffile_set_t old_cf;
     int have_old_cf = 0;
+    int is_reinstall = old_version && new_version &&
+                       strcmp(old_version, new_version) == 0;
     int r = -1;
 
     if (!pkg_name_is_safe(name)) {
@@ -759,7 +761,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
         return -1;
     }
 
-    log_info("upgrading %s", name);
+    log_info("%s %s", is_reinstall ? "reinstalling" : "upgrading", name);
 
     xasprintf(&tmpdir, "%s/aept-XXXXXX", cfg->tmp_dir);
 
@@ -1042,7 +1044,7 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     free(ctrl_path);
     ctrl_path = NULL;
 
-    log_info("upgraded %s", name);
+    log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
     r = 0;
     goto cleanup;
 

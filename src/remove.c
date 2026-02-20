@@ -164,7 +164,7 @@ int aept_do_remove(const char *name, const char *new_version,
     status_unmark_auto(name);
     pin_remove(name);
 
-    log_info("removed %s", name);
+    log_debug("removed %s", name);
 
     return 0;
 }

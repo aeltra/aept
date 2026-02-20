@@ -43,7 +43,7 @@ int run_script(const char *script_dir, const char *pkg_name,
         return 0;
     }
 
-    log_info("running %s for %s %s %s", script,
+    log_debug("running %s for %s %s %s", script,
              pkg_name ? pkg_name : "(none)",
              action ? action : "",
              version ? version : "");
