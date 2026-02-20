@@ -42,7 +42,7 @@ typedef struct {
     int force_confnew;
     int force_confold;
     int purge;
-    int assume_yes;
+    int non_interactive;
     int verbosity;
 } aept_config_t;
 

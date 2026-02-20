@@ -161,9 +161,9 @@ static void usage_install(FILE *out)
         "  -f, --force-depends   Ignore dependency errors\n"
         "  -d, --download-only   Only download, do not install\n"
         "  -n, --noaction        Dry run, show what would be done\n"
-        "  -y, --yes             Assume yes, do not prompt\n"
         "  -h, --help            Show this help\n"
         "\n"
+        "  --non-interactive     Do not prompt; implies --force-confold\n"
         "  --allow-downgrade     Allow package downgrades\n"
         "  --reinstall           Reinstall already installed packages\n"
         "  --no-cache            Download, install, and delete each package\n"
@@ -182,9 +182,9 @@ static void usage_remove(FILE *out)
         "Options:\n"
         "  -f, --force-depends   Ignore dependency errors\n"
         "  -n, --noaction        Dry run, show what would be done\n"
-        "  -y, --yes             Assume yes, do not prompt\n"
         "  -h, --help            Show this help\n"
         "\n"
+        "  --non-interactive     Do not prompt\n"
         "  --purge               Also remove modified conffiles\n"
     );
 }
@@ -199,9 +199,9 @@ static void usage_autoremove(FILE *out)
         "Options:\n"
         "  -f, --force-depends   Ignore dependency errors\n"
         "  -n, --noaction        Dry run, show what would be done\n"
-        "  -y, --yes             Assume yes, do not prompt\n"
         "  -h, --help            Show this help\n"
         "\n"
+        "  --non-interactive     Do not prompt\n"
         "  --purge               Also remove modified conffiles\n"
     );
 }
@@ -217,9 +217,9 @@ static void usage_upgrade(FILE *out)
         "  -f, --force-depends   Ignore dependency errors\n"
         "  -d, --download-only   Only download, do not install\n"
         "  -n, --noaction        Dry run, show what would be done\n"
-        "  -y, --yes             Assume yes, do not prompt\n"
         "  -h, --help            Show this help\n"
         "\n"
+        "  --non-interactive     Do not prompt; implies --force-confold\n"
         "  --allow-downgrade     Allow package downgrades\n"
         "  --no-cache            Download, install, and delete each package\n"
         "  --force-confnew       Always install new conffiles without asking\n"
@@ -344,31 +344,31 @@ static struct option install_options[] = {
     {"force-depends",   no_argument, NULL, 'f'},
     {"download-only",   no_argument, NULL, 'd'},
     {"noaction",        no_argument, NULL, 'n'},
-    {"yes",             no_argument, NULL, 'y'},
     {"help",            no_argument, NULL, 'h'},
     {"allow-downgrade", no_argument, NULL, 0x100},
     {"reinstall",       no_argument, NULL, 0x101},
     {"no-cache",        no_argument, NULL, 0x102},
     {"force-confnew",   no_argument, NULL, 0x103},
     {"force-confold",   no_argument, NULL, 0x104},
+    {"non-interactive", no_argument, NULL, 0x105},
     {NULL, 0, NULL, 0}
 };
 
 static struct option autoremove_options[] = {
-    {"force-depends", no_argument, NULL, 'f'},
-    {"noaction",      no_argument, NULL, 'n'},
-    {"yes",           no_argument, NULL, 'y'},
-    {"help",          no_argument, NULL, 'h'},
-    {"purge",         no_argument, NULL, 0x100},
+    {"force-depends",   no_argument, NULL, 'f'},
+    {"noaction",        no_argument, NULL, 'n'},
+    {"help",            no_argument, NULL, 'h'},
+    {"purge",           no_argument, NULL, 0x100},
+    {"non-interactive", no_argument, NULL, 0x101},
     {NULL, 0, NULL, 0}
 };
 
 static struct option remove_options[] = {
-    {"force-depends", no_argument, NULL, 'f'},
-    {"noaction",      no_argument, NULL, 'n'},
-    {"yes",           no_argument, NULL, 'y'},
-    {"help",          no_argument, NULL, 'h'},
-    {"purge",         no_argument, NULL, 0x100},
+    {"force-depends",   no_argument, NULL, 'f'},
+    {"noaction",        no_argument, NULL, 'n'},
+    {"help",            no_argument, NULL, 'h'},
+    {"purge",           no_argument, NULL, 0x100},
+    {"non-interactive", no_argument, NULL, 0x101},
     {NULL, 0, NULL, 0}
 };
 
@@ -453,21 +453,21 @@ static int cmd_install(int argc, char *argv[])
 {
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, reinstall = 0, no_cache = 0;
-    int force_confnew = 0, force_confold = 0, assume_yes = 0;
+    int force_confnew = 0, force_confold = 0, non_interactive = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "fdnyh", install_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
         case 'f': force_depends = 1; break;
         case 'd': download_only = 1; break;
         case 'n': noaction = 1; break;
-        case 'y': assume_yes = 1; break;
         case 0x100: allow_downgrade = 1; break;
         case 0x101: reinstall = 1; break;
         case 0x102: no_cache = 1; break;
         case 0x103: force_confnew = 1; break;
         case 0x104: force_confold = 1; break;
+        case 0x105: non_interactive = 1; break;
         case 'h': usage_install(stdout); return 0;
         default:  usage_install(stderr); return 1;
         }
@@ -484,12 +484,14 @@ static int cmd_install(int argc, char *argv[])
     cfg->force_depends = force_depends;
     cfg->download_only = download_only;
     cfg->noaction = noaction;
-    cfg->assume_yes = assume_yes || !isatty(STDIN_FILENO);
+    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     cfg->allow_downgrade = allow_downgrade;
     cfg->reinstall = reinstall;
     cfg->no_cache = no_cache;
     cfg->force_confnew = force_confnew;
     cfg->force_confold = force_confold;
+    if (cfg->non_interactive && !cfg->force_confnew)
+        cfg->force_confold = 1;
 
     r = aept_install((const char **)&argv[optind], argc - optind);
     teardown_config();
@@ -498,16 +500,16 @@ static int cmd_install(int argc, char *argv[])
 
 static int cmd_autoremove(int argc, char *argv[])
 {
-    int force_depends = 0, noaction = 0, purge = 0, assume_yes = 0;
+    int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "fnyh", autoremove_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fnh", autoremove_options, NULL)) != -1) {
         switch (opt) {
         case 'f': force_depends = 1; break;
         case 'n': noaction = 1; break;
-        case 'y': assume_yes = 1; break;
         case 0x100: purge = 1; break;
+        case 0x101: non_interactive = 1; break;
         case 'h': usage_autoremove(stdout); return 0;
         default:  usage_autoremove(stderr); return 1;
         }
@@ -518,7 +520,7 @@ static int cmd_autoremove(int argc, char *argv[])
 
     cfg->force_depends = force_depends;
     cfg->noaction = noaction;
-    cfg->assume_yes = assume_yes || !isatty(STDIN_FILENO);
+    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     cfg->purge = purge;
 
     r = aept_autoremove();
@@ -528,16 +530,16 @@ static int cmd_autoremove(int argc, char *argv[])
 
 static int cmd_remove(int argc, char *argv[])
 {
-    int force_depends = 0, noaction = 0, purge = 0, assume_yes = 0;
+    int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "fnyh", remove_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fnh", remove_options, NULL)) != -1) {
         switch (opt) {
         case 'f': force_depends = 1; break;
         case 'n': noaction = 1; break;
-        case 'y': assume_yes = 1; break;
         case 0x100: purge = 1; break;
+        case 0x101: non_interactive = 1; break;
         case 'h': usage_remove(stdout); return 0;
         default:  usage_remove(stderr); return 1;
         }
@@ -553,7 +555,7 @@ static int cmd_remove(int argc, char *argv[])
 
     cfg->force_depends = force_depends;
     cfg->noaction = noaction;
-    cfg->assume_yes = assume_yes || !isatty(STDIN_FILENO);
+    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     cfg->purge = purge;
 
     r = aept_remove((const char **)&argv[optind], argc - optind);
@@ -565,21 +567,21 @@ static int cmd_upgrade(int argc, char *argv[])
 {
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, no_cache = 0;
-    int force_confnew = 0, force_confold = 0, assume_yes = 0;
+    int force_confnew = 0, force_confold = 0, non_interactive = 0;
     int opt, r;
 
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "fdnyh", install_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
         case 'f': force_depends = 1; break;
         case 'd': download_only = 1; break;
         case 'n': noaction = 1; break;
-        case 'y': assume_yes = 1; break;
         case 0x100: allow_downgrade = 1; break;
         case 0x101: break; /* --reinstall: ignored for upgrade */
         case 0x102: no_cache = 1; break;
         case 0x103: force_confnew = 1; break;
         case 0x104: force_confold = 1; break;
+        case 0x105: non_interactive = 1; break;
         case 'h': usage_upgrade(stdout); return 0;
         default:  usage_upgrade(stderr); return 1;
         }
@@ -591,11 +593,13 @@ static int cmd_upgrade(int argc, char *argv[])
     cfg->force_depends = force_depends;
     cfg->download_only = download_only;
     cfg->noaction = noaction;
-    cfg->assume_yes = assume_yes || !isatty(STDIN_FILENO);
+    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     cfg->allow_downgrade = allow_downgrade;
     cfg->no_cache = no_cache;
     cfg->force_confnew = force_confnew;
     cfg->force_confold = force_confold;
+    if (cfg->non_interactive && !cfg->force_confnew)
+        cfg->force_confold = 1;
 
     r = aept_install(NULL, 0);
     teardown_config();

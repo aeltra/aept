@@ -55,8 +55,10 @@ installed package.
 	Dry run. Show which packages would be installed or removed, but do not
 	actually perform any changes.
 
-*-y*, *--yes*
-	Assume yes to all prompts and run non-interactively.
+*--non-interactive*
+	Do not prompt. Implies *--force-confold*, which can be overridden by
+	also passing *--force-confnew*. Automatically enabled when standard
+	input is not a terminal.
 
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.
@@ -90,8 +92,9 @@ be removed unless *--force-depends* is given.
 	Dry run. Show which packages would be removed, but do not actually
 	perform any changes.
 
-*-y*, *--yes*
-	Assume yes to all prompts and run non-interactively.
+*--non-interactive*
+	Do not prompt. Automatically enabled when standard input is not a
+	terminal.
 
 *--purge*
 	Also remove conffiles that have been modified since installation. Without
@@ -110,8 +113,9 @@ manually installed package depends on it.
 	Dry run. Show which packages would be removed, but do not actually
 	perform any changes.
 
-*-y*, *--yes*
-	Assume yes to all prompts and run non-interactively.
+*--non-interactive*
+	Do not prompt. Automatically enabled when standard input is not a
+	terminal.
 
 *--purge*
 	Also remove conffiles that have been modified since installation.
@@ -131,8 +135,10 @@ that have been pinned (see *pin*) are held back and not upgraded.
 	Dry run. Show which packages would be installed or removed, but do not
 	actually perform any changes.
 
-*-y*, *--yes*
-	Assume yes to all prompts and run non-interactively.
+*--non-interactive*
+	Do not prompt. Implies *--force-confold*, which can be overridden by
+	also passing *--force-confnew*. Automatically enabled when standard
+	input is not a terminal.
 
 *--allow-downgrade*
 	Allow the solver to downgrade installed packages.

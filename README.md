@@ -62,9 +62,11 @@ conflicts with or replaces an installed package.
 > Dry run. Show which packages would be installed or removed, but do not
 > actually perform any changes.
 
-**-y**, **--yes**
+**--non-interactive**
 
-> Assume yes to all prompts and run non-interactively.
+> Do not prompt. Implies **--force-confold**, which can be overridden by
+> also passing **--force-confnew**. Automatically enabled when standard
+> input is not a terminal.
 
 **--allow-downgrade**
 
@@ -107,9 +109,10 @@ also be removed unless **--force-depends** is given.
 > Dry run. Show which packages would be removed, but do not actually
 > perform any changes.
 
-**-y**, **--yes**
+**--non-interactive**
 
-> Assume yes to all prompts and run non-interactively.
+> Do not prompt. Automatically enabled when standard input is not a
+> terminal.
 
 **--purge**
 
@@ -131,9 +134,10 @@ and no manually installed package depends on it.
 > Dry run. Show which packages would be removed, but do not actually
 > perform any changes.
 
-**-y**, **--yes**
+**--non-interactive**
 
-> Assume yes to all prompts and run non-interactively.
+> Do not prompt. Automatically enabled when standard input is not a
+> terminal.
 
 **--purge**
 
@@ -157,9 +161,11 @@ that have been pinned (see **pin**) are held back and not upgraded.
 > Dry run. Show which packages would be installed or removed, but do not
 > actually perform any changes.
 
-**-y**, **--yes**
+**--non-interactive**
 
-> Assume yes to all prompts and run non-interactively.
+> Do not prompt. Implies **--force-confold**, which can be overridden by
+> also passing **--force-confnew**. Automatically enabled when standard
+> input is not a terminal.
 
 **--allow-downgrade**
 

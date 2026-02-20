@@ -71,7 +71,7 @@ int confirm_continue(void)
     struct termios old_tio, new_tio;
     int ch;
 
-    if (cfg->assume_yes)
+    if (cfg->non_interactive)
         return 1;
 
     printf("Do you want to continue? [Y/n] ");
