@@ -301,7 +301,7 @@ static int download_package(Id p, Pool *pool, char **dest_out)
     /* Try cached copy first */
     if (access(dest, F_OK) == 0) {
         if (verify_checksum(dest, pool, s) == 0) {
-            log_info("using cached %s",
+            log_debug("using cached %s",
                      pool_id2str(pool, s->name));
             free(url);
             free(location_copy);
