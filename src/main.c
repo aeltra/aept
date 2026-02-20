@@ -153,9 +153,10 @@ static void usage_update(FILE *out)
 static void usage_install(FILE *out)
 {
     fprintf(out,
-        "Usage: aept install [options] <packages...>\n"
+        "Usage: aept install [options] <packages|paths...>\n"
         "\n"
         "Install packages and their dependencies.\n"
+        "Arguments starting with ./ or / are treated as local .ipk files.\n"
         "\n"
         "Options:\n"
         "  -f, --force-depends   Ignore dependency errors\n"
@@ -474,12 +475,37 @@ static int cmd_install(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("install requires at least one package name");
+        log_error("install requires at least one package name or .ipk path");
         return 1;
     }
 
-    if (setup_config() < 0)
+    /* Partition arguments into package names and local .ipk paths */
+    int nargs = argc - optind;
+    const char **pkg_names = xmalloc(nargs * sizeof(char *));
+    const char **local_paths = xmalloc(nargs * sizeof(char *));
+    int n_names = 0, n_locals = 0;
+
+    for (int j = optind; j < argc; j++) {
+        if (argv[j][0] == '/' ||
+                (argv[j][0] == '.' && argv[j][1] == '/')) {
+            if (access(argv[j], R_OK) < 0) {
+                log_error("cannot access '%s': %s",
+                          argv[j], strerror(errno));
+                free(pkg_names);
+                free(local_paths);
+                return 1;
+            }
+            local_paths[n_locals++] = argv[j];
+        } else {
+            pkg_names[n_names++] = argv[j];
+        }
+    }
+
+    if (setup_config() < 0) {
+        free(pkg_names);
+        free(local_paths);
         return 1;
+    }
 
     cfg->force_depends = force_depends;
     cfg->download_only = download_only;
@@ -493,7 +519,10 @@ static int cmd_install(int argc, char *argv[])
     if (cfg->non_interactive && !cfg->force_confnew)
         cfg->force_confold = 1;
 
-    r = aept_install((const char **)&argv[optind], argc - optind);
+    r = aept_install(n_names > 0 ? pkg_names : NULL, n_names,
+                     n_locals > 0 ? local_paths : NULL, n_locals);
+    free(pkg_names);
+    free(local_paths);
     teardown_config();
     return r;
 }
@@ -601,7 +630,7 @@ static int cmd_upgrade(int argc, char *argv[])
     if (cfg->non_interactive && !cfg->force_confnew)
         cfg->force_confold = 1;
 
-    r = aept_install(NULL, 0);
+    r = aept_install(NULL, 0, NULL, 0);
     teardown_config();
     return r;
 }

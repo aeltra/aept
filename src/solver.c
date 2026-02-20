@@ -34,6 +34,19 @@ static int nrepos;
 static Solver *solv;
 static Transaction *trans;
 
+/* Commandline repo for local .ipk files */
+static Repo *commandline_repo;
+
+#define MAX_CMDLINE 256
+
+typedef struct {
+    Id id;
+    char *path;
+} cmdline_entry_t;
+
+static cmdline_entry_t cmdline_entries[MAX_CMDLINE];
+static int ncmdline;
+
 typedef struct {
     char *name;
     char *version;
@@ -74,7 +87,9 @@ int solver_init(void)
     }
 
     installed_repo = NULL;
+    commandline_repo = NULL;
     nrepos = 0;
+    ncmdline = 0;
     solv = NULL;
     trans = NULL;
 
@@ -127,6 +142,59 @@ int solver_load_installed(FILE *fp)
     pool_set_installed(pool, installed_repo);
 
     return 0;
+}
+
+Id solver_load_local(const char *path)
+{
+    Id p;
+
+    if (ncmdline >= MAX_CMDLINE) {
+        log_error("too many local packages");
+        return 0;
+    }
+
+    if (!commandline_repo) {
+        commandline_repo = repo_create(pool, "@commandline");
+        if (!commandline_repo) {
+            log_error("failed to create commandline repo");
+            return 0;
+        }
+    }
+
+    p = repo_add_deb(commandline_repo, path, 0);
+    if (!p) {
+        log_error("failed to read '%s'", path);
+        return 0;
+    }
+
+    cmdline_entries[ncmdline].id = p;
+    cmdline_entries[ncmdline].path = xstrdup(path);
+    ncmdline++;
+
+    return p;
+}
+
+int solver_is_commandline(Id p)
+{
+    Solvable *s;
+
+    if (!commandline_repo)
+        return 0;
+
+    s = pool_id2solvable(pool, p);
+    return s->repo == commandline_repo;
+}
+
+const char *solver_commandline_path(Id p)
+{
+    int i;
+
+    for (i = 0; i < ncmdline; i++) {
+        if (cmdline_entries[i].id == p)
+            return cmdline_entries[i].path;
+    }
+
+    return NULL;
 }
 
 static int do_solve(Queue *job)
@@ -198,14 +266,16 @@ static const char *find_pin_version(const char *name)
     return NULL;
 }
 
-int solver_resolve_install(const char **names, int count)
+int solver_resolve_install(const char **names, int count,
+                           const Id *local_ids, int local_count)
 {
     Queue job;
     int i, r;
 
     queue_init(&job);
 
-    if (names == NULL || count == 0) {
+    if ((names == NULL || count == 0) &&
+            (local_ids == NULL || local_count == 0)) {
         /* upgrade all */
         queue_push2(&job, SOLVER_UPDATE | SOLVER_SOLVABLE_ALL, 0);
 
@@ -257,6 +327,10 @@ int solver_resolve_install(const char **names, int count)
                             SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
             }
         }
+
+        for (i = 0; i < local_count; i++)
+            queue_push2(&job,
+                        SOLVER_INSTALL | SOLVER_SOLVABLE, local_ids[i]);
     }
 
     r = do_solve(&job);
@@ -355,6 +429,8 @@ void solver_clear_pins(void)
 
 void solver_fini(void)
 {
+    int i;
+
     solver_clear_pins();
 
     if (trans) {
@@ -371,6 +447,11 @@ void solver_fini(void)
         pool_free(pool);
         pool = NULL;
     }
+
+    for (i = 0; i < ncmdline; i++)
+        free(cmdline_entries[i].path);
+    ncmdline = 0;
+    commandline_repo = NULL;
 
     installed_repo = NULL;
     nrepos = 0;

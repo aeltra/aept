@@ -138,13 +138,16 @@ static int display_transaction(Transaction *trans, Pool *pool,
             Solvable *s = pool_id2solvable(pool, p);
             const char *name = pool_id2str(pool, s->name);
 
-            if (type == SOLVER_TRANSACTION_UPGRADE ||
+            if (type == SOLVER_TRANSACTION_REINSTALL) {
+                reinstall_names[n_reinstall++] = name;
+            } else if (type == SOLVER_TRANSACTION_UPGRADE ||
                     type == SOLVER_TRANSACTION_DOWNGRADE) {
                 upgrade_names[n_upgrade++] = name;
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
                 install_names[n_install++] = name;
             } else if (type == SOLVER_TRANSACTION_UPGRADED ||
-                    type == SOLVER_TRANSACTION_DOWNGRADED) {
+                    type == SOLVER_TRANSACTION_DOWNGRADED ||
+                    type == SOLVER_TRANSACTION_REINSTALLED) {
                 /* old version being replaced — skip */
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
                 erase_names[n_erase++] = name;
@@ -1105,12 +1108,18 @@ static int do_reinstall(const char **names, int count,
         }
 
         char *ipk_path = NULL;
-        r = download_package(avail, pool, &ipk_path);
-        if (r < 0)
-            return r;
+        int is_local = solver_is_commandline(avail);
+
+        if (is_local) {
+            ipk_path = xstrdup(solver_commandline_path(avail));
+        } else {
+            r = download_package(avail, pool, &ipk_path);
+            if (r < 0)
+                return r;
+        }
 
         r = do_upgrade_package(ipk_path, pool, avail, old_ver, old_ver, NULL);
-        if (cfg->no_cache)
+        if (cfg->no_cache && !is_local)
             unlink(ipk_path);
         free(ipk_path);
         if (r < 0)
@@ -1120,10 +1129,12 @@ static int do_reinstall(const char **names, int count,
     return 0;
 }
 
-int aept_install(const char **names, int count)
+int aept_install(const char **names, int name_count,
+                 const char **local_paths, int local_count)
 {
     Transaction *trans;
     Pool *pool;
+    Id *local_ids = NULL;
     int i, r;
 
     r = solver_init();
@@ -1140,18 +1151,49 @@ int aept_install(const char **names, int count)
 
     pin_load_into_solver();
 
-    r = solver_resolve_install(names, count);
+    pool = solver_pool();
+
+    /* Load local .ipk files into the solver.  Skip packages that are
+     * already installed at the same version (unless --reinstall). */
+    int n_local_ids = 0;
+    if (local_count > 0) {
+        local_ids = xmalloc(local_count * sizeof(Id));
+        for (i = 0; i < local_count; i++) {
+            Id lid = solver_load_local(local_paths[i]);
+            if (!lid) {
+                free(local_ids);
+                local_ids = NULL;
+                r = -1;
+                goto out;
+            }
+
+            Solvable *s = pool_id2solvable(pool, lid);
+            const char *pkg_name = pool_id2str(pool, s->name);
+            const char *pkg_ver = pool_id2str(pool, s->evr);
+            const char *inst_ver = installed_version(pool, pkg_name);
+
+            if (inst_ver && strcmp(inst_ver, pkg_ver) == 0 &&
+                    !cfg->reinstall) {
+                log_info("%s is already installed at version %s",
+                         pkg_name, pkg_ver);
+                continue;
+            }
+
+            local_ids[n_local_ids++] = lid;
+        }
+    }
+
+    r = solver_resolve_install(names, name_count, local_ids, n_local_ids);
     if (r < 0)
         goto out;
 
     trans = solver_transaction();
-    pool = solver_pool();
 
     /* Explicitly named packages become manually installed.
      * Resolve through provides so that e.g. "python" correctly
      * unmarks "python3.9" when python3.9 provides python. */
     if (names && !cfg->noaction) {
-        for (i = 0; i < count; i++) {
+        for (i = 0; i < name_count; i++) {
             status_unmark_auto(names[i]);
             Id nameid = pool_str2id(pool, names[i], 0);
             if (nameid) {
@@ -1165,10 +1207,18 @@ int aept_install(const char **names, int count)
         }
     }
 
+    /* Local packages are also explicitly requested */
+    if (local_ids && !cfg->noaction) {
+        for (i = 0; i < n_local_ids; i++) {
+            Solvable *s = pool_id2solvable(pool, local_ids[i]);
+            status_unmark_auto(pool_id2str(pool, s->name));
+        }
+    }
+
     if (display_transaction(trans, pool,
                            cfg->reinstall ? names : NULL,
-                           cfg->reinstall ? count : 0,
-                           names ? count : 0)) {
+                           cfg->reinstall ? name_count : 0,
+                           (names ? name_count : 0) + n_local_ids)) {
         r = 0;
         goto out;
     }
@@ -1204,6 +1254,11 @@ int aept_install(const char **names, int count)
 
             if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
                 continue;
+
+            if (solver_is_commandline(p)) {
+                ipk_paths[i] = xstrdup(solver_commandline_path(p));
+                continue;
+            }
 
             r = download_package(p, pool, &ipk_paths[i]);
             if (r < 0)
@@ -1242,10 +1297,11 @@ int aept_install(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
 
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
-            /* Skip upgrades/downgrades — handled by do_upgrade_package()
-             * when the INSTALL side of the transaction is processed. */
+            /* Skip upgrades/downgrades/reinstalls — handled by
+             * do_upgrade_package() on the INSTALL side. */
             if (type == SOLVER_TRANSACTION_UPGRADED ||
-                    type == SOLVER_TRANSACTION_DOWNGRADED)
+                    type == SOLVER_TRANSACTION_DOWNGRADED ||
+                    type == SOLVER_TRANSACTION_REINSTALLED)
                 continue;
 
             if (!fileset_sorted) {
@@ -1258,16 +1314,21 @@ int aept_install(const char **names, int count)
                 goto fileset_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
             if (cfg->no_cache) {
-                r = download_package(p, pool, &ipk_paths[i]);
-                if (r < 0)
-                    goto fileset_cleanup;
+                if (solver_is_commandline(p)) {
+                    ipk_paths[i] = xstrdup(solver_commandline_path(p));
+                } else {
+                    r = download_package(p, pool, &ipk_paths[i]);
+                    if (r < 0)
+                        goto fileset_cleanup;
+                }
             }
 
             if (!ipk_paths[i])
                 continue;
 
             if (type == SOLVER_TRANSACTION_UPGRADE ||
-                    type == SOLVER_TRANSACTION_DOWNGRADE) {
+                    type == SOLVER_TRANSACTION_DOWNGRADE ||
+                    type == SOLVER_TRANSACTION_REINSTALL) {
                 const char *old_ver = NULL;
                 const char *new_ver = pool_id2str(pool, s->evr);
                 Id op = transaction_obs_pkg(trans, p);
@@ -1296,11 +1357,13 @@ int aept_install(const char **names, int count)
              * of a dependency (not explicitly requested).
              * Also check provides so that e.g. installing "python"
              * does not auto-mark the providing "python3.9". */
-            if (names && type != SOLVER_TRANSACTION_UPGRADE &&
-                    type != SOLVER_TRANSACTION_DOWNGRADE) {
-                int is_explicit = 0;
+            if ((names || local_ids) &&
+                    type != SOLVER_TRANSACTION_UPGRADE &&
+                    type != SOLVER_TRANSACTION_DOWNGRADE &&
+                    type != SOLVER_TRANSACTION_REINSTALL) {
+                int is_explicit = solver_is_commandline(p);
                 int j;
-                for (j = 0; j < count; j++) {
+                for (j = 0; !is_explicit && j < name_count; j++) {
                     if (strcmp(names[j], pkg_name) == 0) {
                         is_explicit = 1;
                         break;
@@ -1323,10 +1386,11 @@ int aept_install(const char **names, int count)
             }
 
             /* Record installed files for removal protection.
-             * Upgrades already update installed_files in
-             * do_upgrade_package(). */
+             * Upgrades/reinstalls already update installed_files
+             * in do_upgrade_package(). */
             if (type != SOLVER_TRANSACTION_UPGRADE &&
-                    type != SOLVER_TRANSACTION_DOWNGRADE) {
+                    type != SOLVER_TRANSACTION_DOWNGRADE &&
+                    type != SOLVER_TRANSACTION_REINSTALL) {
                 char *list_path = NULL;
                 FILE *lfp;
                 char lbuf[4096];
@@ -1354,7 +1418,8 @@ int aept_install(const char **names, int count)
             }
 
             if (cfg->no_cache) {
-                unlink(ipk_paths[i]);
+                if (!solver_is_commandline(p))
+                    unlink(ipk_paths[i]);
                 free(ipk_paths[i]);
                 ipk_paths[i] = NULL;
             }
@@ -1366,7 +1431,7 @@ int aept_install(const char **names, int count)
     /* Reinstall phase — download and reinstall requested packages
      * that were not covered by the solver transaction. */
     if (cfg->reinstall && names) {
-        r = do_reinstall(names, count, trans, pool);
+        r = do_reinstall(names, name_count, trans, pool);
         if (r < 0)
             goto download_cleanup;
     }
@@ -1383,6 +1448,7 @@ download_cleanup:
     free(ipk_paths);
 
 out:
+    free(local_ids);
     solver_fini();
     return r;
 }

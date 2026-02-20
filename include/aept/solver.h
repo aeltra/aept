@@ -22,8 +22,21 @@ int solver_load_repo(const char *name, FILE *fp, int source_index);
 /* Load the installed package database into the pool. */
 int solver_load_installed(FILE *fp);
 
-/* Resolve: install named packages. If names is NULL, upgrade all. */
-int solver_resolve_install(const char **names, int count);
+/* Load a local .ipk file into the pool as a "commandline" solvable.
+ * Returns the solvable Id, or 0 on error. */
+Id solver_load_local(const char *path);
+
+/* Check whether a solvable belongs to the commandline repo. */
+int solver_is_commandline(Id p);
+
+/* Get the original file path for a commandline solvable.
+ * Returns NULL if p is not a commandline solvable. */
+const char *solver_commandline_path(Id p);
+
+/* Resolve: install named packages and/or specific local solvable Ids.
+ * If all params are NULL/0, upgrade all. */
+int solver_resolve_install(const char **names, int count,
+                           const Id *local_ids, int local_count);
 
 /* Resolve: remove named packages. */
 int solver_resolve_remove(const char **names, int count);
