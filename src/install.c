@@ -107,7 +107,8 @@ static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
 }
 
 static int display_transaction(Transaction *trans, Pool *pool,
-                               const char **ri_names, int ri_count)
+                               const char **ri_names, int ri_count,
+                               int user_count)
 {
     int i;
     int n_install = 0;
@@ -199,7 +200,10 @@ static int display_transaction(Transaction *trans, Pool *pool,
         print_heading("%d to install, %d to upgrade, %d to remove.",
                       n_install, n_upgrade, n_erase);
 
-    if (n_erase > 0 && !confirm_continue())
+    if ((n_erase > 0 ||
+                (user_count > 0 &&
+                 n_install + n_upgrade > user_count)) &&
+            !confirm_continue())
         return -1;
 
     return 0;
@@ -1149,7 +1153,8 @@ int aept_install(const char **names, int count)
 
     if (display_transaction(trans, pool,
                            cfg->reinstall ? names : NULL,
-                           cfg->reinstall ? count : 0)) {
+                           cfg->reinstall ? count : 0,
+                           names ? count : 0)) {
         r = 0;
         goto out;
     }

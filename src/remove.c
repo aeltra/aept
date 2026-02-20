@@ -219,23 +219,9 @@ int aept_remove(const char **names, int count)
 
     print_heading("0 to install, 0 to upgrade, %d to remove.", n_erase);
 
-    /* Prompt if any removal was not explicitly requested by the user. */
-    int has_extra = 0;
-    for (i = 0; i < n_erase && !has_extra; i++) {
-        int j, found = 0;
-        for (j = 0; j < count; j++) {
-            if (strcmp(erase_names[i], names[j]) == 0) {
-                found = 1;
-                break;
-            }
-        }
-        if (!found)
-            has_extra = 1;
-    }
-
     free(erase_names);
 
-    if (has_extra && !confirm_continue()) {
+    if (n_erase > count && !confirm_continue()) {
         r = 0;
         goto out;
     }
