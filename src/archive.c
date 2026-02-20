@@ -751,7 +751,11 @@ struct aept_ar *ar_open_pkg_control_archive(const char *filename)
 
     ar = (struct aept_ar *)xmalloc(sizeof(struct aept_ar));
 
-    ar->ar = extract_outer(filename, "control.tar.gz");
+#if HAVE_ZSTD
+    ar->ar = extract_outer(filename, "control.tar.zst");
+#endif
+    if (!ar->ar)
+        ar->ar = extract_outer(filename, "control.tar.gz");
 #if HAVE_XZ
     if (!ar->ar)
         ar->ar = extract_outer(filename, "control.tar.xz");
@@ -763,10 +767,6 @@ struct aept_ar *ar_open_pkg_control_archive(const char *filename)
 #if HAVE_LZ4
     if (!ar->ar)
         ar->ar = extract_outer(filename, "control.tar.lz4");
-#endif
-#if HAVE_ZSTD
-    if (!ar->ar)
-        ar->ar = extract_outer(filename, "control.tar.zst");
 #endif
     if (!ar->ar) {
         free(ar);
@@ -785,7 +785,11 @@ struct aept_ar *ar_open_pkg_data_archive(const char *filename)
 
     ar = (struct aept_ar *)xmalloc(sizeof(struct aept_ar));
 
-    ar->ar = extract_outer(filename, "data.tar.gz");
+#if HAVE_ZSTD
+    ar->ar = extract_outer(filename, "data.tar.zst");
+#endif
+    if (!ar->ar)
+        ar->ar = extract_outer(filename, "data.tar.gz");
 #if HAVE_XZ
     if (!ar->ar)
         ar->ar = extract_outer(filename, "data.tar.xz");
@@ -797,10 +801,6 @@ struct aept_ar *ar_open_pkg_data_archive(const char *filename)
 #if HAVE_LZ4
     if (!ar->ar)
         ar->ar = extract_outer(filename, "data.tar.lz4");
-#endif
-#if HAVE_ZSTD
-    if (!ar->ar)
-        ar->ar = extract_outer(filename, "data.tar.zst");
 #endif
     if (!ar->ar) {
         free(ar);

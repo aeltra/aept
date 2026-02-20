@@ -18,10 +18,10 @@ struct aept_ar {
     int extract_flags;
 };
 
-/* Open control.tar.gz from an IPK file. */
+/* Open the control tarball from an IPK file. */
 struct aept_ar *ar_open_pkg_control_archive(const char *filename);
 
-/* Open data.tar.gz from an IPK file. */
+/* Open the data tarball from an IPK file. */
 struct aept_ar *ar_open_pkg_data_archive(const char *filename);
 
 /* Open a gzip-compressed file for streaming decompression. */
