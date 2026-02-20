@@ -34,6 +34,7 @@
 static const char *conf_file = DEFAULT_CONF;
 static const char *offline_root;
 static int conf_explicit;
+static int verbose_count;
 
 /* ── shared config helpers ─────────────────────────────────────────── */
 
@@ -60,6 +61,8 @@ static int load_config(void)
             free((char *)cf);
         return -1;
     }
+
+    cfg->verbosity += verbose_count;
 
     if (cf != conf_file)
         free((char *)cf);
@@ -1043,7 +1046,7 @@ int main(int argc, char *argv[])
         switch (opt) {
         case 'c': conf_file = optarg; conf_explicit = 1; break;
         case 'o': offline_root = optarg; break;
-        case 'v': cfg->verbosity++; break;
+        case 'v': verbose_count++; break;
         case 'h': usage_main(stdout); return 0;
         default:  usage_main(stderr); return 1;
         }
