@@ -54,7 +54,7 @@ enum {
 typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
 void aept_ctx_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
 
-typedef struct {
+typedef struct aept_transaction {
     const char **install;   int n_install;
     const char **upgrade;   int n_upgrade;
     const char **reinstall; int n_reinstall;

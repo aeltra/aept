@@ -17,6 +17,13 @@
 
 static int use_color;
 
+/* Callback globals (set by API entry points, NULL by default) */
+aept_log_fn     aept_log_cb;
+void           *aept_log_cb_data;
+aept_confirm_fn aept_confirm_cb;
+void           *aept_confirm_cb_data;
+const struct aept_transaction *aept_confirm_txn;
+
 static const char *level_name[] = {
     [AEPT_ERROR]   = "error",
     [AEPT_WARNING] = "warning",
@@ -47,6 +54,23 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     if (aept_cfg && level > aept_cfg->verbosity)
         return;
 
+    if (aept_log_cb) {
+        char buf[1024];
+        int n;
+
+        va_start(ap, fmt);
+        n = vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+        if (level == AEPT_DEBUG && file && n >= 0
+                && (size_t)n < sizeof(buf) - 1) {
+            snprintf(buf + n, sizeof(buf) - n, " (%s:%d)", file, line);
+        }
+
+        aept_log_cb(level, buf, aept_log_cb_data);
+        return;
+    }
+
     out = (level <= AEPT_WARNING) ? stderr : stdout;
 
     if (use_color) {
@@ -73,6 +97,9 @@ int aept_confirm_continue(void)
 
     if (aept_cfg->non_interactive)
         return 1;
+
+    if (aept_confirm_cb)
+        return aept_confirm_cb(aept_confirm_txn, aept_confirm_cb_data);
 
     printf("Do you want to continue? [Y/n] ");
     fflush(stdout);

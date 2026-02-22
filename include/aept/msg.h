@@ -32,4 +32,18 @@ void aept_print_heading(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 void aept_print_names(const char **list, int count);
 
+/* Callback types (matching public API in aept/aept.h) */
+typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
+
+struct aept_transaction;
+typedef int (*aept_confirm_fn)(const struct aept_transaction *txn,
+                               void *userdata);
+
+/* Global callback pointers (set/restored by API entry points) */
+extern aept_log_fn     aept_log_cb;
+extern void           *aept_log_cb_data;
+extern aept_confirm_fn aept_confirm_cb;
+extern void           *aept_confirm_cb_data;
+extern const struct aept_transaction *aept_confirm_txn;
+
 #endif
