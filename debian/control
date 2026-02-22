@@ -5,12 +5,32 @@ Maintainer: Tobias Koch <tobias.koch@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                autoconf,
                automake,
+               libtool,
                pkg-config,
                libarchive-dev,
                libsolv-dev,
                scdoc
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
+
+Package: libaept0
+Section: libs
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Package management library for .aeltra packages
+ libaept provides dependency resolution and package management
+ functionality using libsolv and libarchive. It can be embedded
+ into applications that need to manage .ipk packages.
+
+Package: libaept-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libaept0 (= ${binary:Version}), ${misc:Depends}
+Description: Development files for libaept
+ This package contains the header files and development symlinks
+ needed to build applications against libaept.
 
 Package: aept
 Architecture: any
