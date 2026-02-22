@@ -26,7 +26,6 @@
 #include "aept/install.h"
 #include "aept/msg.h"
 #include "aept/pin.h"
-#include "aept/query.h"
 #include "aept/remove.h"
 #include "aept/solver.h"
 #include "aept/status.h"

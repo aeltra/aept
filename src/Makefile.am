@@ -13,7 +13,6 @@ libaept_la_SOURCES = \
     archive.c \
     script.c \
     install.c \
-    query.c \
     remove.c \
     update.c \
     status.c \
