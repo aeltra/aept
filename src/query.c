@@ -53,7 +53,7 @@ int aept_owns(const char *path)
     int found = 0;
 
     if (*path == '\0') {
-        log_error("empty file path");
+        aept_log_error("empty file path");
         return 1;
     }
     needle = strip_leading(path);
@@ -61,7 +61,7 @@ int aept_owns(const char *path)
         needle = ".";
     needle_len = path_len(needle);
 
-    dir = opendir(cfg->info_dir);
+    dir = opendir(aept_cfg->info_dir);
     if (!dir)
         return 1;
 
@@ -75,7 +75,7 @@ int aept_owns(const char *path)
         if (!dot || strcmp(dot, ".list") != 0)
             continue;
 
-        xasprintf(&list_path, "%s/%s", cfg->info_dir, ent->d_name);
+        aept_asprintf(&list_path, "%s/%s", aept_cfg->info_dir, ent->d_name);
         fp = fopen(list_path, "r");
         free(list_path);
 
@@ -86,8 +86,8 @@ int aept_owns(const char *path)
             const char *entry;
             char *tab;
 
-            if (fgets_is_truncated(buf, sizeof(buf))) {
-                fgets_drain_line(fp);
+            if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+                aept_fgets_drain_line(fp);
                 continue;
             }
             buf[strcspn(buf, "\n")] = '\0';
@@ -127,16 +127,16 @@ int aept_files(const char *name)
     FILE *fp;
     char buf[4096];
 
-    if (!pkg_name_is_safe(name)) {
-        log_error("invalid package name '%s'", name);
+    if (!aept_pkg_name_is_safe(name)) {
+        aept_log_error("invalid package name '%s'", name);
         return 1;
     }
 
-    xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
+    aept_asprintf(&list_path, "%s/%s.list", aept_cfg->info_dir, name);
 
     fp = fopen(list_path, "r");
     if (!fp) {
-        log_error("package '%s' is not installed", name);
+        aept_log_error("package '%s' is not installed", name);
         free(list_path);
         return 1;
     }
@@ -145,8 +145,8 @@ int aept_files(const char *name)
     while (fgets(buf, sizeof(buf), fp)) {
         char *tab;
 
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         buf[strcspn(buf, "\n")] = '\0';
@@ -169,8 +169,8 @@ int aept_print_architecture(void)
 {
     int i;
 
-    for (i = 0; i < cfg->narchs; i++)
-        printf("%s\n", cfg->archs[i]);
+    for (i = 0; i < aept_cfg->narchs; i++)
+        printf("%s\n", aept_cfg->archs[i]);
 
     return 0;
 }
@@ -181,21 +181,21 @@ static int load_repos(void)
 {
     int i;
 
-    for (i = 0; i < cfg->nsources; i++) {
+    for (i = 0; i < aept_cfg->nsources; i++) {
         char *list_path = NULL;
         FILE *fp;
 
-        xasprintf(&list_path, "%s/%s", cfg->lists_dir, cfg->sources[i].name);
+        aept_asprintf(&list_path, "%s/%s", aept_cfg->lists_dir, aept_cfg->sources[i].name);
 
         fp = fopen(list_path, "r");
         if (!fp) {
-            log_debug("cannot open package list '%s': %s",
+            aept_log_debug("cannot open package list '%s': %s",
                       list_path, strerror(errno));
             free(list_path);
             continue;
         }
 
-        solver_load_repo(cfg->sources[i].name, fp, i);
+        aept_solver_load_repo(aept_cfg->sources[i].name, fp, i);
         fclose(fp);
         free(list_path);
     }
@@ -242,13 +242,13 @@ int aept_list(const char *pattern, int filter_installed, int filter_upgradable)
     int nentries = 0, alloc = 0;
     int i;
 
-    if (solver_init() < 0)
+    if (aept_solver_init() < 0)
         return 1;
 
-    status_load();
+    aept_status_load();
     load_repos();
 
-    pool = solver_pool();
+    pool = aept_solver_pool();
 
     /* Collect unique packages, tracking best available and installed */
     FOR_POOL_SOLVABLES(p) {
@@ -260,7 +260,7 @@ int aept_list(const char *pattern, int filter_installed, int filter_upgradable)
         if (!e) {
             if (nentries >= alloc) {
                 alloc = alloc ? alloc * 2 : 256;
-                entries = xrealloc(entries, alloc * sizeof(*entries));
+                entries = aept_realloc(entries, alloc * sizeof(*entries));
             }
             e = &entries[nentries++];
             e->name_id = s->name;
@@ -322,7 +322,7 @@ int aept_list(const char *pattern, int filter_installed, int filter_upgradable)
     }
 
     free(entries);
-    solver_fini();
+    aept_solver_fini();
     return 0;
 }
 
@@ -386,13 +386,13 @@ int aept_show(const char *name)
     unsigned int medianr;
     int r = 1;
 
-    if (solver_init() < 0)
+    if (aept_solver_init() < 0)
         return 1;
 
-    status_load();
+    aept_status_load();
     load_repos();
 
-    pool = solver_pool();
+    pool = aept_solver_pool();
 
     name_id = pool_str2id(pool, name, 0);
     if (!name_id)
@@ -453,9 +453,9 @@ int aept_show(const char *name)
     goto cleanup;
 
 not_found:
-    log_error("package '%s' not found", name);
+    aept_log_error("package '%s' not found", name);
 
 cleanup:
-    solver_fini();
+    aept_solver_fini();
     return r;
 }

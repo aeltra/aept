@@ -24,13 +24,13 @@ int aept_verify_signature(const char *file, const char *sigfile)
     pid = fork();
 
     if (pid < 0) {
-        log_error("failed to fork usign process: %s", strerror(errno));
+        aept_log_error("failed to fork usign process: %s", strerror(errno));
         return -1;
     }
 
     if (pid == 0) {
         execl(AEPT_USIGN_BIN, "usign", "-q", "-V",
-              "-P", cfg->usign_keydir,
+              "-P", aept_cfg->usign_keydir,
               "-m", file,
               "-x", sigfile,
               NULL);
@@ -39,12 +39,12 @@ int aept_verify_signature(const char *file, const char *sigfile)
 
     r = waitpid(pid, &status, 0);
     if (r == -1) {
-        log_error("usign: waitpid: %s", strerror(errno));
+        aept_log_error("usign: waitpid: %s", strerror(errno));
         return -1;
     }
 
     if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-        log_error("signature verification failed for '%s'", file);
+        aept_log_error("signature verification failed for '%s'", file);
         return -1;
     }
 

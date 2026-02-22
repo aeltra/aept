@@ -16,17 +16,17 @@
 
 static const char *strip_offline_root(const char *path)
 {
-    if (!cfg->offline_root)
+    if (!aept_cfg->offline_root)
         return path;
 
-    size_t len = strlen(cfg->offline_root);
-    if (strncmp(path, cfg->offline_root, len) == 0)
+    size_t len = strlen(aept_cfg->offline_root);
+    if (strncmp(path, aept_cfg->offline_root, len) == 0)
         return path + len;
 
     return path;
 }
 
-int run_script(const char *script_dir, const char *pkg_name,
+int aept_run_script(const char *script_dir, const char *pkg_name,
                const char *script, const char *action,
                const char *version)
 {
@@ -34,39 +34,39 @@ int run_script(const char *script_dir, const char *pkg_name,
     int r;
 
     if (pkg_name)
-        xasprintf(&path, "%s/%s.%s", script_dir, pkg_name, script);
+        aept_asprintf(&path, "%s/%s.%s", script_dir, pkg_name, script);
     else
-        xasprintf(&path, "%s/%s", script_dir, script);
+        aept_asprintf(&path, "%s/%s", script_dir, script);
 
-    if (!file_exists(path)) {
+    if (!aept_file_exists(path)) {
         free(path);
         return 0;
     }
 
-    log_debug("running %s for %s %s %s", script,
+    aept_log_debug("running %s for %s %s %s", script,
              pkg_name ? pkg_name : "(none)",
              action ? action : "",
              version ? version : "");
 
     const char *run_path = path;
-    if (cfg->offline_root)
+    if (aept_cfg->offline_root)
         run_path = strip_offline_root(path);
 
     if (action && version) {
         const char *argv[] = {"/bin/sh", run_path, action, version, NULL};
-        r = xsystem_offline_root(argv);
+        r = aept_system_offline_root(argv);
     } else if (action) {
         const char *argv[] = {"/bin/sh", run_path, action, NULL};
-        r = xsystem_offline_root(argv);
+        r = aept_system_offline_root(argv);
     } else {
         const char *argv[] = {"/bin/sh", run_path, NULL};
-        r = xsystem_offline_root(argv);
+        r = aept_system_offline_root(argv);
     }
 
     free(path);
 
     if (r != 0) {
-        log_error("%s script for %s failed with exit code %d",
+        aept_log_error("%s script for %s failed with exit code %d",
                   script, pkg_name ? pkg_name : "(none)", r);
         return r;
     }

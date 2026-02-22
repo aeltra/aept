@@ -18,18 +18,18 @@ void aept_log_init(void);
 void aept_log(int level, const char *file, int line, const char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
 
-#define log_error(fmt, ...) \
+#define aept_log_error(fmt, ...) \
     aept_log(AEPT_ERROR, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define log_warning(fmt, ...) \
+#define aept_log_warning(fmt, ...) \
     aept_log(AEPT_WARNING, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...) \
+#define aept_log_info(fmt, ...) \
     aept_log(AEPT_INFO, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define log_debug(fmt, ...) \
+#define aept_log_debug(fmt, ...) \
     aept_log(AEPT_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
-int confirm_continue(void);
-void print_heading(const char *fmt, ...)
+int aept_confirm_continue(void);
+void aept_print_heading(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
-void print_names(const char **list, int count);
+void aept_print_names(const char **list, int count);
 
 #endif

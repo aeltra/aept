@@ -20,7 +20,7 @@
  *
  * Returns 0 on success, script exit code on failure,
  * 0 if script does not exist. */
-int run_script(const char *script_dir, const char *pkg_name,
+int aept_run_script(const char *script_dir, const char *pkg_name,
                const char *script, const char *action,
                const char *version);
 

@@ -22,12 +22,12 @@ int aept_clean(void)
     struct dirent *ent;
     int errors = 0;
 
-    d = opendir(cfg->cache_dir);
+    d = opendir(aept_cfg->cache_dir);
     if (!d) {
         if (errno == ENOENT)
             return 0;
-        log_error("cannot open cache directory '%s': %s",
-                  cfg->cache_dir, strerror(errno));
+        aept_log_error("cannot open cache directory '%s': %s",
+                  aept_cfg->cache_dir, strerror(errno));
         return -1;
     }
 
@@ -37,10 +37,10 @@ int aept_clean(void)
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
 
-        xasprintf(&path, "%s/%s", cfg->cache_dir, ent->d_name);
+        aept_asprintf(&path, "%s/%s", aept_cfg->cache_dir, ent->d_name);
 
         if (unlink(path) < 0) {
-            log_error("cannot remove '%s': %s", path, strerror(errno));
+            aept_log_error("cannot remove '%s': %s", path, strerror(errno));
             errors++;
         }
 

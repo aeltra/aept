@@ -1,7 +1,7 @@
 /* util.c - utility functions
  *
  * Copyright (C) 2026 Tobias Koch
- * Based in part on xsystem by Carl D. Worth,
+ * Based in part on aept_system by Carl D. Worth,
  *   Copyright (C) 2001 University of Southern California
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -26,7 +26,7 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
-void *xmalloc(size_t size)
+void *aept_malloc(size_t size)
 {
     /* malloc(0) may return NULL on some libc implementations */
     void *p = malloc(size ? size : 1);
@@ -37,7 +37,7 @@ void *xmalloc(size_t size)
     return p;
 }
 
-void *xrealloc(void *ptr, size_t size)
+void *aept_realloc(void *ptr, size_t size)
 {
     void *p = realloc(ptr, size);
     if (!p) {
@@ -47,7 +47,7 @@ void *xrealloc(void *ptr, size_t size)
     return p;
 }
 
-char *xstrdup(const char *s)
+char *aept_strdup(const char *s)
 {
     char *p = strdup(s);
     if (!p) {
@@ -57,7 +57,7 @@ char *xstrdup(const char *s)
     return p;
 }
 
-int xasprintf(char **strp, const char *fmt, ...)
+int aept_asprintf(char **strp, const char *fmt, ...)
 {
     va_list ap;
     int r;
@@ -82,7 +82,7 @@ static void signal_handler(int sig)
     interrupted = 1;
 }
 
-void signal_setup(void)
+void aept_signal_setup(void)
 {
     struct sigaction sa;
 
@@ -95,12 +95,12 @@ void signal_setup(void)
     sigaction(SIGTERM, &sa, NULL);
 }
 
-int signal_was_interrupted(void)
+int aept_signal_was_interrupted(void)
 {
     return interrupted;
 }
 
-int pkg_name_is_safe(const char *name)
+int aept_pkg_name_is_safe(const char *name)
 {
     if (!name || name[0] == '\0')
         return 0;
@@ -118,7 +118,7 @@ int pkg_name_is_safe(const char *name)
     return 1;
 }
 
-int symlink_target_is_safe(const char *target)
+int aept_symlink_target_is_safe(const char *target)
 {
     if (!target)
         return 0;
@@ -137,7 +137,7 @@ int symlink_target_is_safe(const char *target)
  *   - newlines          (line injection in .list)
  *   - tabs              (field injection in .list)
  */
-int archive_path_is_safe(const char *path)
+int aept_archive_path_is_safe(const char *path)
 {
     int prev_dot = 0;
 
@@ -155,32 +155,32 @@ int archive_path_is_safe(const char *path)
     return 1;
 }
 
-int fgets_is_truncated(const char *buf, size_t bufsize)
+int aept_fgets_is_truncated(const char *buf, size_t bufsize)
 {
     size_t len = strlen(buf);
     return len > 0 && len == bufsize - 1 && buf[len - 1] != '\n';
 }
 
-void fgets_drain_line(FILE *fp)
+void aept_fgets_drain_line(FILE *fp)
 {
     int c;
     while ((c = fgetc(fp)) != EOF && c != '\n')
         ;
 }
 
-int file_exists(const char *path)
+int aept_file_exists(const char *path)
 {
     struct stat st;
     return lstat(path, &st) == 0;
 }
 
-int file_is_dir(const char *path)
+int aept_file_is_dir(const char *path)
 {
     struct stat st;
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-int file_copy(const char *src, const char *dst)
+int aept_file_copy(const char *src, const char *dst)
 {
     FILE *in, *out;
     char buf[4096];
@@ -223,12 +223,12 @@ int file_copy(const char *src, const char *dst)
     return 0;
 }
 
-int file_mkdir_hier(const char *path, mode_t mode)
+int aept_file_mkdir_hier(const char *path, mode_t mode)
 {
     char *p, *dir;
     int r;
 
-    dir = xstrdup(path);
+    dir = aept_strdup(path);
 
     for (p = dir + 1; *p; p++) {
         if (*p != '/')
@@ -252,7 +252,7 @@ int file_mkdir_hier(const char *path, mode_t mode)
     return 0;
 }
 
-int xsystem(const char *argv[])
+int aept_system(const char *argv[])
 {
     int status;
     pid_t pid;
@@ -262,7 +262,7 @@ int xsystem(const char *argv[])
 
     switch (pid) {
     case -1:
-        log_error("%s: fork: %s", argv[0], strerror(errno));
+        aept_log_error("%s: fork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
         execvp(argv[0], (char *const *)argv);
@@ -273,17 +273,17 @@ int xsystem(const char *argv[])
 
     r = waitpid(pid, &status, 0);
     if (r == -1) {
-        log_error("%s: waitpid: %s", argv[0], strerror(errno));
+        aept_log_error("%s: waitpid: %s", argv[0], strerror(errno));
         return -1;
     }
 
     if (WIFSIGNALED(status)) {
-        log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
+        aept_log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
         return -1;
     }
 
     if (!WIFEXITED(status)) {
-        log_error("%s: unexpected status %d from waitpid", argv[0], status);
+        aept_log_error("%s: unexpected status %d from waitpid", argv[0], status);
         return -1;
     }
 
@@ -301,27 +301,27 @@ static int unshare_and_map_user(void)
     gid_t gid = getegid();
 
     if (unshare(CLONE_NEWUSER) != 0) {
-        log_error("failed to unshare user namespace: %s",
+        aept_log_error("failed to unshare user namespace: %s",
                   strerror(errno));
         return -1;
     }
 
     /* Write uid_map: map real uid to 0 inside the namespace */
-    xasprintf(&mapfile, "/proc/%ld/uid_map", (long)pid);
+    aept_asprintf(&mapfile, "/proc/%ld/uid_map", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        log_error("failed to open '%s': %s", mapfile, strerror(errno));
+        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
-    xasprintf(&content, "0 %lu 1", (unsigned long)uid);
+    aept_asprintf(&content, "0 %lu 1", (unsigned long)uid);
     ret = write(fd, content, strlen(content));
     close(fd);
     free(content);
     content = NULL;
 
     if (ret < 0) {
-        log_error("failed to write uid_map: %s", strerror(errno));
+        aept_log_error("failed to write uid_map: %s", strerror(errno));
         goto error;
     }
 
@@ -329,10 +329,10 @@ static int unshare_and_map_user(void)
     mapfile = NULL;
 
     /* Write "deny" to setgroups (required before writing gid_map) */
-    xasprintf(&mapfile, "/proc/%ld/setgroups", (long)pid);
+    aept_asprintf(&mapfile, "/proc/%ld/setgroups", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        log_error("failed to open '%s': %s", mapfile, strerror(errno));
+        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
@@ -340,7 +340,7 @@ static int unshare_and_map_user(void)
     close(fd);
 
     if (ret != 4) {
-        log_error("failed to disable setgroups");
+        aept_log_error("failed to disable setgroups");
         goto error;
     }
 
@@ -348,21 +348,21 @@ static int unshare_and_map_user(void)
     mapfile = NULL;
 
     /* Write gid_map: map real gid to 0 inside the namespace */
-    xasprintf(&mapfile, "/proc/%ld/gid_map", (long)pid);
+    aept_asprintf(&mapfile, "/proc/%ld/gid_map", (long)pid);
     ret = fd = open(mapfile, O_RDWR);
     if (ret == -1) {
-        log_error("failed to open '%s': %s", mapfile, strerror(errno));
+        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
         goto error;
     }
 
-    xasprintf(&content, "0 %lu 1\n", (unsigned long)gid);
+    aept_asprintf(&content, "0 %lu 1\n", (unsigned long)gid);
     ret = write(fd, content, strlen(content));
     close(fd);
     free(content);
     content = NULL;
 
     if (ret < 0) {
-        log_error("failed to write gid_map: %s", strerror(errno));
+        aept_log_error("failed to write gid_map: %s", strerror(errno));
         goto error;
     }
 
@@ -391,7 +391,7 @@ static int path_cmp(const void *a, const void *b)
     return strcmp(*(const char **)a, *(const char **)b);
 }
 
-void fileset_init(aept_fileset_t *fs)
+void aept_fileset_init(aept_fileset_t *fs)
 {
     fs->paths = NULL;
     fs->count = 0;
@@ -399,7 +399,7 @@ void fileset_init(aept_fileset_t *fs)
     fs->sorted = 0;
 }
 
-void fileset_add(aept_fileset_t *fs, const char *path)
+void aept_fileset_add(aept_fileset_t *fs, const char *path)
 {
     path = normalize_path(path);
     if (path[0] == '\0')
@@ -407,14 +407,14 @@ void fileset_add(aept_fileset_t *fs, const char *path)
 
     if (fs->count >= fs->alloc) {
         fs->alloc = fs->alloc ? fs->alloc * 2 : 256;
-        fs->paths = xrealloc(fs->paths, fs->alloc * sizeof(char *));
+        fs->paths = aept_realloc(fs->paths, fs->alloc * sizeof(char *));
     }
 
-    fs->paths[fs->count++] = xstrdup(path);
+    fs->paths[fs->count++] = aept_strdup(path);
     fs->sorted = 0;
 }
 
-void fileset_sort(aept_fileset_t *fs)
+void aept_fileset_sort(aept_fileset_t *fs)
 {
     if (fs->sorted || fs->count <= 1)
         return;
@@ -422,27 +422,27 @@ void fileset_sort(aept_fileset_t *fs)
     fs->sorted = 1;
 }
 
-int fileset_contains(aept_fileset_t *fs, const char *path)
+int aept_fileset_contains(aept_fileset_t *fs, const char *path)
 {
     path = normalize_path(path);
     if (fs->count == 0 || path[0] == '\0')
         return 0;
-    fileset_sort(fs);
+    aept_fileset_sort(fs);
     return bsearch(&path, fs->paths, fs->count, sizeof(char *),
                    path_cmp) != NULL;
 }
 
-void fileset_free(aept_fileset_t *fs)
+void aept_fileset_free(aept_fileset_t *fs)
 {
     int i;
 
     for (i = 0; i < fs->count; i++)
         free(fs->paths[i]);
     free(fs->paths);
-    fileset_init(fs);
+    aept_fileset_init(fs);
 }
 
-int xsystem_offline_root(const char *argv[])
+int aept_system_offline_root(const char *argv[])
 {
     int status;
     pid_t pid;
@@ -452,22 +452,22 @@ int xsystem_offline_root(const char *argv[])
 
     switch (pid) {
     case -1:
-        log_error("%s: fork: %s", argv[0], strerror(errno));
+        aept_log_error("%s: fork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
-        if (cfg->offline_root) {
+        if (aept_cfg->offline_root) {
             if (geteuid() != 0) {
                 if (unshare_and_map_user() != 0)
                     _exit(AEPT_EXIT_SETUP_FAILED);
             }
 
-            if (chroot(cfg->offline_root) != 0) {
-                log_error("failed to chroot to '%s': %s",
-                          cfg->offline_root, strerror(errno));
+            if (chroot(aept_cfg->offline_root) != 0) {
+                aept_log_error("failed to chroot to '%s': %s",
+                          aept_cfg->offline_root, strerror(errno));
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
             if (chdir("/") != 0) {
-                log_error("failed to chdir to '/': %s", strerror(errno));
+                aept_log_error("failed to chdir to '/': %s", strerror(errno));
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
         }
@@ -479,17 +479,17 @@ int xsystem_offline_root(const char *argv[])
 
     r = waitpid(pid, &status, 0);
     if (r == -1) {
-        log_error("%s: waitpid: %s", argv[0], strerror(errno));
+        aept_log_error("%s: waitpid: %s", argv[0], strerror(errno));
         return -1;
     }
 
     if (WIFSIGNALED(status)) {
-        log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
+        aept_log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
         return -1;
     }
 
     if (!WIFEXITED(status)) {
-        log_error("%s: unexpected status %d from waitpid", argv[0], status);
+        aept_log_error("%s: unexpected status %d from waitpid", argv[0], status);
         return -1;
     }
 

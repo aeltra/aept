@@ -24,16 +24,16 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 - Autotools config: `#include <config.h>`
 - Functions return 0 on success, -1 on error
 - Error cleanup via `goto cleanup` pattern
-- OOM-safe allocators: `xmalloc()`, `xrealloc()`, `xstrdup()`, `xasprintf()`
+- OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`, `aept_asprintf()`
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
 - License: GPL-2.0-or-later; file headers include SPDX and copyright
 
 ## Architecture
 
-**Global config singleton** (`cfg` in config.c) — `aept_config_t` holds all paths, sources, flags, and architectures. Initialized from `/etc/aept/aept.conf` by `config_load()`, freed by `config_free()`.
+**Global config singleton** (`aept_cfg` in config.c) — `aept_config_t` holds all paths, sources, flags, and architectures. Initialized from `/etc/aept/aept.conf` by `aept_config_load()`, freed by `aept_config_free()`.
 
-**Command flow** (main.c): parse CLI opts → `config_load()` → dispatch to `aept_update()`, `aept_install()`, `aept_remove()`, or `aept_upgrade()` → `config_free()`.
+**Command flow** (main.c): parse CLI opts → `aept_config_load()` → dispatch to `aept_update()`, `aept_install()`, `aept_remove()`, or `aept_upgrade()` → `aept_config_free()`.
 
 **Key subsystems:**
 
@@ -42,5 +42,5 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.
-- **util.c** — `xsystem()` / `xsystem_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs.
+- **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs.
 - **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) with `PKG_ROOT` env var set.

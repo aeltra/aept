@@ -55,29 +55,29 @@ typedef struct {
 static pin_entry_t *pins;
 static int npins;
 
-int solver_init(void)
+int aept_solver_init(void)
 {
     pool = pool_create();
     if (!pool) {
-        log_error("failed to create solver pool");
+        aept_log_error("failed to create solver pool");
         return -1;
     }
 
-    if (cfg->narchs > 0) {
+    if (aept_cfg->narchs > 0) {
         int i;
         size_t len = 0;
         char *archstr;
 
-        for (i = 0; i < cfg->narchs; i++)
-            len += strlen(cfg->archs[i]) + 1;
+        for (i = 0; i < aept_cfg->narchs; i++)
+            len += strlen(aept_cfg->archs[i]) + 1;
 
-        archstr = xmalloc(len);
+        archstr = aept_malloc(len);
         archstr[0] = '\0';
 
-        for (i = 0; i < cfg->narchs; i++) {
+        for (i = 0; i < aept_cfg->narchs; i++) {
             if (i > 0)
                 strcat(archstr, ":");
-            strcat(archstr, cfg->archs[i]);
+            strcat(archstr, aept_cfg->archs[i]);
         }
 
         pool_setarch(pool, archstr);
@@ -96,23 +96,23 @@ int solver_init(void)
     return 0;
 }
 
-int solver_load_repo(const char *name, FILE *fp, int source_index)
+int aept_solver_load_repo(const char *name, FILE *fp, int source_index)
 {
     Repo *repo;
 
     if (nrepos >= MAX_REPOS) {
-        log_error("too many repositories");
+        aept_log_error("too many repositories");
         return -1;
     }
 
     repo = repo_create(pool, name);
     if (!repo) {
-        log_error("failed to create repo '%s'", name);
+        aept_log_error("failed to create repo '%s'", name);
         return -1;
     }
 
     if (repo_add_debpackages(repo, fp, 0)) {
-        log_error("failed to parse Packages for '%s'", name);
+        aept_log_error("failed to parse Packages for '%s'", name);
         repo_free(repo, 0);
         return -1;
     }
@@ -124,16 +124,16 @@ int solver_load_repo(const char *name, FILE *fp, int source_index)
     return 0;
 }
 
-int solver_load_installed(FILE *fp)
+int aept_solver_load_installed(FILE *fp)
 {
     installed_repo = repo_create(pool, "@installed");
     if (!installed_repo) {
-        log_error("failed to create installed repo");
+        aept_log_error("failed to create installed repo");
         return -1;
     }
 
     if (repo_add_debpackages(installed_repo, fp, 0)) {
-        log_error("failed to parse status file");
+        aept_log_error("failed to parse status file");
         repo_free(installed_repo, 0);
         installed_repo = NULL;
         return -1;
@@ -144,37 +144,37 @@ int solver_load_installed(FILE *fp)
     return 0;
 }
 
-Id solver_load_local(const char *path)
+Id aept_solver_load_local(const char *path)
 {
     Id p;
 
     if (ncmdline >= MAX_CMDLINE) {
-        log_error("too many local packages");
+        aept_log_error("too many local packages");
         return 0;
     }
 
     if (!commandline_repo) {
         commandline_repo = repo_create(pool, "@commandline");
         if (!commandline_repo) {
-            log_error("failed to create commandline repo");
+            aept_log_error("failed to create commandline repo");
             return 0;
         }
     }
 
     p = repo_add_deb(commandline_repo, path, 0);
     if (!p) {
-        log_error("failed to read '%s'", path);
+        aept_log_error("failed to read '%s'", path);
         return 0;
     }
 
     cmdline_entries[ncmdline].id = p;
-    cmdline_entries[ncmdline].path = xstrdup(path);
+    cmdline_entries[ncmdline].path = aept_strdup(path);
     ncmdline++;
 
     return p;
 }
 
-int solver_is_commandline(Id p)
+int aept_solver_is_commandline(Id p)
 {
     Solvable *s;
 
@@ -185,7 +185,7 @@ int solver_is_commandline(Id p)
     return s->repo == commandline_repo;
 }
 
-const char *solver_commandline_path(Id p)
+const char *aept_solver_commandline_path(Id p)
 {
     int i;
 
@@ -206,25 +206,25 @@ static int do_solve(Queue *job)
 
     solv = solver_create(pool);
     if (!solv) {
-        log_error("failed to create solver");
+        aept_log_error("failed to create solver");
         return -1;
     }
 
     solver_set_flag(solv, SOLVER_FLAG_ALLOW_UNINSTALL, 1);
     solver_set_flag(solv, SOLVER_FLAG_ALLOW_ARCHCHANGE, 1);
 
-    if (cfg->allow_downgrade)
+    if (aept_cfg->allow_downgrade)
         solver_set_flag(solv, SOLVER_FLAG_ALLOW_DOWNGRADE, 1);
 
     problems = solver_solve(solv, job);
-    if (problems > 0 && cfg->force_depends) {
-        log_warning("dependency problems (--force-depends, accepting solutions):");
+    if (problems > 0 && aept_cfg->force_depends) {
+        aept_log_warning("dependency problems (--force-depends, accepting solutions):");
 
         problem = 0;
         while ((problem = solver_next_problem(solv, problem)) != 0) {
             Id solution;
 
-            log_warning("  - %s", solver_problem2str(solv, problem));
+            aept_log_warning("  - %s", solver_problem2str(solv, problem));
 
             solution = solver_next_solution(solv, problem, 0);
             if (solution)
@@ -235,12 +235,12 @@ static int do_solve(Queue *job)
     }
 
     if (problems > 0) {
-        log_error("dependency problems:");
+        aept_log_error("dependency problems:");
 
         problem = 0;
         while ((problem = solver_next_problem(solv, problem)) != 0) {
             const char *s = solver_problem2str(solv, problem);
-            log_error("  - %s", s);
+            aept_log_error("  - %s", s);
         }
 
         solver_free(solv);
@@ -266,7 +266,7 @@ static const char *find_pin_version(const char *name)
     return NULL;
 }
 
-int solver_resolve_install(const char **names, int count,
+int aept_solver_resolve_install(const char **names, int count,
                            const Id *local_ids, int local_count)
 {
     Queue job;
@@ -313,7 +313,7 @@ int solver_resolve_install(const char **names, int count,
                     queue_push2(&job,
                                 SOLVER_INSTALL | SOLVER_SOLVABLE, target);
                 } else {
-                    log_warning("pinned version '%s' of '%s' not found "
+                    aept_log_warning("pinned version '%s' of '%s' not found "
                                 "in any repository, installing best "
                                 "available", pin_ver, names[i]);
                     Id id = pool_str2id(pool, names[i], 1);
@@ -339,7 +339,7 @@ int solver_resolve_install(const char **names, int count,
     return r;
 }
 
-int solver_resolve_remove(const char **names, int count)
+int aept_solver_resolve_remove(const char **names, int count)
 {
     Queue job;
     int i, r;
@@ -357,17 +357,17 @@ int solver_resolve_remove(const char **names, int count)
     return r;
 }
 
-Transaction *solver_transaction(void)
+Transaction *aept_solver_transaction(void)
 {
     return trans;
 }
 
-Pool *solver_pool(void)
+Pool *aept_solver_pool(void)
 {
     return pool;
 }
 
-int solver_solvable_source_index(Id p)
+int aept_solver_solvable_source_index(Id p)
 {
     Solvable *s = pool_id2solvable(pool, p);
     int i;
@@ -380,7 +380,7 @@ int solver_solvable_source_index(Id p)
     return -1;
 }
 
-Id solver_find_available(const char *name)
+Id aept_solver_find_available(const char *name)
 {
     Id nameid = pool_str2id(pool, name, 0);
     Id best = 0;
@@ -406,15 +406,15 @@ Id solver_find_available(const char *name)
     return best;
 }
 
-void solver_add_pin(const char *name, const char *version)
+void aept_solver_add_pin(const char *name, const char *version)
 {
     npins++;
-    pins = xrealloc(pins, npins * sizeof(pin_entry_t));
-    pins[npins - 1].name = xstrdup(name);
-    pins[npins - 1].version = xstrdup(version);
+    pins = aept_realloc(pins, npins * sizeof(pin_entry_t));
+    pins[npins - 1].name = aept_strdup(name);
+    pins[npins - 1].version = aept_strdup(version);
 }
 
-void solver_clear_pins(void)
+void aept_solver_clear_pins(void)
 {
     int i;
 
@@ -427,7 +427,7 @@ void solver_clear_pins(void)
     npins = 0;
 }
 
-const char *solver_installed_version(const char *name)
+const char *aept_solver_installed_version(const char *name)
 {
     if (!pool || !pool->installed)
         return NULL;
@@ -443,11 +443,11 @@ const char *solver_installed_version(const char *name)
     return NULL;
 }
 
-void solver_fini(void)
+void aept_solver_fini(void)
 {
     int i;
 
-    solver_clear_pins();
+    aept_solver_clear_pins();
 
     if (trans) {
         transaction_free(trans);

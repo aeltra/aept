@@ -41,7 +41,7 @@ static const char *resolve_conf(void)
     if (!offline_root || conf_explicit)
         return conf_file;
 
-    xasprintf(&path, "%s%s", offline_root, DEFAULT_CONF);
+    aept_asprintf(&path, "%s%s", offline_root, DEFAULT_CONF);
     return path;
 }
 
@@ -50,29 +50,29 @@ static int load_config(void)
     const char *cf = resolve_conf();
 
     if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        log_warning("config file '%s' not found, using defaults", cf);
-        config_set_defaults();
-    } else if (config_load(cf) < 0) {
+        aept_log_warning("config file '%s' not found, using defaults", cf);
+        aept_config_set_defaults();
+    } else if (aept_config_load(cf) < 0) {
         if (cf != conf_file)
             free((char *)cf);
         return -1;
     }
 
-    cfg->verbosity += verbose_count;
+    aept_cfg->verbosity += verbose_count;
 
     if (cf != conf_file)
         free((char *)cf);
 
     if (offline_root) {
-        free(cfg->offline_root);
-        cfg->offline_root = xstrdup(offline_root);
+        free(aept_cfg->offline_root);
+        aept_cfg->offline_root = aept_strdup(offline_root);
     }
 
-    config_apply_offline_root();
+    aept_config_apply_offline_root();
 
-    if (!cfg->offline_root && !file_exists("/etc/aeltra_version")) {
-        log_error("not running on Aeltra OS; use -o to set an offline root");
-        config_free();
+    if (!aept_cfg->offline_root && !aept_file_exists("/etc/aeltra_version")) {
+        aept_log_error("not running on Aeltra OS; use -o to set an offline root");
+        aept_config_free();
         return -1;
     }
 
@@ -84,13 +84,13 @@ static int setup_config(void)
     if (load_config() < 0)
         return -1;
 
-    if (config_validate() < 0) {
-        config_free();
+    if (aept_config_validate() < 0) {
+        aept_config_free();
         return -1;
     }
 
-    if (config_lock() < 0) {
-        config_free();
+    if (aept_config_lock() < 0) {
+        aept_config_free();
         return -1;
     }
 
@@ -99,8 +99,8 @@ static int setup_config(void)
 
 static void teardown_config(void)
 {
-    config_unlock();
-    config_free();
+    aept_config_unlock();
+    aept_config_free();
 }
 
 /* ── usage functions ───────────────────────────────────────────────── */
@@ -474,21 +474,21 @@ static int cmd_install(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("install requires at least one package name or .ipk path");
+        aept_log_error("install requires at least one package name or .ipk path");
         return 1;
     }
 
     /* Partition arguments into package names and local .ipk paths */
     int nargs = argc - optind;
-    const char **pkg_names = xmalloc(nargs * sizeof(char *));
-    const char **local_paths = xmalloc(nargs * sizeof(char *));
+    const char **pkg_names = aept_malloc(nargs * sizeof(char *));
+    const char **local_paths = aept_malloc(nargs * sizeof(char *));
     int n_names = 0, n_locals = 0;
 
     for (int j = optind; j < argc; j++) {
         if (argv[j][0] == '/' ||
                 (argv[j][0] == '.' && argv[j][1] == '/')) {
             if (access(argv[j], R_OK) < 0) {
-                log_error("cannot access '%s': %s",
+                aept_log_error("cannot access '%s': %s",
                           argv[j], strerror(errno));
                 free(pkg_names);
                 free(local_paths);
@@ -506,17 +506,17 @@ static int cmd_install(int argc, char *argv[])
         return 1;
     }
 
-    cfg->force_depends = force_depends;
-    cfg->download_only = download_only;
-    cfg->noaction = noaction;
-    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    cfg->allow_downgrade = allow_downgrade;
-    cfg->reinstall = reinstall;
-    cfg->no_cache = no_cache;
-    cfg->force_confnew = force_confnew;
-    cfg->force_confold = force_confold;
-    if (cfg->non_interactive && !cfg->force_confnew)
-        cfg->force_confold = 1;
+    aept_cfg->force_depends = force_depends;
+    aept_cfg->download_only = download_only;
+    aept_cfg->noaction = noaction;
+    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
+    aept_cfg->allow_downgrade = allow_downgrade;
+    aept_cfg->reinstall = reinstall;
+    aept_cfg->no_cache = no_cache;
+    aept_cfg->force_confnew = force_confnew;
+    aept_cfg->force_confold = force_confold;
+    if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
+        aept_cfg->force_confold = 1;
 
     r = aept_install(n_names > 0 ? pkg_names : NULL, n_names,
                      n_locals > 0 ? local_paths : NULL, n_locals);
@@ -546,10 +546,10 @@ static int cmd_autoremove(int argc, char *argv[])
     if (setup_config() < 0)
         return 1;
 
-    cfg->force_depends = force_depends;
-    cfg->noaction = noaction;
-    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    cfg->purge = purge;
+    aept_cfg->force_depends = force_depends;
+    aept_cfg->noaction = noaction;
+    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
+    aept_cfg->purge = purge;
 
     r = aept_autoremove();
     teardown_config();
@@ -574,17 +574,17 @@ static int cmd_remove(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("remove requires at least one package name");
+        aept_log_error("remove requires at least one package name");
         return 1;
     }
 
     if (setup_config() < 0)
         return 1;
 
-    cfg->force_depends = force_depends;
-    cfg->noaction = noaction;
-    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    cfg->purge = purge;
+    aept_cfg->force_depends = force_depends;
+    aept_cfg->noaction = noaction;
+    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
+    aept_cfg->purge = purge;
 
     r = aept_remove((const char **)&argv[optind], argc - optind);
     teardown_config();
@@ -618,16 +618,16 @@ static int cmd_upgrade(int argc, char *argv[])
     if (setup_config() < 0)
         return 1;
 
-    cfg->force_depends = force_depends;
-    cfg->download_only = download_only;
-    cfg->noaction = noaction;
-    cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    cfg->allow_downgrade = allow_downgrade;
-    cfg->no_cache = no_cache;
-    cfg->force_confnew = force_confnew;
-    cfg->force_confold = force_confold;
-    if (cfg->non_interactive && !cfg->force_confnew)
-        cfg->force_confold = 1;
+    aept_cfg->force_depends = force_depends;
+    aept_cfg->download_only = download_only;
+    aept_cfg->noaction = noaction;
+    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
+    aept_cfg->allow_downgrade = allow_downgrade;
+    aept_cfg->no_cache = no_cache;
+    aept_cfg->force_confnew = force_confnew;
+    aept_cfg->force_confold = force_confold;
+    if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
+        aept_cfg->force_confold = 1;
 
     r = aept_install(NULL, 0, NULL, 0);
     teardown_config();
@@ -677,7 +677,7 @@ static int cmd_list(int argc, char *argv[])
         return 1;
 
     r = aept_list(pattern, filter_installed, filter_upgradable);
-    config_free();
+    aept_config_free();
     return r;
 }
 
@@ -694,7 +694,7 @@ static int cmd_show(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("show requires a package name");
+        aept_log_error("show requires a package name");
         return 1;
     }
 
@@ -702,7 +702,7 @@ static int cmd_show(int argc, char *argv[])
         return 1;
 
     r = aept_show(argv[optind]);
-    config_free();
+    aept_config_free();
     return r;
 }
 
@@ -719,7 +719,7 @@ static int cmd_files(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("files requires a package name");
+        aept_log_error("files requires a package name");
         return 1;
     }
 
@@ -727,7 +727,7 @@ static int cmd_files(int argc, char *argv[])
         return 1;
 
     r = aept_files(argv[optind]);
-    config_free();
+    aept_config_free();
     return r;
 }
 
@@ -744,7 +744,7 @@ static int cmd_owns(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("owns requires a file path");
+        aept_log_error("owns requires a file path");
         return 1;
     }
 
@@ -752,7 +752,7 @@ static int cmd_owns(int argc, char *argv[])
         return 1;
 
     r = aept_owns(argv[optind]);
-    config_free();
+    aept_config_free();
     return r;
 }
 
@@ -771,7 +771,7 @@ static int cmd_mark_manual(int argc, char *argv[])
     }
 
     if (!all && optind >= argc) {
-        log_error("mark manual requires package names or --all");
+        aept_log_error("mark manual requires package names or --all");
         return 1;
     }
 
@@ -779,26 +779,26 @@ static int cmd_mark_manual(int argc, char *argv[])
         return 1;
 
     if (all) {
-        r = status_clear_auto();
+        r = aept_status_clear_auto();
     } else {
         r = 0;
         for (i = optind; i < argc; i++) {
             char *list_path = NULL;
-            xasprintf(&list_path, "%s/%s.list",
-                      cfg->info_dir, argv[i]);
-            if (!file_exists(list_path)) {
-                log_warning("package '%s' is not installed, skipping",
+            aept_asprintf(&list_path, "%s/%s.list",
+                      aept_cfg->info_dir, argv[i]);
+            if (!aept_file_exists(list_path)) {
+                aept_log_warning("package '%s' is not installed, skipping",
                             argv[i]);
                 free(list_path);
                 continue;
             }
             free(list_path);
-            if (status_unmark_auto(argv[i]) < 0)
+            if (aept_status_unmark_auto(argv[i]) < 0)
                 r = -1;
         }
     }
 
-    config_free();
+    aept_config_free();
     return r < 0 ? 1 : 0;
 }
 
@@ -815,7 +815,7 @@ static int cmd_mark_auto(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("mark auto requires package names");
+        aept_log_error("mark auto requires package names");
         return 1;
     }
 
@@ -825,20 +825,20 @@ static int cmd_mark_auto(int argc, char *argv[])
     r = 0;
     for (i = optind; i < argc; i++) {
         char *list_path = NULL;
-        xasprintf(&list_path, "%s/%s.list",
-                  cfg->info_dir, argv[i]);
-        if (!file_exists(list_path)) {
-            log_warning("package '%s' is not installed, skipping",
+        aept_asprintf(&list_path, "%s/%s.list",
+                  aept_cfg->info_dir, argv[i]);
+        if (!aept_file_exists(list_path)) {
+            aept_log_warning("package '%s' is not installed, skipping",
                         argv[i]);
             free(list_path);
             continue;
         }
         free(list_path);
-        if (status_mark_auto(argv[i]) < 0)
+        if (aept_status_mark_auto(argv[i]) < 0)
             r = -1;
     }
 
-    config_free();
+    aept_config_free();
     return r < 0 ? 1 : 0;
 }
 
@@ -867,7 +867,7 @@ static int cmd_mark(int argc, char *argv[])
     if (strcmp(action, "auto") == 0)
         return cmd_mark_auto(argc - optind, argv + optind);
 
-    log_error("unknown mark action '%s'", action);
+    aept_log_error("unknown mark action '%s'", action);
     usage_mark(stderr);
     return 1;
 }
@@ -885,7 +885,7 @@ static int cmd_pin(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("pin requires at least one package name");
+        aept_log_error("pin requires at least one package name");
         usage_pin(stderr);
         return 1;
     }
@@ -902,9 +902,9 @@ static int cmd_pin(int argc, char *argv[])
     }
 
     if (need_solver) {
-        if (solver_init() < 0 || status_load() < 0) {
-            solver_fini();
-            config_free();
+        if (aept_solver_init() < 0 || aept_status_load() < 0) {
+            aept_solver_fini();
+            aept_config_free();
             return 1;
         }
     }
@@ -920,31 +920,31 @@ static int cmd_pin(int argc, char *argv[])
             name = argv[i];
             version = eq + 1;
 
-            if (pin_add(name, version) < 0)
+            if (aept_pin_add(name, version) < 0)
                 r = -1;
             else
-                log_info("pinned %s at version %s", name, version);
+                aept_log_info("pinned %s at version %s", name, version);
         } else {
             name = argv[i];
-            const char *found_version = solver_installed_version(name);
+            const char *found_version = aept_solver_installed_version(name);
 
             if (!found_version) {
-                log_warning("package '%s' is not installed, skipping",
+                aept_log_warning("package '%s' is not installed, skipping",
                             name);
                 continue;
             }
 
-            if (pin_add(name, found_version) < 0)
+            if (aept_pin_add(name, found_version) < 0)
                 r = -1;
             else
-                log_info("pinned %s at version %s", name, found_version);
+                aept_log_info("pinned %s at version %s", name, found_version);
         }
     }
 
     if (need_solver)
-        solver_fini();
+        aept_solver_fini();
 
-    config_free();
+    aept_config_free();
     return r < 0 ? 1 : 0;
 }
 
@@ -961,7 +961,7 @@ static int cmd_unpin(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        log_error("unpin requires at least one package name");
+        aept_log_error("unpin requires at least one package name");
         usage_pin(stderr);
         return 1;
     }
@@ -971,13 +971,13 @@ static int cmd_unpin(int argc, char *argv[])
 
     r = 0;
     for (i = optind; i < argc; i++) {
-        if (pin_remove(argv[i]) < 0)
+        if (aept_pin_remove(argv[i]) < 0)
             r = -1;
         else
-            log_info("unpinned %s", argv[i]);
+            aept_log_info("unpinned %s", argv[i]);
     }
 
-    config_free();
+    aept_config_free();
     return r < 0 ? 1 : 0;
 }
 
@@ -997,7 +997,7 @@ static int cmd_print_architecture(int argc, char *argv[])
         return 1;
 
     r = aept_print_architecture();
-    config_free();
+    aept_config_free();
     return r;
 }
 
@@ -1017,7 +1017,7 @@ int main(int argc, char *argv[])
     int opt;
 
     aept_log_init();
-    signal_setup();
+    aept_signal_setup();
 
     while ((opt = getopt_long(argc, argv, "+c:o:vh", global_options, NULL)) != -1) {
         switch (opt) {
@@ -1065,7 +1065,7 @@ int main(int argc, char *argv[])
     if (strcmp(command, "print-architecture") == 0)
         return cmd_print_architecture(argc - optind, argv + optind);
 
-    log_error("unknown command '%s'", command);
+    aept_log_error("unknown command '%s'", command);
     usage_main(stderr);
     return 1;
 }

@@ -46,7 +46,7 @@ typedef struct {
     int verbosity;
 } aept_config_t;
 
-extern aept_config_t *cfg;
+extern aept_config_t *aept_cfg;
 
 #define AEPT_USIGN_BIN "/usr/bin/usign"
 

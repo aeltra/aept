@@ -70,44 +70,44 @@ int aept_autoremove(void)
     Solvable *s;
     int i, r;
 
-    r = solver_init();
+    r = aept_solver_init();
     if (r < 0)
         return -1;
 
-    r = status_load();
+    r = aept_status_load();
     if (r < 0)
         goto out;
 
-    pool = solver_pool();
+    pool = aept_solver_pool();
     installed = pool->installed;
 
     if (!installed || installed->end <= installed->start) {
-        log_info("nothing to do");
+        aept_log_info("nothing to do");
         r = 0;
         goto out;
     }
 
     pool_createwhatprovides(pool);
 
-    fileset_init(&auto_set);
-    r = status_load_auto_set(&auto_set);
+    aept_fileset_init(&auto_set);
+    r = aept_status_load_auto_set(&auto_set);
     if (r < 0)
         goto out_fileset;
 
     if (auto_set.count == 0) {
-        log_info("nothing to do");
+        aept_log_info("nothing to do");
         r = 0;
         goto out_fileset;
     }
 
     /* BFS: mark all packages reachable from manually-installed ones. */
     ninstalled = installed->end - installed->start;
-    needed = xmalloc(ninstalled);
+    needed = aept_malloc(ninstalled);
     memset(needed, 0, ninstalled);
 
     FOR_REPO_SOLVABLES(installed, p, s) {
         const char *name = pool_id2str(pool, s->name);
-        if (!fileset_contains(&auto_set, name))
+        if (!aept_fileset_contains(&auto_set, name))
             mark_needed(pool, p, needed, ninstalled);
     }
 
@@ -120,48 +120,48 @@ int aept_autoremove(void)
             continue;
 
         const char *name = pool_id2str(pool, s->name);
-        if (!fileset_contains(&auto_set, name))
+        if (!aept_fileset_contains(&auto_set, name))
             continue;
 
         ncandidates++;
-        candidates = xrealloc(candidates,
+        candidates = aept_realloc(candidates,
                               ncandidates * sizeof(const char *));
-        candidates_evr = xrealloc(candidates_evr,
+        candidates_evr = aept_realloc(candidates_evr,
                                   ncandidates * sizeof(const char *));
         candidates[ncandidates - 1] = name;
         candidates_evr[ncandidates - 1] = pool_id2str(pool, s->evr);
     }
 
     if (ncandidates == 0) {
-        log_info("nothing to do");
+        aept_log_info("nothing to do");
         r = 0;
         goto out_needed;
     }
 
-    print_heading("The following packages will be REMOVED:");
-    print_names(candidates, ncandidates);
-    print_heading("0 to install, 0 to upgrade, %d to remove.", ncandidates);
+    aept_print_heading("The following packages will be REMOVED:");
+    aept_print_names(candidates, ncandidates);
+    aept_print_heading("0 to install, 0 to upgrade, %d to remove.", ncandidates);
 
-    if (!confirm_continue()) {
+    if (!aept_confirm_continue()) {
         r = 0;
         goto out_needed;
     }
 
-    if (cfg->noaction) {
-        log_info("dry run, not removing");
+    if (aept_cfg->noaction) {
+        aept_log_info("dry run, not removing");
         r = 0;
         goto out_needed;
     }
 
     for (i = 0; i < ncandidates; i++) {
-        if (signal_was_interrupted()) {
-            log_warning("interrupted, stopping");
+        if (aept_signal_was_interrupted()) {
+            aept_log_warning("interrupted, stopping");
             r = -1;
             goto out_needed;
         }
 
         r = aept_do_remove(candidates[i], NULL, NULL);
-        if (r < 0 && !cfg->force_depends)
+        if (r < 0 && !aept_cfg->force_depends)
             goto out_needed;
     }
 
@@ -172,8 +172,8 @@ out_needed:
     free(candidates);
     free(needed);
 out_fileset:
-    fileset_free(&auto_set);
+    aept_fileset_free(&auto_set);
 out:
-    solver_fini();
+    aept_solver_fini();
     return r;
 }

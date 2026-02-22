@@ -20,28 +20,28 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
-void conffile_set_init(aept_conffile_set_t *cs)
+void aept_conffile_set_init(aept_conffile_set_t *cs)
 {
     cs->entries = NULL;
     cs->count = 0;
     cs->alloc = 0;
 }
 
-void conffile_set_add(aept_conffile_set_t *cs, const char *path,
+void aept_conffile_set_add(aept_conffile_set_t *cs, const char *path,
                       const char *md5)
 {
     if (cs->count >= cs->alloc) {
         cs->alloc = cs->alloc ? cs->alloc * 2 : 8;
-        cs->entries = xrealloc(cs->entries,
+        cs->entries = aept_realloc(cs->entries,
                                cs->alloc * sizeof(aept_conffile_t));
     }
 
-    cs->entries[cs->count].path = xstrdup(path);
-    cs->entries[cs->count].md5 = md5 ? xstrdup(md5) : NULL;
+    cs->entries[cs->count].path = aept_strdup(path);
+    cs->entries[cs->count].md5 = md5 ? aept_strdup(md5) : NULL;
     cs->count++;
 }
 
-const char *conffile_set_lookup(const aept_conffile_set_t *cs,
+const char *aept_conffile_set_lookup(const aept_conffile_set_t *cs,
                                 const char *path)
 {
     for (int i = 0; i < cs->count; i++) {
@@ -52,17 +52,17 @@ const char *conffile_set_lookup(const aept_conffile_set_t *cs,
     return NULL;
 }
 
-void conffile_set_free(aept_conffile_set_t *cs)
+void aept_conffile_set_free(aept_conffile_set_t *cs)
 {
     for (int i = 0; i < cs->count; i++) {
         free(cs->entries[i].path);
         free(cs->entries[i].md5);
     }
     free(cs->entries);
-    conffile_set_init(cs);
+    aept_conffile_set_init(cs);
 }
 
-char *conffile_md5(const char *path)
+char *aept_conffile_md5(const char *path)
 {
     Chksum *chk;
     FILE *fp;
@@ -88,7 +88,7 @@ char *conffile_md5(const char *path)
 
     raw = solv_chksum_get(chk, &len);
 
-    hex = xmalloc(len * 2 + 1);
+    hex = aept_malloc(len * 2 + 1);
     for (int i = 0; i < len; i++)
         sprintf(hex + i * 2, "%02x", raw[i]);
     hex[len * 2] = '\0';
@@ -97,13 +97,13 @@ char *conffile_md5(const char *path)
     return hex;
 }
 
-int conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
+int aept_conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
     char buf[4096];
 
-    xasprintf(&path, "%s/conffiles", control_dir);
+    aept_asprintf(&path, "%s/conffiles", control_dir);
     fp = fopen(path, "r");
     free(path);
 
@@ -111,31 +111,31 @@ int conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         buf[strcspn(buf, "\n")] = '\0';
         if (buf[0] == '\0')
             continue;
-        if (!archive_path_is_safe(buf)) {
-            log_warning("ignoring unsafe conffile path '%s'", buf);
+        if (!aept_archive_path_is_safe(buf)) {
+            aept_log_warning("ignoring unsafe conffile path '%s'", buf);
             continue;
         }
-        conffile_set_add(cs, buf, NULL);
+        aept_conffile_set_add(cs, buf, NULL);
     }
 
     fclose(fp);
     return 0;
 }
 
-int conffile_load(const char *name, aept_conffile_set_t *cs)
+int aept_conffile_load(const char *name, aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
     char buf[4096];
 
-    xasprintf(&path, "%s/%s.conffiles", cfg->info_dir, name);
+    aept_asprintf(&path, "%s/%s.conffiles", aept_cfg->info_dir, name);
     fp = fopen(path, "r");
     free(path);
 
@@ -145,8 +145,8 @@ int conffile_load(const char *name, aept_conffile_set_t *cs)
     while (fgets(buf, sizeof(buf), fp)) {
         char *sep;
 
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         buf[strcspn(buf, "\n")] = '\0';
@@ -162,22 +162,22 @@ int conffile_load(const char *name, aept_conffile_set_t *cs)
         while (*file_path == ' ')
             file_path++;
 
-        conffile_set_add(cs, file_path, buf);
+        aept_conffile_set_add(cs, file_path, buf);
     }
 
     fclose(fp);
     return 0;
 }
 
-int conffile_save(const char *name, const aept_conffile_set_t *cs)
+int aept_conffile_save(const char *name, const aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
 
-    xasprintf(&path, "%s/%s.conffiles", cfg->info_dir, name);
+    aept_asprintf(&path, "%s/%s.conffiles", aept_cfg->info_dir, name);
     fp = fopen(path, "w");
     if (!fp) {
-        log_error("cannot write '%s': %s", path, strerror(errno));
+        aept_log_error("cannot write '%s': %s", path, strerror(errno));
         free(path);
         return -1;
     }
@@ -189,7 +189,7 @@ int conffile_save(const char *name, const aept_conffile_set_t *cs)
     }
 
     if (ferror(fp) || fclose(fp) != 0) {
-        log_error("failed to write '%s'", path);
+        aept_log_error("failed to write '%s'", path);
         free(path);
         return -1;
     }
@@ -204,13 +204,13 @@ static int conffile_prompt(const char *cf_path,
                            const char *disk_path,
                            const char *new_path)
 {
-    if (cfg->force_confnew)
+    if (aept_cfg->force_confnew)
         return 1;
-    if (cfg->force_confold)
+    if (aept_cfg->force_confold)
         return 0;
 
     if (!isatty(STDIN_FILENO)) {
-        log_warning("'%s' has been modified; "
+        aept_log_warning("'%s' has been modified; "
                     "keeping old version (non-interactive)", cf_path);
         return -1;
     }
@@ -256,7 +256,7 @@ static int conffile_prompt(const char *cf_path,
         if (ch == 'd' || ch == 'D') {
             putchar('\n');
             const char *argv[] = {"diff", "-u", disk_path, new_path, NULL};
-            xsystem(argv);
+            aept_system(argv);
             continue;
         }
 
@@ -267,35 +267,35 @@ static int conffile_prompt(const char *cf_path,
                 shell = "/bin/sh";
             printf("Type 'exit' to return to the conffile prompt.\n");
             const char *argv[] = {shell, NULL};
-            xsystem(argv);
+            aept_system(argv);
             continue;
         }
     }
 }
 
-int conffile_resolve_upgrade(const char *name,
+int aept_conffile_resolve_upgrade(const char *name,
                              const aept_conffile_set_t *old_conffiles,
                              const aept_conffile_set_t *new_conffiles)
 {
     aept_conffile_set_t result;
 
-    conffile_set_init(&result);
+    aept_conffile_set_init(&result);
 
     for (int i = 0; i < new_conffiles->count; i++) {
         const char *cf_path = new_conffiles->entries[i].path;
-        char *disk_path = config_root_path(cf_path);
+        char *disk_path = aept_config_root_path(cf_path);
         char *new_path = NULL;
         const char *old_md5;
         char *current_md5;
         char *new_md5;
         int install_new = 0;
 
-        xasprintf(&new_path, "%s.aept-new", disk_path);
+        aept_asprintf(&new_path, "%s.aept-new", disk_path);
 
         old_md5 = old_conffiles ?
-            conffile_set_lookup(old_conffiles, cf_path) : NULL;
-        current_md5 = conffile_md5(disk_path);
-        new_md5 = conffile_md5(new_path);
+            aept_conffile_set_lookup(old_conffiles, cf_path) : NULL;
+        current_md5 = aept_conffile_md5(disk_path);
+        new_md5 = aept_conffile_md5(new_path);
 
         if (!current_md5) {
             /* File does not exist on disk: install new */
@@ -319,7 +319,7 @@ int conffile_resolve_upgrade(const char *name,
 
         if (install_new > 0 && new_md5) {
             if (rename(new_path, disk_path) < 0)
-                log_warning("failed to install new conffile '%s'", cf_path);
+                aept_log_warning("failed to install new conffile '%s'", cf_path);
         } else if (install_new == 0) {
             unlink(new_path);
         }
@@ -328,7 +328,7 @@ int conffile_resolve_upgrade(const char *name,
         /* Record the package's conffile hash so future upgrades
          * can detect user modifications against the shipped version. */
         {
-            conffile_set_add(&result, cf_path, new_md5);
+            aept_conffile_set_add(&result, cf_path, new_md5);
         }
 
         free(disk_path);
@@ -337,7 +337,7 @@ int conffile_resolve_upgrade(const char *name,
         free(new_md5);
     }
 
-    conffile_save(name, &result);
-    conffile_set_free(&result);
+    aept_conffile_save(name, &result);
+    aept_conffile_set_free(&result);
     return 0;
 }

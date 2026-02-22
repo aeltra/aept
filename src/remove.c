@@ -25,24 +25,24 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-int remove_files(const char *name, aept_fileset_t *protected)
+int aept_remove_files(const char *name, aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
     char buf[4096];
     aept_conffile_set_t conffiles;
 
-    conffile_set_init(&conffiles);
-    if (!cfg->purge)
-        conffile_load(name, &conffiles);
+    aept_conffile_set_init(&conffiles);
+    if (!aept_cfg->purge)
+        aept_conffile_load(name, &conffiles);
 
-    xasprintf(&list_path, "%s/%s.list", cfg->info_dir, name);
+    aept_asprintf(&list_path, "%s/%s.list", aept_cfg->info_dir, name);
 
     fp = fopen(list_path, "r");
     free(list_path);
 
     if (!fp) {
-        conffile_set_free(&conffiles);
+        aept_conffile_set_free(&conffiles);
         return 0;
     }
 
@@ -50,8 +50,8 @@ int remove_files(const char *name, aept_fileset_t *protected)
         char *path;
         char *tab;
 
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
 
@@ -73,26 +73,26 @@ int remove_files(const char *name, aept_fileset_t *protected)
         if (path[0] == '\0')
             continue;
 
-        if (!archive_path_is_safe(path))
+        if (!aept_archive_path_is_safe(path))
             continue;
 
-        if (protected && fileset_contains(protected, path))
+        if (protected && aept_fileset_contains(protected, path))
             continue;
 
         char *full_path = NULL;
-        xasprintf(&full_path, "%s/%s",
-                  cfg->offline_root ? cfg->offline_root : "", path);
+        aept_asprintf(&full_path, "%s/%s",
+                  aept_cfg->offline_root ? aept_cfg->offline_root : "", path);
 
         /* Skip modified conffiles unless purging */
         if (conffiles.count > 0) {
             char *abs_path = NULL;
-            xasprintf(&abs_path, "/%s", path);
-            const char *saved_md5 = conffile_set_lookup(&conffiles,
+            aept_asprintf(&abs_path, "/%s", path);
+            const char *saved_md5 = aept_conffile_set_lookup(&conffiles,
                                                         abs_path);
             if (saved_md5) {
-                char *cur_md5 = conffile_md5(full_path);
+                char *cur_md5 = aept_conffile_md5(full_path);
                 if (cur_md5 && strcmp(saved_md5, cur_md5) != 0) {
-                    log_info("not removing modified conffile '%s'",
+                    aept_log_info("not removing modified conffile '%s'",
                              abs_path);
                     free(cur_md5);
                     free(abs_path);
@@ -105,14 +105,14 @@ int remove_files(const char *name, aept_fileset_t *protected)
         }
 
         if (unlink(full_path) < 0 && errno != ENOENT)
-            log_debug("cannot remove '%s': %s",
+            aept_log_debug("cannot remove '%s': %s",
                       full_path, strerror(errno));
 
         free(full_path);
     }
 
     fclose(fp);
-    conffile_set_free(&conffiles);
+    aept_conffile_set_free(&conffiles);
 
     return 0;
 }
@@ -126,7 +126,7 @@ static void remove_info_files(const char *name)
 
     for (int i = 0; exts[i]; i++) {
         char *path = NULL;
-        xasprintf(&path, "%s/%s.%s", cfg->info_dir, name, exts[i]);
+        aept_asprintf(&path, "%s/%s.%s", aept_cfg->info_dir, name, exts[i]);
         unlink(path);
         free(path);
     }
@@ -137,39 +137,39 @@ int aept_do_remove(const char *name, const char *new_version,
 {
     int r;
 
-    if (!pkg_name_is_safe(name)) {
-        log_error("refusing to remove package with unsafe name '%s'", name);
+    if (!aept_pkg_name_is_safe(name)) {
+        aept_log_error("refusing to remove package with unsafe name '%s'", name);
         return -1;
     }
 
-    log_info("removing %s", name);
+    aept_log_info("removing %s", name);
 
     /* Run prerm */
-    r = run_script(cfg->info_dir, name, "prerm",
+    r = aept_run_script(aept_cfg->info_dir, name, "prerm",
                    new_version ? "upgrade" : "remove", new_version);
     if (r != 0) {
-        log_error("prerm failed for '%s', aborting removal", name);
+        aept_log_error("prerm failed for '%s', aborting removal", name);
         return -1;
     }
 
     /* Remove files */
-    remove_files(name, protected);
+    aept_remove_files(name, protected);
 
     /* Run postrm */
-    r = run_script(cfg->info_dir, name, "postrm",
+    r = aept_run_script(aept_cfg->info_dir, name, "postrm",
                    new_version ? "upgrade" : "remove", new_version);
     if (r != 0)
-        log_warning("postrm failed for '%s', continuing", name);
+        aept_log_warning("postrm failed for '%s', continuing", name);
 
     /* Remove info files */
     remove_info_files(name);
 
     /* Update status */
-    status_remove(name);
-    status_unmark_auto(name);
-    pin_remove(name);
+    aept_status_remove(name);
+    aept_status_unmark_auto(name);
+    aept_pin_remove(name);
 
-    log_debug("removed %s", name);
+    aept_log_debug("removed %s", name);
 
     return 0;
 }
@@ -180,29 +180,29 @@ int aept_remove(const char **names, int count)
     Pool *pool;
     int i, r;
 
-    r = solver_init();
+    r = aept_solver_init();
     if (r < 0)
         return -1;
 
-    r = status_load();
+    r = aept_status_load();
     if (r < 0)
         goto out;
 
-    r = solver_resolve_remove(names, count);
+    r = aept_solver_resolve_remove(names, count);
     if (r < 0)
         goto out;
 
-    trans = solver_transaction();
-    pool = solver_pool();
+    trans = aept_solver_transaction();
+    pool = aept_solver_pool();
 
     if (!trans || trans->steps.count == 0) {
-        log_info("nothing to do");
+        aept_log_info("nothing to do");
         r = 0;
         goto out;
     }
 
     int n_erase = 0;
-    const char **erase_names = xmalloc(trans->steps.count * sizeof(char *));
+    const char **erase_names = aept_malloc(trans->steps.count * sizeof(char *));
 
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
@@ -218,28 +218,28 @@ int aept_remove(const char **names, int count)
     }
 
     if (n_erase > 0) {
-        print_heading("The following packages will be REMOVED:");
-        print_names(erase_names, n_erase);
+        aept_print_heading("The following packages will be REMOVED:");
+        aept_print_names(erase_names, n_erase);
     }
 
-    print_heading("0 to install, 0 to upgrade, %d to remove.", n_erase);
+    aept_print_heading("0 to install, 0 to upgrade, %d to remove.", n_erase);
 
     free(erase_names);
 
-    if (n_erase > count && !confirm_continue()) {
+    if (n_erase > count && !aept_confirm_continue()) {
         r = 0;
         goto out;
     }
 
-    if (cfg->noaction) {
-        log_info("dry run, not removing");
+    if (aept_cfg->noaction) {
+        aept_log_info("dry run, not removing");
         r = 0;
         goto out;
     }
 
     for (i = 0; i < trans->steps.count; i++) {
-        if (signal_was_interrupted()) {
-            log_warning("interrupted, stopping");
+        if (aept_signal_was_interrupted()) {
+            aept_log_warning("interrupted, stopping");
             r = -1;
             goto out;
         }
@@ -256,13 +256,13 @@ int aept_remove(const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
 
         r = aept_do_remove(pkg_name, NULL, NULL);
-        if (r < 0 && !cfg->force_depends)
+        if (r < 0 && !aept_cfg->force_depends)
             goto out;
     }
 
     r = 0;
 
 out:
-    solver_fini();
+    aept_solver_fini();
     return r;
 }

@@ -44,7 +44,7 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     if (level < 0 || level > AEPT_DEBUG)
         return;
 
-    if (cfg && level > cfg->verbosity)
+    if (aept_cfg && level > aept_cfg->verbosity)
         return;
 
     out = (level <= AEPT_WARNING) ? stderr : stdout;
@@ -66,12 +66,12 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     fputc('\n', out);
 }
 
-int confirm_continue(void)
+int aept_confirm_continue(void)
 {
     struct termios old_tio, new_tio;
     int ch;
 
-    if (cfg->non_interactive)
+    if (aept_cfg->non_interactive)
         return 1;
 
     printf("Do you want to continue? [Y/n] ");
@@ -95,7 +95,7 @@ int confirm_continue(void)
     return 1;
 }
 
-void print_heading(const char *fmt, ...)
+void aept_print_heading(const char *fmt, ...)
 {
     va_list ap;
 
@@ -130,7 +130,7 @@ static int cmp_str(const void *a, const void *b)
     return strcmp(*(const char **)a, *(const char **)b);
 }
 
-void print_names(const char **list, int count)
+void aept_print_names(const char **list, int count)
 {
     int i, col, width, len;
 

@@ -25,22 +25,22 @@ static int decompress_gz(const char *gz_path, const char *out_path)
     FILE *fp;
     int r;
 
-    ar = ar_open_compressed_file(gz_path);
+    ar = aept_ar_open_compressed_file(gz_path);
     if (!ar)
         return -1;
 
     fp = fopen(out_path, "w");
     if (!fp) {
-        ar_close(ar);
+        aept_ar_close(ar);
         return -1;
     }
 
-    r = ar_copy_to_stream(ar, fp);
+    r = aept_ar_copy_to_stream(ar, fp);
 
     if (fclose(fp) != 0 && r == 0)
         r = -1;
 
-    ar_close(ar);
+    aept_ar_close(ar);
 
     return r;
 }
@@ -49,8 +49,8 @@ static int is_active_source(const char *name)
 {
     int i;
 
-    for (i = 0; i < cfg->nsources; i++) {
-        if (strcmp(name, cfg->sources[i].name) == 0)
+    for (i = 0; i < aept_cfg->nsources; i++) {
+        if (strcmp(name, aept_cfg->sources[i].name) == 0)
             return 1;
     }
 
@@ -62,7 +62,7 @@ static void prune_stale_lists(void)
     DIR *d;
     struct dirent *ent;
 
-    d = opendir(cfg->lists_dir);
+    d = opendir(aept_cfg->lists_dir);
     if (!d)
         return;
 
@@ -76,7 +76,7 @@ static void prune_stale_lists(void)
             continue;
 
         /* Strip .sig suffix to get the source name */
-        copy = xstrdup(name);
+        copy = aept_strdup(name);
         base = copy;
 
         size_t len = strlen(base);
@@ -84,7 +84,7 @@ static void prune_stale_lists(void)
             base[len - 4] = '\0';
 
         if (!is_active_source(base)) {
-            xasprintf(&path, "%s/%s", cfg->lists_dir, name);
+            aept_asprintf(&path, "%s/%s", aept_cfg->lists_dir, name);
             unlink(path);
             free(path);
         }
@@ -100,28 +100,28 @@ int aept_update(void)
     int i;
     int errors = 0;
 
-    file_mkdir_hier(cfg->lists_dir, 0755);
+    aept_file_mkdir_hier(aept_cfg->lists_dir, 0755);
 
-    for (i = 0; i < cfg->nsources; i++) {
-        if (strncmp(cfg->sources[i].url, "https://", 8) != 0)
-            log_warning("source '%s' uses insecure transport",
-                        cfg->sources[i].name);
+    for (i = 0; i < aept_cfg->nsources; i++) {
+        if (strncmp(aept_cfg->sources[i].url, "https://", 8) != 0)
+            aept_log_warning("source '%s' uses insecure transport",
+                        aept_cfg->sources[i].name);
     }
 
-    for (i = 0; i < cfg->nsources; i++) {
-        aept_source_t *src = &cfg->sources[i];
+    for (i = 0; i < aept_cfg->nsources; i++) {
+        aept_source_t *src = &aept_cfg->sources[i];
         char *url = NULL;
         char *dest = NULL;
         char *list_path = NULL;
         int r;
 
-        xasprintf(&list_path, "%s/%s", cfg->lists_dir, src->name);
+        aept_asprintf(&list_path, "%s/%s", aept_cfg->lists_dir, src->name);
 
         if (src->gzip) {
             char *gz_path = NULL;
 
-            xasprintf(&url, "%s/Packages.gz", src->url);
-            xasprintf(&gz_path, "%s.gz", list_path);
+            aept_asprintf(&url, "%s/Packages.gz", src->url);
+            aept_asprintf(&gz_path, "%s.gz", list_path);
 
             r = aept_download(url, gz_path, url);
             if (r < 0) {
@@ -134,13 +134,13 @@ int aept_update(void)
             free(gz_path);
 
             if (r < 0) {
-                log_error("failed to decompress Packages.gz for '%s'",
+                aept_log_error("failed to decompress Packages.gz for '%s'",
                           src->name);
                 errors++;
                 goto next;
             }
         } else {
-            xasprintf(&url, "%s/Packages", src->url);
+            aept_asprintf(&url, "%s/Packages", src->url);
 
             r = aept_download(url, list_path, "Packages");
             if (r < 0) {
@@ -149,16 +149,16 @@ int aept_update(void)
             }
         }
 
-        if (cfg->check_signature) {
+        if (aept_cfg->check_signature) {
             char *sig_url = NULL;
             char *sig_path = NULL;
 
-            xasprintf(&sig_url, "%s/Packages.sig", src->url);
-            xasprintf(&sig_path, "%s.sig", list_path);
+            aept_asprintf(&sig_url, "%s/Packages.sig", src->url);
+            aept_asprintf(&sig_path, "%s.sig", list_path);
 
             r = aept_download(sig_url, sig_path, sig_url);
             if (r < 0) {
-                log_error("failed to download signature for '%s'",
+                aept_log_error("failed to download signature for '%s'",
                           src->name);
                 unlink(list_path);
                 errors++;
@@ -181,7 +181,7 @@ int aept_update(void)
             free(sig_path);
         }
 
-        log_info("updated source '%s'", src->name);
+        aept_log_info("updated source '%s'", src->name);
 
     next:
         free(url);

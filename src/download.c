@@ -16,13 +16,13 @@ int aept_download(const char *url, const char *dest, const char *name)
 {
     const char *argv[] = {"wget", "-q", "-O", dest, url, NULL};
 
-    log_info("downloading %s", name);
+    aept_log_info("downloading %s", name);
 
     unlink(dest);
 
-    int r = xsystem(argv);
+    int r = aept_system(argv);
     if (r != 0) {
-        log_error("failed to download '%s'", url);
+        aept_log_error("failed to download '%s'", url);
         unlink(dest);
         return -1;
     }

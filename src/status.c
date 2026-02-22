@@ -16,7 +16,7 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-int status_load(void)
+int aept_status_load(void)
 {
     FILE *fp, *mem;
     char *buf = NULL;
@@ -27,13 +27,13 @@ int status_load(void)
     static const char unpacked_status[] = "Status: install ok unpacked";
     static const char installed_status[] = "Status: install ok installed";
 
-    if (!file_exists(cfg->status_file))
+    if (!aept_file_exists(aept_cfg->status_file))
         return 0;
 
-    fp = fopen(cfg->status_file, "r");
+    fp = fopen(aept_cfg->status_file, "r");
     if (!fp) {
-        log_error("cannot open status file '%s': %s",
-                  cfg->status_file, strerror(errno));
+        aept_log_error("cannot open status file '%s': %s",
+                  aept_cfg->status_file, strerror(errno));
         return -1;
     }
 
@@ -67,7 +67,7 @@ int status_load(void)
         return -1;
     }
 
-    r = solver_load_installed(fp);
+    r = aept_solver_load_installed(fp);
     fclose(fp);
     free(buf);
 
@@ -75,7 +75,7 @@ int status_load(void)
 }
 
 
-int status_add(const char *control_path, const char *state)
+int aept_status_add(const char *control_path, const char *state)
 {
     FILE *src, *old, *dst;
     char *tmp_path = NULL;
@@ -83,15 +83,15 @@ int status_add(const char *control_path, const char *state)
 
     src = fopen(control_path, "r");
     if (!src) {
-        log_error("cannot open control file '%s': %s",
+        aept_log_error("cannot open control file '%s': %s",
                   control_path, strerror(errno));
         return -1;
     }
 
-    xasprintf(&tmp_path, "%s.tmp", cfg->status_file);
+    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->status_file);
     dst = fopen(tmp_path, "w");
     if (!dst) {
-        log_error("cannot open status file '%s': %s",
+        aept_log_error("cannot open status file '%s': %s",
                   tmp_path, strerror(errno));
         fclose(src);
         free(tmp_path);
@@ -99,7 +99,7 @@ int status_add(const char *control_path, const char *state)
     }
 
     /* Copy existing status file */
-    old = fopen(cfg->status_file, "r");
+    old = fopen(aept_cfg->status_file, "r");
     if (old) {
         while (fgets(buf, sizeof(buf), old))
             fputs(buf, dst);
@@ -115,14 +115,14 @@ int status_add(const char *control_path, const char *state)
     fclose(src);
 
     if (ferror(dst) || fclose(dst) != 0) {
-        log_error("failed to write status file '%s'", tmp_path);
+        aept_log_error("failed to write status file '%s'", tmp_path);
         unlink(tmp_path);
         free(tmp_path);
         return -1;
     }
 
-    if (rename(tmp_path, cfg->status_file) < 0) {
-        log_error("cannot rename status file: %s", strerror(errno));
+    if (rename(tmp_path, aept_cfg->status_file) < 0) {
+        aept_log_error("cannot rename status file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -132,7 +132,7 @@ int status_add(const char *control_path, const char *state)
     return 0;
 }
 
-int status_remove(const char *name)
+int aept_status_remove(const char *name)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
@@ -140,11 +140,11 @@ int status_remove(const char *name)
     int skip = 0;
     int continuation = 0;
 
-    fp = fopen(cfg->status_file, "r");
+    fp = fopen(aept_cfg->status_file, "r");
     if (!fp)
         return 0;
 
-    xasprintf(&tmp_path, "%s.tmp", cfg->status_file);
+    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->status_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         fclose(fp);
@@ -167,20 +167,20 @@ int status_remove(const char *name)
         if (!skip)
             fputs(buf, tmp);
 
-        continuation = fgets_is_truncated(buf, sizeof(buf));
+        continuation = aept_fgets_is_truncated(buf, sizeof(buf));
     }
 
     fclose(fp);
 
     if (ferror(tmp) || fclose(tmp) != 0) {
-        log_error("failed to write status file '%s'", tmp_path);
+        aept_log_error("failed to write status file '%s'", tmp_path);
         unlink(tmp_path);
         free(tmp_path);
         return -1;
     }
 
-    if (rename(tmp_path, cfg->status_file) < 0) {
-        log_error("cannot rename status file: %s", strerror(errno));
+    if (rename(tmp_path, aept_cfg->status_file) < 0) {
+        aept_log_error("cannot rename status file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -190,41 +190,41 @@ int status_remove(const char *name)
     return 0;
 }
 
-int status_mark_auto(const char *name)
+int aept_status_mark_auto(const char *name)
 {
-    if (status_is_auto(name))
+    if (aept_status_is_auto(name))
         return 0;
 
-    FILE *fp = fopen(cfg->auto_file, "a");
+    FILE *fp = fopen(aept_cfg->auto_file, "a");
     if (!fp) {
-        log_error("cannot open auto-installed file '%s': %s",
-                  cfg->auto_file, strerror(errno));
+        aept_log_error("cannot open auto-installed file '%s': %s",
+                  aept_cfg->auto_file, strerror(errno));
         return -1;
     }
 
     fprintf(fp, "%s\n", name);
 
     if (ferror(fp) || fclose(fp) != 0) {
-        log_error("failed to write auto-installed file '%s'",
-                  cfg->auto_file);
+        aept_log_error("failed to write auto-installed file '%s'",
+                  aept_cfg->auto_file);
         return -1;
     }
 
     return 0;
 }
 
-int status_unmark_auto(const char *name)
+int aept_status_unmark_auto(const char *name)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
     char buf[256];
     int found = 0;
 
-    fp = fopen(cfg->auto_file, "r");
+    fp = fopen(aept_cfg->auto_file, "r");
     if (!fp)
         return 0;
 
-    xasprintf(&tmp_path, "%s.tmp", cfg->auto_file);
+    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->auto_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         fclose(fp);
@@ -233,8 +233,8 @@ int status_unmark_auto(const char *name)
     }
 
     while (fgets(buf, sizeof(buf), fp)) {
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         char pkg_name[256];
@@ -256,14 +256,14 @@ int status_unmark_auto(const char *name)
     }
 
     if (ferror(tmp) || fclose(tmp) != 0) {
-        log_error("failed to write auto-installed file '%s'", tmp_path);
+        aept_log_error("failed to write auto-installed file '%s'", tmp_path);
         unlink(tmp_path);
         free(tmp_path);
         return -1;
     }
 
-    if (rename(tmp_path, cfg->auto_file) < 0) {
-        log_error("cannot rename auto-installed file: %s", strerror(errno));
+    if (rename(tmp_path, aept_cfg->auto_file) < 0) {
+        aept_log_error("cannot rename auto-installed file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -273,18 +273,18 @@ int status_unmark_auto(const char *name)
     return 0;
 }
 
-int status_is_auto(const char *name)
+int aept_status_is_auto(const char *name)
 {
     FILE *fp;
     char buf[256];
 
-    fp = fopen(cfg->auto_file, "r");
+    fp = fopen(aept_cfg->auto_file, "r");
     if (!fp)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         char pkg_name[256];
@@ -299,38 +299,38 @@ int status_is_auto(const char *name)
     return 0;
 }
 
-int status_clear_auto(void)
+int aept_status_clear_auto(void)
 {
-    FILE *fp = fopen(cfg->auto_file, "w");
+    FILE *fp = fopen(aept_cfg->auto_file, "w");
     if (!fp) {
-        log_error("cannot open auto-installed file '%s': %s",
-                  cfg->auto_file, strerror(errno));
+        aept_log_error("cannot open auto-installed file '%s': %s",
+                  aept_cfg->auto_file, strerror(errno));
         return -1;
     }
     fclose(fp);
     return 0;
 }
 
-int status_load_auto_set(aept_fileset_t *set)
+int aept_status_load_auto_set(aept_fileset_t *set)
 {
     FILE *fp;
     char buf[256];
 
-    fp = fopen(cfg->auto_file, "r");
+    fp = fopen(aept_cfg->auto_file, "r");
     if (!fp)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
-        if (fgets_is_truncated(buf, sizeof(buf))) {
-            fgets_drain_line(fp);
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
             continue;
         }
         char pkg_name[256];
         if (sscanf(buf, "%255s", pkg_name) == 1)
-            fileset_add(set, pkg_name);
+            aept_fileset_add(set, pkg_name);
     }
 
     fclose(fp);
-    fileset_sort(set);
+    aept_fileset_sort(set);
     return 0;
 }
