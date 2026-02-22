@@ -1,7 +1,7 @@
+lib_LTLIBRARIES = libaept.la
 bin_PROGRAMS = aept
 
-aept_SOURCES = \
-    main.c \
+libaept_la_SOURCES = \
     autoremove.c \
     clean.c \
     conffile.c \
@@ -20,5 +20,10 @@ aept_SOURCES = \
     msg.c \
     pin.c
 
+libaept_la_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
+libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS)
+libaept_la_LDFLAGS = -version-info 0:0:0
+
+aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
-aept_LDADD = $(SOLV_LIBS) $(ARCHIVE_LIBS)
+aept_LDADD = libaept.la

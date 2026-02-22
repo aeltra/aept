@@ -3,11 +3,13 @@ AC_CONFIG_SRCDIR([src/main.c])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign subdir-objects -Wall -Werror])
+AC_CONFIG_MACRO_DIRS([m4])
 
 AC_CANONICAL_HOST
 AC_PROG_CC
 AC_PROG_INSTALL
 AM_PROG_AR
+LT_INIT
 
 AC_DEFINE([_GNU_SOURCE], [1], [Enable GNU extensions])
 

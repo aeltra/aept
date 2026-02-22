@@ -427,6 +427,22 @@ void solver_clear_pins(void)
     npins = 0;
 }
 
+const char *solver_installed_version(const char *name)
+{
+    if (!pool || !pool->installed)
+        return NULL;
+
+    Id p;
+    Solvable *s;
+
+    FOR_REPO_SOLVABLES(pool->installed, p, s) {
+        if (strcmp(pool_id2str(pool, s->name), name) == 0)
+            return pool_id2str(pool, s->evr);
+    }
+
+    return NULL;
+}
+
 void solver_fini(void)
 {
     int i;

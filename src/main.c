@@ -11,10 +11,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <solv/pool.h>
-#include <solv/repo.h>
-#include <solv/solvable.h>
-
 #include "aept/aept.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
@@ -905,17 +901,12 @@ static int cmd_pin(int argc, char *argv[])
         }
     }
 
-    Pool *pool = NULL;
-    Repo *installed = NULL;
-
     if (need_solver) {
         if (solver_init() < 0 || status_load() < 0) {
             solver_fini();
             config_free();
             return 1;
         }
-        pool = solver_pool();
-        installed = pool->installed;
     }
 
     r = 0;
@@ -935,19 +926,7 @@ static int cmd_pin(int argc, char *argv[])
                 log_info("pinned %s at version %s", name, version);
         } else {
             name = argv[i];
-            const char *found_version = NULL;
-
-            if (installed) {
-                Id p;
-                Solvable *s;
-
-                FOR_REPO_SOLVABLES(installed, p, s) {
-                    if (strcmp(pool_id2str(pool, s->name), name) == 0) {
-                        found_version = pool_id2str(pool, s->evr);
-                        break;
-                    }
-                }
-            }
+            const char *found_version = solver_installed_version(name);
 
             if (!found_version) {
                 log_warning("package '%s' is not installed, skipping",
@@ -955,12 +934,10 @@ static int cmd_pin(int argc, char *argv[])
                 continue;
             }
 
-            char *ver_copy = xstrdup(found_version);
-            if (pin_add(name, ver_copy) < 0)
+            if (pin_add(name, found_version) < 0)
                 r = -1;
             else
-                log_info("pinned %s at version %s", name, ver_copy);
-            free(ver_copy);
+                log_info("pinned %s at version %s", name, found_version);
         }
     }
 

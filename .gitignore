@@ -8,6 +8,8 @@
 /configure~
 /m4/*.m4
 Makefile.in
+libtool
+/src/.libs
 
 # Build output (after ./configure && make)
 /config.h
@@ -17,6 +19,8 @@ Makefile.in
 Makefile
 .deps/
 *.o
+*.lo
+*.la
 /src/aept
 
 # Distribution tarballs

@@ -61,6 +61,11 @@ void solver_add_pin(const char *name, const char *version);
 /* Clear all registered pins (called by solver_fini). */
 void solver_clear_pins(void);
 
+/* Look up the installed version of a package by name.
+ * Returns the version string (valid until solver_fini), or NULL if not
+ * installed. */
+const char *solver_installed_version(const char *name);
+
 /* Free all solver state. */
 void solver_fini(void);
 
