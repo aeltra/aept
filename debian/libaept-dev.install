@@ -1,3 +1,4 @@
 usr/include/aept/aept.h
+usr/lib/*/libaept.a
 usr/lib/*/libaept.so
 usr/lib/*/libaept.la
