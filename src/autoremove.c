@@ -13,7 +13,7 @@
 #include <solv/repo.h>
 #include <solv/solvable.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/autoremove.h"
 #include "aept/msg.h"
 #include "aept/remove.h"

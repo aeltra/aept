@@ -10,7 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/pin.h"
 #include "aept/solver.h"

@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/util.h"
 #include "aept/verify.h"

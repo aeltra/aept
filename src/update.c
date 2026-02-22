@@ -11,7 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/download.h"
 #include "aept/msg.h"

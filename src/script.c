@@ -9,7 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/script.h"
 #include "aept/util.h"

@@ -11,7 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"

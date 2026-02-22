@@ -19,7 +19,7 @@
 #include <solv/queue.h>
 #include <solv/problems.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/solver.h"
 #include "aept/util.h"

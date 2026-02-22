@@ -21,7 +21,7 @@
 #include <solv/solvable.h>
 #include <solv/transaction.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/conffile.h"
 #include "aept/config.h"

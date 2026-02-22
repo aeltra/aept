@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/download.h"
 #include "aept/msg.h"
 #include "aept/util.h"

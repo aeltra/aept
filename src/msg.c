@@ -12,7 +12,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/msg.h"
 
 static int use_color;

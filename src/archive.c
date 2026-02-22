@@ -16,7 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "aept/aept.h"
+#include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/msg.h"
 #include "aept/util.h"
