@@ -345,8 +345,10 @@ static struct archive *open_ipk_tar(const char *ipk_path, const char *prefix)
     }
 
     struct archive *inner = open_inner(outer);
-    if (!inner)
-        return NULL;  /* outer freed by open_inner on failure path? No. */
+    if (!inner) {
+        archive_read_free(outer);
+        return NULL;
+    }
 
     return inner;
 }
@@ -362,8 +364,8 @@ static struct archive *new_disk_writer(int flags)
         return NULL;
     }
 
-    if (archive_write_disk_set_options(disk, flags) != ARCHIVE_OK &&
-            archive_write_disk_set_options(disk, flags) != ARCHIVE_WARN) {
+    int r = archive_write_disk_set_options(disk, flags);
+    if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
         aept_log_error("failed to set disk options: %s",
                   archive_error_string(disk));
         archive_write_free(disk);
