@@ -108,7 +108,10 @@ void aept_ctx_free(aept_ctx_t *ctx)
 int aept_ctx_load_config(aept_ctx_t *ctx, const char *path)
 {
     aept_config_t *saved = aept_cfg;
+    char *root_override = ctx->config.offline_root;
     int r = 0;
+
+    ctx->config.offline_root = NULL;
 
     if (ctx->config_loaded) {
         aept_cfg = &ctx->config;
@@ -127,8 +130,14 @@ int aept_ctx_load_config(aept_ctx_t *ctx, const char *path)
         r = aept_config_load(path);
 
     if (r < 0) {
+        free(root_override);
         aept_cfg = saved;
         return -1;
+    }
+
+    if (root_override) {
+        free(aept_cfg->offline_root);
+        aept_cfg->offline_root = root_override;
     }
 
     aept_config_apply_offline_root();

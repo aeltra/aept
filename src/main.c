@@ -11,18 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "aept/internal.h"
-#include "aept/autoremove.h"
-#include "aept/clean.h"
-#include "aept/config.h"
-#include "aept/install.h"
+#include "aept/aept.h"
 #include "aept/msg.h"
-#include "aept/pin.h"
-#include "aept/query.h"
-#include "aept/remove.h"
-#include "aept/solver.h"
-#include "aept/status.h"
-#include "aept/update.h"
 #include "aept/util.h"
 
 #define DEFAULT_CONF "/etc/aept/aept.conf"
@@ -32,7 +22,7 @@ static const char *offline_root;
 static int conf_explicit;
 static int verbose_count;
 
-/* ── shared config helpers ─────────────────────────────────────────── */
+/* ── shared helpers ───────────────────────────────────────────────── */
 
 static const char *resolve_conf(void)
 {
@@ -45,62 +35,51 @@ static const char *resolve_conf(void)
     return path;
 }
 
-static int load_config(void)
+static aept_ctx_t *init_ctx(void)
 {
-    const char *cf = resolve_conf();
+    aept_ctx_t *ctx;
+    const char *cf;
 
-    if (access(cf, R_OK) < 0 && !conf_explicit && errno == ENOENT) {
-        aept_log_warning("config file '%s' not found, using defaults", cf);
-        aept_config_set_defaults();
-    } else if (aept_config_load(cf) < 0) {
-        if (cf != conf_file)
-            free((char *)cf);
-        return -1;
+    ctx = aept_ctx_new();
+    if (!ctx) {
+        aept_log_error("out of memory");
+        return NULL;
     }
 
-    aept_cfg->verbosity += verbose_count;
+    if (offline_root)
+        aept_ctx_set_offline_root(ctx, offline_root);
+
+    cf = resolve_conf();
+
+    if (conf_explicit && access(cf, R_OK) < 0) {
+        aept_log_error("cannot access config file '%s': %s",
+                  cf, strerror(errno));
+        aept_ctx_free(ctx);
+        return NULL;
+    }
+
+    if (!conf_explicit && access(cf, R_OK) < 0 && errno == ENOENT)
+        aept_log_warning("config file '%s' not found, using defaults", cf);
+
+    if (aept_ctx_load_config(ctx, cf) < 0) {
+        if (cf != conf_file)
+            free((char *)cf);
+        aept_ctx_free(ctx);
+        return NULL;
+    }
 
     if (cf != conf_file)
         free((char *)cf);
 
-    if (offline_root) {
-        free(aept_cfg->offline_root);
-        aept_cfg->offline_root = aept_strdup(offline_root);
-    }
+    aept_ctx_set_verbosity(ctx, AEPT_LOG_INFO + verbose_count);
 
-    aept_config_apply_offline_root();
-
-    if (!aept_cfg->offline_root && !aept_file_exists("/etc/aeltra_version")) {
+    if (!offline_root && access("/etc/aeltra_version", F_OK) != 0) {
         aept_log_error("not running on Aeltra OS; use -o to set an offline root");
-        aept_config_free();
-        return -1;
+        aept_ctx_free(ctx);
+        return NULL;
     }
 
-    return 0;
-}
-
-static int setup_config(void)
-{
-    if (load_config() < 0)
-        return -1;
-
-    if (aept_config_validate() < 0) {
-        aept_config_free();
-        return -1;
-    }
-
-    if (aept_config_lock() < 0) {
-        aept_config_free();
-        return -1;
-    }
-
-    return 0;
-}
-
-static void teardown_config(void)
-{
-    aept_config_unlock();
-    aept_config_free();
+    return ctx;
 }
 
 /* ── usage functions ───────────────────────────────────────────────── */
@@ -431,6 +410,7 @@ static struct option print_arch_options[] = {
 
 static int cmd_update(int argc, char *argv[])
 {
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -441,11 +421,12 @@ static int cmd_update(int argc, char *argv[])
         }
     }
 
-    if (setup_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_update();
-    teardown_config();
+    r = aept_update(ctx);
+    aept_ctx_free(ctx);
     return r;
 }
 
@@ -454,6 +435,7 @@ static int cmd_install(int argc, char *argv[])
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, reinstall = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -500,35 +482,39 @@ static int cmd_install(int argc, char *argv[])
         }
     }
 
-    if (setup_config() < 0) {
+    ctx = init_ctx();
+    if (!ctx) {
         free(pkg_names);
         free(local_paths);
         return 1;
     }
 
-    aept_cfg->force_depends = force_depends;
-    aept_cfg->download_only = download_only;
-    aept_cfg->noaction = noaction;
-    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    aept_cfg->allow_downgrade = allow_downgrade;
-    aept_cfg->reinstall = reinstall;
-    aept_cfg->no_cache = no_cache;
-    aept_cfg->force_confnew = force_confnew;
-    aept_cfg->force_confold = force_confold;
-    if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
-        aept_cfg->force_confold = 1;
+    non_interactive = non_interactive || !isatty(STDIN_FILENO);
 
-    r = aept_op_install(n_names > 0 ? pkg_names : NULL, n_names,
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_DEPENDS, force_depends);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_DOWNLOAD_ONLY, download_only);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_ALLOW_DOWNGRADE, allow_downgrade);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_REINSTALL, reinstall);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NO_CACHE, no_cache);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFNEW, force_confnew);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, force_confold);
+    if (non_interactive && !force_confnew)
+        aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, 1);
+
+    r = aept_install(ctx, n_names > 0 ? pkg_names : NULL, n_names,
                      n_locals > 0 ? local_paths : NULL, n_locals);
     free(pkg_names);
     free(local_paths);
-    teardown_config();
+    aept_ctx_free(ctx);
     return r;
 }
 
 static int cmd_autoremove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -543,22 +529,26 @@ static int cmd_autoremove(int argc, char *argv[])
         }
     }
 
-    if (setup_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    aept_cfg->force_depends = force_depends;
-    aept_cfg->noaction = noaction;
-    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    aept_cfg->purge = purge;
+    non_interactive = non_interactive || !isatty(STDIN_FILENO);
 
-    r = aept_op_autoremove();
-    teardown_config();
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_DEPENDS, force_depends);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_PURGE, purge);
+
+    r = aept_autoremove(ctx);
+    aept_ctx_free(ctx);
     return r;
 }
 
 static int cmd_remove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -578,16 +568,19 @@ static int cmd_remove(int argc, char *argv[])
         return 1;
     }
 
-    if (setup_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    aept_cfg->force_depends = force_depends;
-    aept_cfg->noaction = noaction;
-    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    aept_cfg->purge = purge;
+    non_interactive = non_interactive || !isatty(STDIN_FILENO);
 
-    r = aept_op_remove((const char **)&argv[optind], argc - optind);
-    teardown_config();
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_DEPENDS, force_depends);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_PURGE, purge);
+
+    r = aept_remove(ctx, (const char **)&argv[optind], argc - optind);
+    aept_ctx_free(ctx);
     return r;
 }
 
@@ -596,6 +589,7 @@ static int cmd_upgrade(int argc, char *argv[])
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -615,27 +609,31 @@ static int cmd_upgrade(int argc, char *argv[])
         }
     }
 
-    if (setup_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    aept_cfg->force_depends = force_depends;
-    aept_cfg->download_only = download_only;
-    aept_cfg->noaction = noaction;
-    aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
-    aept_cfg->allow_downgrade = allow_downgrade;
-    aept_cfg->no_cache = no_cache;
-    aept_cfg->force_confnew = force_confnew;
-    aept_cfg->force_confold = force_confold;
-    if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
-        aept_cfg->force_confold = 1;
+    non_interactive = non_interactive || !isatty(STDIN_FILENO);
 
-    r = aept_op_install(NULL, 0, NULL, 0);
-    teardown_config();
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_DEPENDS, force_depends);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_DOWNLOAD_ONLY, download_only);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_ALLOW_DOWNGRADE, allow_downgrade);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_NO_CACHE, no_cache);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFNEW, force_confnew);
+    aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, force_confold);
+    if (non_interactive && !force_confnew)
+        aept_ctx_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, 1);
+
+    r = aept_upgrade(ctx);
+    aept_ctx_free(ctx);
     return r;
 }
 
 static int cmd_clean(int argc, char *argv[])
 {
+    aept_ctx_t *ctx;
     int opt, r;
 
     optind = 1;
@@ -646,11 +644,12 @@ static int cmd_clean(int argc, char *argv[])
         }
     }
 
-    if (setup_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_clean();
-    teardown_config();
+    r = aept_clean(ctx);
+    aept_ctx_free(ctx);
     return r;
 }
 
@@ -658,7 +657,9 @@ static int cmd_list(int argc, char *argv[])
 {
     const char *pattern = NULL;
     int filter_installed = 0, filter_upgradable = 0;
-    int opt, r;
+    aept_ctx_t *ctx;
+    aept_pkg_list_t list;
+    int opt, r, i;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", list_options, NULL)) != -1) {
@@ -673,16 +674,43 @@ static int cmd_list(int argc, char *argv[])
     if (optind < argc)
         pattern = argv[optind];
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_list(pattern, filter_installed, filter_upgradable);
-    aept_config_free();
-    return r;
+    r = aept_list(ctx, pattern, filter_installed, filter_upgradable, &list);
+    if (r < 0) {
+        aept_ctx_free(ctx);
+        return 1;
+    }
+
+    for (i = 0; i < list.count; i++) {
+        aept_pkg_entry_t *e = &list.entries[i];
+
+        printf("%s - %s", e->name, e->version);
+
+        if (e->summary)
+            printf(" - %s", e->summary);
+
+        if (e->installed) {
+            if (e->upgradable)
+                printf(" [installed,upgradable]");
+            else
+                printf(" [installed]");
+        }
+
+        printf("\n");
+    }
+
+    aept_pkg_list_free(&list);
+    aept_ctx_free(ctx);
+    return 0;
 }
 
 static int cmd_show(int argc, char *argv[])
 {
+    aept_ctx_t *ctx;
+    aept_pkg_info_t info;
     int opt, r;
 
     optind = 1;
@@ -698,17 +726,77 @@ static int cmd_show(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_show(argv[optind]);
-    aept_config_free();
-    return r;
+    r = aept_show(ctx, argv[optind], &info);
+    if (r != 0) {
+        if (r > 0)
+            aept_log_error("package '%s' not found", argv[optind]);
+        aept_ctx_free(ctx);
+        return 1;
+    }
+
+    printf("Package: %s\n", info.name);
+    printf("Version: %s\n", info.version);
+    printf("Architecture: %s\n", info.architecture);
+
+    if (info.installed_size)
+        printf("Installed-Size: %llu kB\n", info.installed_size);
+
+    if (info.depends)
+        printf("Depends: %s\n", info.depends);
+    if (info.pre_depends)
+        printf("Pre-Depends: %s\n", info.pre_depends);
+    if (info.recommends)
+        printf("Recommends: %s\n", info.recommends);
+    if (info.suggests)
+        printf("Suggests: %s\n", info.suggests);
+    if (info.provides)
+        printf("Provides: %s\n", info.provides);
+    if (info.conflicts)
+        printf("Conflicts: %s\n", info.conflicts);
+    if (info.replaces)
+        printf("Replaces: %s\n", info.replaces);
+
+    if (info.homepage)
+        printf("Homepage: %s\n", info.homepage);
+
+    if (info.filename)
+        printf("Filename: %s\n", info.filename);
+
+    if (info.summary) {
+        printf("Description: %s\n", info.summary);
+        if (info.description) {
+            const char *p = info.description;
+            while (*p) {
+                const char *eol = strchr(p, '\n');
+                if (eol) {
+                    printf(" %.*s\n", (int)(eol - p), p);
+                    p = eol + 1;
+                } else {
+                    printf(" %s\n", p);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (info.is_installed)
+        printf("Status: install ok installed\n");
+
+    aept_pkg_info_free(&info);
+    aept_ctx_free(ctx);
+    return 0;
 }
 
 static int cmd_files(int argc, char *argv[])
 {
-    int opt, r;
+    aept_ctx_t *ctx;
+    char **paths;
+    int count;
+    int opt, r, i;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", files_options, NULL)) != -1) {
@@ -723,17 +811,34 @@ static int cmd_files(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_files(argv[optind]);
-    aept_config_free();
-    return r;
+    r = aept_files(ctx, argv[optind], &paths, &count);
+    if (r != 0) {
+        if (r > 0)
+            aept_log_error("package '%s' is not installed", argv[optind]);
+        aept_ctx_free(ctx);
+        return 1;
+    }
+
+    for (i = 0; i < count; i++) {
+        printf("%s\n", paths[i]);
+        free(paths[i]);
+    }
+    free(paths);
+
+    aept_ctx_free(ctx);
+    return 0;
 }
 
 static int cmd_owns(int argc, char *argv[])
 {
-    int opt, r;
+    aept_ctx_t *ctx;
+    char **owners;
+    int count;
+    int opt, r, i;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", owns_options, NULL)) != -1) {
@@ -748,18 +853,31 @@ static int cmd_owns(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_owns(argv[optind]);
-    aept_config_free();
-    return r;
+    r = aept_owns(ctx, argv[optind], &owners, &count);
+    if (r != 0) {
+        aept_ctx_free(ctx);
+        return 1;
+    }
+
+    for (i = 0; i < count; i++) {
+        printf("%s\n", owners[i]);
+        free(owners[i]);
+    }
+    free(owners);
+
+    aept_ctx_free(ctx);
+    return 0;
 }
 
 static int cmd_mark_manual(int argc, char *argv[])
 {
     int all = 0;
-    int opt, i, r;
+    aept_ctx_t *ctx;
+    int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", mark_manual_options, NULL)) != -1) {
@@ -775,36 +893,24 @@ static int cmd_mark_manual(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
     if (all) {
-        r = aept_status_clear_auto();
+        r = aept_mark_manual_all(ctx);
     } else {
-        r = 0;
-        for (i = optind; i < argc; i++) {
-            char *list_path = NULL;
-            aept_asprintf(&list_path, "%s/%s.list",
-                      aept_cfg->info_dir, argv[i]);
-            if (!aept_file_exists(list_path)) {
-                aept_log_warning("package '%s' is not installed, skipping",
-                            argv[i]);
-                free(list_path);
-                continue;
-            }
-            free(list_path);
-            if (aept_status_unmark_auto(argv[i]) < 0)
-                r = -1;
-        }
+        r = aept_mark_manual(ctx, (const char **)&argv[optind], argc - optind);
     }
 
-    aept_config_free();
+    aept_ctx_free(ctx);
     return r < 0 ? 1 : 0;
 }
 
 static int cmd_mark_auto(int argc, char *argv[])
 {
-    int opt, i, r;
+    aept_ctx_t *ctx;
+    int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", mark_auto_options, NULL)) != -1) {
@@ -819,26 +925,13 @@ static int cmd_mark_auto(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = 0;
-    for (i = optind; i < argc; i++) {
-        char *list_path = NULL;
-        aept_asprintf(&list_path, "%s/%s.list",
-                  aept_cfg->info_dir, argv[i]);
-        if (!aept_file_exists(list_path)) {
-            aept_log_warning("package '%s' is not installed, skipping",
-                        argv[i]);
-            free(list_path);
-            continue;
-        }
-        free(list_path);
-        if (aept_status_mark_auto(argv[i]) < 0)
-            r = -1;
-    }
+    r = aept_mark_auto(ctx, (const char **)&argv[optind], argc - optind);
 
-    aept_config_free();
+    aept_ctx_free(ctx);
     return r < 0 ? 1 : 0;
 }
 
@@ -874,7 +967,8 @@ static int cmd_mark(int argc, char *argv[])
 
 static int cmd_pin(int argc, char *argv[])
 {
-    int opt, i, r, need_solver = 0;
+    aept_ctx_t *ctx;
+    int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
@@ -890,67 +984,20 @@ static int cmd_pin(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    /* check if any arg needs installed-version lookup */
-    for (i = optind; i < argc; i++) {
-        if (!strchr(argv[i], '=')) {
-            need_solver = 1;
-            break;
-        }
-    }
+    r = aept_pin(ctx, (const char **)&argv[optind], argc - optind);
 
-    if (need_solver) {
-        if (aept_solver_init() < 0 || aept_status_load() < 0) {
-            aept_solver_fini();
-            aept_config_free();
-            return 1;
-        }
-    }
-
-    r = 0;
-    for (i = optind; i < argc; i++) {
-        char *eq = strchr(argv[i], '=');
-        const char *name;
-        const char *version;
-
-        if (eq) {
-            *eq = '\0';
-            name = argv[i];
-            version = eq + 1;
-
-            if (aept_pin_add(name, version) < 0)
-                r = -1;
-            else
-                aept_log_info("pinned %s at version %s", name, version);
-        } else {
-            name = argv[i];
-            const char *found_version = aept_solver_installed_version(name);
-
-            if (!found_version) {
-                aept_log_warning("package '%s' is not installed, skipping",
-                            name);
-                continue;
-            }
-
-            if (aept_pin_add(name, found_version) < 0)
-                r = -1;
-            else
-                aept_log_info("pinned %s at version %s", name, found_version);
-        }
-    }
-
-    if (need_solver)
-        aept_solver_fini();
-
-    aept_config_free();
+    aept_ctx_free(ctx);
     return r < 0 ? 1 : 0;
 }
 
 static int cmd_unpin(int argc, char *argv[])
 {
-    int opt, i, r;
+    aept_ctx_t *ctx;
+    int opt, r;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
@@ -966,24 +1013,22 @@ static int cmd_unpin(int argc, char *argv[])
         return 1;
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = 0;
-    for (i = optind; i < argc; i++) {
-        if (aept_pin_remove(argv[i]) < 0)
-            r = -1;
-        else
-            aept_log_info("unpinned %s", argv[i]);
-    }
+    r = aept_unpin(ctx, (const char **)&argv[optind], argc - optind);
 
-    aept_config_free();
+    aept_ctx_free(ctx);
     return r < 0 ? 1 : 0;
 }
 
 static int cmd_print_architecture(int argc, char *argv[])
 {
-    int opt, r;
+    aept_ctx_t *ctx;
+    char **archs;
+    int count;
+    int opt, r, i;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
@@ -993,12 +1038,24 @@ static int cmd_print_architecture(int argc, char *argv[])
         }
     }
 
-    if (load_config() < 0)
+    ctx = init_ctx();
+    if (!ctx)
         return 1;
 
-    r = aept_op_print_architecture();
-    aept_config_free();
-    return r;
+    r = aept_architectures(ctx, &archs, &count);
+    if (r < 0) {
+        aept_ctx_free(ctx);
+        return 1;
+    }
+
+    for (i = 0; i < count; i++) {
+        printf("%s\n", archs[i]);
+        free(archs[i]);
+    }
+    free(archs);
+
+    aept_ctx_free(ctx);
+    return 0;
 }
 
 /* ── main ──────────────────────────────────────────────────────────── */
