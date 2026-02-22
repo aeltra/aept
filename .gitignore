@@ -37,3 +37,6 @@ Makefile
 /debian/autoreconf.before
 /debian/debhelper-build-stamp
 /debian/files
+/debian/libaept-dev/
+/debian/libaept0/
+/debian/tmp/
