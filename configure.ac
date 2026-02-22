@@ -24,16 +24,6 @@ AC_CHECK_LIB([solv], [pool_create], [:],
 AC_CHECK_LIB([solvext], [repo_add_debpackages], [:],
   [AC_MSG_ERROR([libsolvext library not found])])
 
-# Probe compression support in libarchive
-AC_CHECK_LIB([archive], [archive_read_support_filter_xz],
-  [AC_DEFINE([HAVE_XZ], [1], [libarchive has xz support])])
-AC_CHECK_LIB([archive], [archive_read_support_filter_bzip2],
-  [AC_DEFINE([HAVE_BZIP2], [1], [libarchive has bzip2 support])])
-AC_CHECK_LIB([archive], [archive_read_support_filter_lz4],
-  [AC_DEFINE([HAVE_LZ4], [1], [libarchive has lz4 support])])
-AC_CHECK_LIB([archive], [archive_read_support_filter_zstd],
-  [AC_DEFINE([HAVE_ZSTD], [1], [libarchive has zstd support])])
-
 # Optional static linking for libarchive and/or libsolv
 AC_ARG_ENABLE([static-libarchive],
   [AS_HELP_STRING([--enable-static-libarchive],

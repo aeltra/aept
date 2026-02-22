@@ -1,7 +1,7 @@
 /* clean.h - cache cleanup
  *
  * Copyright (C) 2026 Tobias Koch
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef AEPT_CLEAN_H_7BF97F

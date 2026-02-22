@@ -1,9 +1,7 @@
 /* archive.h - IPK archive extraction via libarchive
  *
- * Copyright (C) 2014 Paul Barker (original opkg implementation)
- * Copyright (C) 2026 Tobias Koch (adapted for aept)
- *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 Tobias Koch
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef ARCHIVE_H_7BF97F

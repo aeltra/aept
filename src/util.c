@@ -1,10 +1,7 @@
 /* util.c - utility functions
  *
  * Copyright (C) 2026 Tobias Koch
- * Based in part on aept_system by Carl D. Worth,
- *   Copyright (C) 2001 University of Southern California
- *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: MIT
  */
 
 #include <config.h>
@@ -227,40 +224,35 @@ int aept_file_mkdir_hier(const char *path, mode_t mode)
 
 int aept_system(const char *argv[])
 {
-    int status;
-    pid_t pid;
-    int r;
-
-    pid = fork();
-
-    switch (pid) {
-    case -1:
-        aept_log_error("%s: fork: %s", argv[0], strerror(errno));
+    pid_t pid = fork();
+    if (pid < 0) {
+        aept_log_error("fork failed for '%s': %s", argv[0], strerror(errno));
         return -1;
-    case 0:
+    }
+
+    if (pid == 0) {
         execvp(argv[0], (char *const *)argv);
         _exit(AEPT_EXIT_EXEC_FAILED);
-    default:
-        break;
     }
 
-    r = waitpid(pid, &status, 0);
-    if (r == -1) {
-        aept_log_error("%s: waitpid: %s", argv[0], strerror(errno));
-        return -1;
+    int wstatus;
+    while (waitpid(pid, &wstatus, 0) < 0) {
+        if (errno != EINTR) {
+            aept_log_error("waitpid failed for '%s': %s",
+                      argv[0], strerror(errno));
+            return -1;
+        }
     }
 
-    if (WIFSIGNALED(status)) {
-        aept_log_error("%s: killed by signal %d", argv[0], WTERMSIG(status));
-        return -1;
+    if (WIFEXITED(wstatus))
+        return WEXITSTATUS(wstatus);
+
+    if (WIFSIGNALED(wstatus)) {
+        aept_log_error("'%s' terminated by signal %d",
+                  argv[0], WTERMSIG(wstatus));
     }
 
-    if (!WIFEXITED(status)) {
-        aept_log_error("%s: unexpected status %d from waitpid", argv[0], status);
-        return -1;
-    }
-
-    return WEXITSTATUS(status);
+    return -1;
 }
 
 static int unshare_and_map_user(void)

@@ -1,7 +1,7 @@
 /* main.c - CLI entry point
  *
  * Copyright (C) 2026 Tobias Koch
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: MIT
  */
 
 #include <errno.h>
