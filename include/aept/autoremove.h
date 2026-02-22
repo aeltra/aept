@@ -8,6 +8,6 @@
 #define AUTOREMOVE_H_7BF97F
 
 /* Remove auto-installed packages that are no longer needed. */
-int aept_autoremove(void);
+int aept_op_autoremove(void);
 
 #endif

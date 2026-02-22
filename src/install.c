@@ -1129,7 +1129,7 @@ static int do_reinstall(const char **names, int count,
     return 0;
 }
 
-int aept_install(const char **names, int name_count,
+int aept_op_install(const char **names, int name_count,
                  const char **local_paths, int local_count)
 {
     Transaction *trans;

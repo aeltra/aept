@@ -2,6 +2,7 @@ lib_LTLIBRARIES = libaept.la
 bin_PROGRAMS = aept
 
 libaept_la_SOURCES = \
+    api.c \
     autoremove.c \
     clean.c \
     conffile.c \

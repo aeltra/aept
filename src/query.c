@@ -44,7 +44,7 @@ static size_t path_len(const char *p)
     return len;
 }
 
-int aept_owns(const char *path)
+int aept_op_owns(const char *path)
 {
     DIR *dir;
     struct dirent *ent;
@@ -121,7 +121,7 @@ int aept_owns(const char *path)
     return found ? 0 : 1;
 }
 
-int aept_files(const char *name)
+int aept_op_files(const char *name)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -165,7 +165,7 @@ int aept_files(const char *name)
     return 0;
 }
 
-int aept_print_architecture(void)
+int aept_op_print_architecture(void)
 {
     int i;
 
@@ -233,7 +233,7 @@ static struct list_entry *find_entry(struct list_entry *entries, int n, Id name_
     return NULL;
 }
 
-int aept_list(const char *pattern, int filter_installed, int filter_upgradable)
+int aept_op_list(const char *pattern, int filter_installed, int filter_upgradable)
 {
     Pool *pool;
     Id p;
@@ -376,7 +376,7 @@ static void print_description(Pool *pool, Solvable *s)
     }
 }
 
-int aept_show(const char *name)
+int aept_op_show(const char *name)
 {
     Pool *pool;
     Id name_id, p;

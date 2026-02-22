@@ -56,7 +56,7 @@ static void mark_needed(Pool *pool, Id p, char *needed, int ninstalled)
     }
 }
 
-int aept_autoremove(void)
+int aept_op_autoremove(void)
 {
     Pool *pool;
     Repo *installed;

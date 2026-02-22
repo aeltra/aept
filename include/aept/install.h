@@ -10,7 +10,7 @@
 /* Install packages by name and/or from local .ipk files.
  * If all params are NULL/0, upgrade all.
  * Resolves dependencies via solver. */
-int aept_install(const char **names, int name_count,
+int aept_op_install(const char **names, int name_count,
                  const char **local_paths, int local_count);
 
 #endif

@@ -16,7 +16,7 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
-int aept_clean(void)
+int aept_op_clean(void)
 {
     DIR *d;
     struct dirent *ent;

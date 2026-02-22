@@ -8,6 +8,6 @@
 #define UPDATE_H_7BF97F
 
 /* Fetch Packages lists and signatures for all configured sources. */
-int aept_update(void);
+int aept_op_update(void);
 
 #endif

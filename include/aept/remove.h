@@ -14,7 +14,7 @@
 int aept_remove_files(const char *name, aept_fileset_t *protected);
 
 /* Remove packages by name. Resolves reverse dependencies via solver. */
-int aept_remove(const char **names, int count);
+int aept_op_remove(const char **names, int count);
 
 /* Remove a single package (used internally by install for upgrades).
  * new_version: version of the replacing package (NULL for pure removal).

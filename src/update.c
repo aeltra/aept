@@ -95,7 +95,7 @@ static void prune_stale_lists(void)
     closedir(d);
 }
 
-int aept_update(void)
+int aept_op_update(void)
 {
     int i;
     int errors = 0;

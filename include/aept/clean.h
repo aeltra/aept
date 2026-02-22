@@ -7,6 +7,6 @@
 #ifndef AEPT_CLEAN_H_7BF97F
 #define AEPT_CLEAN_H_7BF97F
 
-int aept_clean(void);
+int aept_op_clean(void);
 
 #endif

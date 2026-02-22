@@ -174,7 +174,7 @@ int aept_do_remove(const char *name, const char *new_version,
     return 0;
 }
 
-int aept_remove(const char **names, int count)
+int aept_op_remove(const char **names, int count)
 {
     Transaction *trans;
     Pool *pool;

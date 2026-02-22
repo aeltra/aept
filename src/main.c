@@ -444,7 +444,7 @@ static int cmd_update(int argc, char *argv[])
     if (setup_config() < 0)
         return 1;
 
-    r = aept_update();
+    r = aept_op_update();
     teardown_config();
     return r;
 }
@@ -518,7 +518,7 @@ static int cmd_install(int argc, char *argv[])
     if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
         aept_cfg->force_confold = 1;
 
-    r = aept_install(n_names > 0 ? pkg_names : NULL, n_names,
+    r = aept_op_install(n_names > 0 ? pkg_names : NULL, n_names,
                      n_locals > 0 ? local_paths : NULL, n_locals);
     free(pkg_names);
     free(local_paths);
@@ -551,7 +551,7 @@ static int cmd_autoremove(int argc, char *argv[])
     aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     aept_cfg->purge = purge;
 
-    r = aept_autoremove();
+    r = aept_op_autoremove();
     teardown_config();
     return r;
 }
@@ -586,7 +586,7 @@ static int cmd_remove(int argc, char *argv[])
     aept_cfg->non_interactive = non_interactive || !isatty(STDIN_FILENO);
     aept_cfg->purge = purge;
 
-    r = aept_remove((const char **)&argv[optind], argc - optind);
+    r = aept_op_remove((const char **)&argv[optind], argc - optind);
     teardown_config();
     return r;
 }
@@ -629,7 +629,7 @@ static int cmd_upgrade(int argc, char *argv[])
     if (aept_cfg->non_interactive && !aept_cfg->force_confnew)
         aept_cfg->force_confold = 1;
 
-    r = aept_install(NULL, 0, NULL, 0);
+    r = aept_op_install(NULL, 0, NULL, 0);
     teardown_config();
     return r;
 }
@@ -649,7 +649,7 @@ static int cmd_clean(int argc, char *argv[])
     if (setup_config() < 0)
         return 1;
 
-    r = aept_clean();
+    r = aept_op_clean();
     teardown_config();
     return r;
 }
@@ -676,7 +676,7 @@ static int cmd_list(int argc, char *argv[])
     if (load_config() < 0)
         return 1;
 
-    r = aept_list(pattern, filter_installed, filter_upgradable);
+    r = aept_op_list(pattern, filter_installed, filter_upgradable);
     aept_config_free();
     return r;
 }
@@ -701,7 +701,7 @@ static int cmd_show(int argc, char *argv[])
     if (load_config() < 0)
         return 1;
 
-    r = aept_show(argv[optind]);
+    r = aept_op_show(argv[optind]);
     aept_config_free();
     return r;
 }
@@ -726,7 +726,7 @@ static int cmd_files(int argc, char *argv[])
     if (load_config() < 0)
         return 1;
 
-    r = aept_files(argv[optind]);
+    r = aept_op_files(argv[optind]);
     aept_config_free();
     return r;
 }
@@ -751,7 +751,7 @@ static int cmd_owns(int argc, char *argv[])
     if (load_config() < 0)
         return 1;
 
-    r = aept_owns(argv[optind]);
+    r = aept_op_owns(argv[optind]);
     aept_config_free();
     return r;
 }
@@ -996,7 +996,7 @@ static int cmd_print_architecture(int argc, char *argv[])
     if (load_config() < 0)
         return 1;
 
-    r = aept_print_architecture();
+    r = aept_op_print_architecture();
     aept_config_free();
     return r;
 }

@@ -131,7 +131,8 @@ void aept_pkg_info_free(aept_pkg_info_t *info);
 int aept_files(aept_ctx_t *ctx, const char *name,
                char ***paths_out, int *count_out);
 
-int aept_owns(aept_ctx_t *ctx, const char *path, char **owner_out);
+int aept_owns(aept_ctx_t *ctx, const char *path,
+              char ***owners_out, int *count_out);
 
 int aept_architectures(aept_ctx_t *ctx,
                        char ***archs_out, int *count_out);
