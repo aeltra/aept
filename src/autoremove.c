@@ -154,7 +154,7 @@ int aept_op_autoremove(void)
     }
 
     for (i = 0; i < ncandidates; i++) {
-        if (aept_signal_was_interrupted()) {
+        if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
             r = -1;
             goto out_needed;

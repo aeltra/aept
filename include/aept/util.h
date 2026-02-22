@@ -33,8 +33,7 @@ int aept_file_is_dir(const char *path);
 int aept_file_copy(const char *src, const char *dst);
 int aept_file_mkdir_hier(const char *path, mode_t mode);
 
-void aept_signal_setup(void);
-int aept_signal_was_interrupted(void);
+int aept_cancelled(void);
 
 int aept_system(const char *argv[]);
 int aept_system_offline_root(const char *argv[]);

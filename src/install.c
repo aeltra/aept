@@ -1282,7 +1282,7 @@ int aept_op_install(const char **names, int name_count,
     aept_fileset_init(&installed_files);
 
     for (i = 0; i < trans->steps.count; i++) {
-        if (aept_signal_was_interrupted()) {
+        if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
             r = -1;
             goto fileset_cleanup;

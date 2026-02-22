@@ -238,7 +238,7 @@ int aept_op_remove(const char **names, int count)
     }
 
     for (i = 0; i < trans->steps.count; i++) {
-        if (aept_signal_was_interrupted()) {
+        if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
             r = -1;
             goto out;
