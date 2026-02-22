@@ -12,6 +12,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/msg.h"
 
@@ -20,9 +21,10 @@ static int use_color;
 /* Callback globals (set by API entry points, NULL by default) */
 aept_log_fn     aept_log_cb;
 void           *aept_log_cb_data;
+aept_display_fn aept_display_cb;
+void           *aept_display_cb_data;
 aept_confirm_fn aept_confirm_cb;
 void           *aept_confirm_cb_data;
-const struct aept_transaction *aept_confirm_txn;
 
 static const char *level_name[] = {
     [AEPT_ERROR]   = "error",
@@ -90,6 +92,40 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     fputc('\n', out);
 }
 
+void aept_display_transaction(const struct aept_transaction *txn)
+{
+    if (aept_display_cb) {
+        aept_display_cb(txn, aept_display_cb_data);
+        return;
+    }
+
+    if (txn->n_install > 0) {
+        aept_print_heading("The following NEW packages will be installed:");
+        aept_print_names(txn->install, txn->n_install);
+    }
+    if (txn->n_upgrade > 0) {
+        aept_print_heading("The following packages will be UPGRADED:");
+        aept_print_names(txn->upgrade, txn->n_upgrade);
+    }
+    if (txn->n_reinstall > 0) {
+        aept_print_heading("The following packages will be REINSTALLED:");
+        aept_print_names(txn->reinstall, txn->n_reinstall);
+    }
+    if (txn->n_remove > 0) {
+        aept_print_heading("The following packages will be REMOVED:");
+        aept_print_names(txn->remove, txn->n_remove);
+    }
+
+    if (txn->n_reinstall > 0)
+        aept_print_heading("%d to install, %d to upgrade, "
+                      "%d to remove, %d to reinstall.",
+                      txn->n_install, txn->n_upgrade,
+                      txn->n_remove, txn->n_reinstall);
+    else
+        aept_print_heading("%d to install, %d to upgrade, %d to remove.",
+                      txn->n_install, txn->n_upgrade, txn->n_remove);
+}
+
 int aept_confirm_continue(void)
 {
     struct termios old_tio, new_tio;
@@ -99,7 +135,7 @@ int aept_confirm_continue(void)
         return 1;
 
     if (aept_confirm_cb)
-        return aept_confirm_cb(aept_confirm_txn, aept_confirm_cb_data);
+        return aept_confirm_cb(aept_confirm_cb_data);
 
     printf("Do you want to continue? [Y/n] ");
     fflush(stdout);

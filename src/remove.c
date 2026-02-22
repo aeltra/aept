@@ -14,6 +14,7 @@
 #include <solv/solvable.h>
 #include <solv/transaction.h>
 
+#include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/conffile.h"
 #include "aept/config.h"
@@ -217,12 +218,11 @@ int aept_op_remove(const char **names, int count)
         erase_names[n_erase++] = pool_id2str(pool, s->name);
     }
 
-    if (n_erase > 0) {
-        aept_print_heading("The following packages will be REMOVED:");
-        aept_print_names(erase_names, n_erase);
-    }
+    aept_transaction_t txn = {0};
+    txn.remove  = erase_names;
+    txn.n_remove = n_erase;
 
-    aept_print_heading("0 to install, 0 to upgrade, %d to remove.", n_erase);
+    aept_display_transaction(&txn);
 
     free(erase_names);
 

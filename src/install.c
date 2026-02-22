@@ -21,6 +21,7 @@
 #include <solv/solvable.h>
 #include <solv/transaction.h>
 
+#include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/conffile.h"
@@ -173,35 +174,19 @@ static int display_transaction(Transaction *trans, Pool *pool,
         reinstall_names[n_reinstall++] = pkg_name;
     }
 
-    if (n_install > 0) {
-        aept_print_heading("The following NEW packages will be installed:");
-        aept_print_names(install_names, n_install);
-    }
-    if (n_upgrade > 0) {
-        aept_print_heading("The following packages will be UPGRADED:");
-        aept_print_names(upgrade_names, n_upgrade);
-    }
-    if (n_reinstall > 0) {
-        aept_print_heading("The following packages will be REINSTALLED:");
-        aept_print_names(reinstall_names, n_reinstall);
-    }
-    if (n_erase > 0) {
-        aept_print_heading("The following packages will be REMOVED:");
-        aept_print_names(erase_names, n_erase);
-    }
+    aept_transaction_t txn = {
+        .install   = install_names,  .n_install   = n_install,
+        .upgrade   = upgrade_names,  .n_upgrade   = n_upgrade,
+        .reinstall = reinstall_names,.n_reinstall  = n_reinstall,
+        .remove    = erase_names,    .n_remove    = n_erase,
+    };
+
+    aept_display_transaction(&txn);
 
     free(install_names);
     free(upgrade_names);
     free(erase_names);
     free(reinstall_names);
-
-    if (n_reinstall > 0)
-        aept_print_heading("%d to install, %d to upgrade, "
-                      "%d to remove, %d to reinstall.",
-                      n_install, n_upgrade, n_erase, n_reinstall);
-    else
-        aept_print_heading("%d to install, %d to upgrade, %d to remove.",
-                      n_install, n_upgrade, n_erase);
 
     if ((n_erase > 0 ||
                 (user_count > 0 &&

@@ -57,8 +57,11 @@ typedef struct aept_transaction {
     const char **remove;    int n_remove;
 } aept_transaction_t;
 
+typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
+void aept_set_display_fn(aept_display_fn fn, void *userdata);
+
 /* Return non-zero to proceed, 0 to abort. */
-typedef int (*aept_confirm_fn)(const aept_transaction_t *txn, void *userdata);
+typedef int (*aept_confirm_fn)(void *userdata);
 void aept_set_confirm_fn(aept_confirm_fn fn, void *userdata);
 
 /* --- Cancellation -------------------------------------------------------- */

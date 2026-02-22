@@ -41,6 +41,9 @@ static struct {
     aept_log_fn     log_fn;
     void           *log_userdata;
 
+    aept_display_fn display_fn;
+    void           *display_userdata;
+
     aept_confirm_fn confirm_fn;
     void           *confirm_userdata;
 
@@ -55,9 +58,10 @@ int aept_init(void)
     aept_cfg = &ctx.config;
     aept_log_cb = NULL;
     aept_log_cb_data = NULL;
+    aept_display_cb = NULL;
+    aept_display_cb_data = NULL;
     aept_confirm_cb = NULL;
     aept_confirm_cb_data = NULL;
-    aept_confirm_txn = NULL;
     return 0;
 }
 
@@ -70,9 +74,10 @@ void aept_cleanup(void)
 
     aept_log_cb = NULL;
     aept_log_cb_data = NULL;
+    aept_display_cb = NULL;
+    aept_display_cb_data = NULL;
     aept_confirm_cb = NULL;
     aept_confirm_cb_data = NULL;
-    aept_confirm_txn = NULL;
 
     memset(&ctx, 0, sizeof(ctx));
     aept_cfg = &ctx.config;
@@ -169,6 +174,14 @@ void aept_set_log_fn(aept_log_fn fn, void *userdata)
     ctx.log_userdata = userdata;
     aept_log_cb = fn;
     aept_log_cb_data = userdata;
+}
+
+void aept_set_display_fn(aept_display_fn fn, void *userdata)
+{
+    ctx.display_fn = fn;
+    ctx.display_userdata = userdata;
+    aept_display_cb = fn;
+    aept_display_cb_data = userdata;
 }
 
 void aept_set_confirm_fn(aept_confirm_fn fn, void *userdata)
