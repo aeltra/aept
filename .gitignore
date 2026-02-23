@@ -31,6 +31,7 @@ Makefile
 
 /debian/.debhelper/
 /debian/aept.1
+/debian/*.debhelper
 /debian/*.debhelper.log
 /debian/*.substvars
 /debian/aept/
