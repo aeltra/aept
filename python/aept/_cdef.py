@@ -1,12 +1,9 @@
-/* aept.h - public API for libaept
- *
- * Copyright (C) 2026 Tobias Koch
- * SPDX-License-Identifier: MIT
- */
+# CFFI C declarations mirroring include/aept/aept.h
+#
+# Keep in sync with the public API header.  No preprocessor directives,
+# no compiler attributes -- only plain C declarations that CFFI can parse.
 
-#ifndef AEPT_H_7BF97F
-#define AEPT_H_7BF97F
-
+CDEF = """\
 /* --- Lifecycle ----------------------------------------------------------- */
 
 int  aept_init(void);
@@ -60,7 +57,6 @@ typedef struct aept_transaction {
 typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
 void aept_set_display_fn(aept_display_fn fn, void *userdata);
 
-/* Return non-zero to proceed, 0 to abort. */
 typedef int (*aept_confirm_fn)(void *userdata);
 void aept_set_confirm_fn(aept_confirm_fn fn, void *userdata);
 
@@ -125,18 +121,18 @@ typedef struct {
     int   is_installed;
 } aept_pkg_info_t;
 
-/* Returns 0 on success, 1 if not found, -1 on error. */
 int  aept_show(const char *name, aept_pkg_info_t *out);
 void aept_pkg_info_free(aept_pkg_info_t *info);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 
-/* Returns 0 on success, 1 if not found, -1 on error. */
 int aept_files(const char *name, char ***paths_out, int *count_out);
 
-/* Returns 0 on success, 1 if not found, -1 on error. */
 int aept_owns(const char *path, char ***owners_out, int *count_out);
 
 int aept_architectures(char ***archs_out, int *count_out);
+"""
 
-#endif
+LIBC_CDEF = """\
+void free(void *ptr);
+"""

@@ -41,3 +41,6 @@ Makefile
 /debian/libaept-dev/
 /debian/libaept0/
 /debian/tmp/
+
+# Python
+__pycache__/
