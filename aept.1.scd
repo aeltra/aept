@@ -11,9 +11,9 @@ aept - Aeltra Package Tool
 # DESCRIPTION
 
 *aept* is a minimal package manager for .aeltra packages with dependency
-resolution. It uses libsolv for dependency solving and libarchive for archive
-extraction. Package lists and signatures are fetched with wget, and signature
-verification is performed by usign.
+resolution. It uses libsolv for dependency solving, libarchive for archive
+extraction, and libfetch for HTTP downloads. Signature verification is
+performed by usign.
 
 # GLOBAL OPTIONS
 
@@ -294,6 +294,12 @@ The following keys are recognized:
 :  Set to 1 to not preserve file ownership during extraction.
    Files will be owned by the calling user instead of the
    uid/gid recorded in the package.
+|  ssl_client_cert
+:  (none)
+:  Path to a PEM client certificate for HTTPS
+|  ssl_client_key
+:  (none)
+:  Path to the corresponding PEM private key
 |  allow_downgrade
 :  0
 :  Set to 1 to allow package downgrades
