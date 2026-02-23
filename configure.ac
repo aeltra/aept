@@ -16,6 +16,9 @@ AC_DEFINE([_GNU_SOURCE], [1], [Enable GNU extensions])
 # Require libarchive
 PKG_CHECK_MODULES([LIBARCHIVE], [libarchive])
 
+# Require OpenSSL (for libfetch)
+PKG_CHECK_MODULES([OPENSSL], [openssl])
+
 # Require libsolv
 AC_CHECK_HEADER([solv/pool.h], [],
   [AC_MSG_ERROR([libsolv headers not found])])

@@ -22,6 +22,7 @@ Makefile
 *.lo
 *.la
 /src/aept
+/libfetch/.dirstamp
 
 # Distribution tarballs
 *.tar.gz
