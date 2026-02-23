@@ -44,3 +44,7 @@ Makefile
 
 # Python
 __pycache__/
+/python/dist/
+/python/build/
+/python/*.egg-info/
+/debian/python3-aept/
