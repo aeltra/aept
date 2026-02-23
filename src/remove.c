@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <solv/pool.h>
@@ -26,12 +27,26 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
+/* Sort directories by path length descending (deepest first) */
+static int dir_depth_cmp(const void *a, const void *b)
+{
+    size_t la = strlen(*(const char **)a);
+    size_t lb = strlen(*(const char **)b);
+
+    if (lb > la) return 1;
+    if (lb < la) return -1;
+    return 0;
+}
+
 int aept_remove_files(const char *name, aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
     char buf[4096];
     aept_conffile_set_t conffiles;
+    char **dirs = NULL;
+    int n_dirs = 0;
+    int dirs_cap = 0;
 
     aept_conffile_set_init(&conffiles);
     if (!aept_cfg->purge)
@@ -63,6 +78,11 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
         if (tab)
             *tab = '\0';
 
+        /* Parse mode to detect directories */
+        unsigned int mode = 0;
+        if (tab)
+            mode = (unsigned int)strtoul(tab + 1, NULL, 8);
+
         path = buf;
 
         /* Skip leading ./ */
@@ -83,6 +103,16 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
         char *full_path = NULL;
         aept_asprintf(&full_path, "%s/%s",
                   aept_cfg->offline_root ? aept_cfg->offline_root : "", path);
+
+        /* Collect directories for removal after files */
+        if (S_ISDIR(mode)) {
+            if (n_dirs >= dirs_cap) {
+                dirs_cap = dirs_cap ? dirs_cap * 2 : 32;
+                dirs = aept_realloc(dirs, dirs_cap * sizeof(char *));
+            }
+            dirs[n_dirs++] = full_path;
+            continue;
+        }
 
         /* Skip modified conffiles unless purging */
         if (conffiles.count > 0) {
@@ -114,6 +144,19 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
 
     fclose(fp);
     aept_conffile_set_free(&conffiles);
+
+    /* Remove directories deepest-first */
+    if (n_dirs > 0) {
+        qsort(dirs, n_dirs, sizeof(char *), dir_depth_cmp);
+
+        for (int i = 0; i < n_dirs; i++) {
+            if (rmdir(dirs[i]) < 0 && errno != ENOTEMPTY && errno != ENOENT)
+                aept_log_debug("cannot rmdir '%s': %s",
+                          dirs[i], strerror(errno));
+            free(dirs[i]);
+        }
+        free(dirs);
+    }
 
     return 0;
 }
