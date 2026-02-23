@@ -1,4 +1,4 @@
-/* download.h - wget download wrapper
+/* download.h - HTTP download
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT

@@ -27,6 +27,8 @@ typedef struct {
     char *usign_keydir;     /* default "/etc/aept/usign/trustdb" */
     char *auto_file;        /* default "/var/lib/aept/auto-installed" */
     char *pin_file;         /* default "/var/lib/aept/pinned-packages" */
+    char *ssl_client_cert;  /* NULL or path to client certificate */
+    char *ssl_client_key;   /* NULL or path to client private key */
 
     char **archs;
     int narchs;

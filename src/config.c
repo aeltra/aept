@@ -88,6 +88,10 @@ static void set_option(const char *key, const char *value)
         strp = &aept_cfg->auto_file;
     else if (strcmp(key, "pin_file") == 0)
         strp = &aept_cfg->pin_file;
+    else if (strcmp(key, "ssl_client_cert") == 0)
+        strp = &aept_cfg->ssl_client_cert;
+    else if (strcmp(key, "ssl_client_key") == 0)
+        strp = &aept_cfg->ssl_client_key;
     else if (strcmp(key, "check_signature") == 0) {
         aept_cfg->check_signature = atoi(value);
         return;
@@ -272,6 +276,8 @@ void aept_config_free(void)
     free(aept_cfg->usign_keydir);
     free(aept_cfg->auto_file);
     free(aept_cfg->pin_file);
+    free(aept_cfg->ssl_client_cert);
+    free(aept_cfg->ssl_client_key);
 
     memset(aept_cfg, 0, sizeof(*aept_cfg));
 }
