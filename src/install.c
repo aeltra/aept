@@ -33,6 +33,7 @@
 #include "aept/script.h"
 #include "aept/solver.h"
 #include "aept/status.h"
+#include "aept/trigger.h"
 #include "aept/install.h"
 #include "aept/util.h"
 
@@ -667,7 +668,9 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
     free(ctrl_path);
 
     /* Copy scripts to info_dir */
-    const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", NULL};
+    const char *scripts[] = {
+        "preinst", "postinst", "prerm", "postrm", "trigger", NULL
+    };
     for (int i = 0; scripts[i]; i++) {
         char *src = NULL, *dst = NULL;
         aept_asprintf(&src, "%s/%s", tmpdir, scripts[i]);
@@ -679,6 +682,23 @@ static int do_install_package(const char *ipk_path, Pool *pool, Id p,
             free(dst);
         }
         free(src);
+    }
+
+    /* Copy triggers file to info_dir and rebuild index */
+    {
+        char *trig_src = NULL, *trig_dst = NULL;
+        aept_asprintf(&trig_src, "%s/triggers", tmpdir);
+        if (aept_file_exists(trig_src)) {
+            aept_asprintf(&trig_dst, "%s/%s.triggers",
+                          aept_cfg->info_dir, name);
+            if (rename(trig_src, trig_dst) < 0
+                    && aept_file_copy(trig_src, trig_dst) < 0)
+                aept_log_warning("failed to install triggers for '%s'", name);
+            else
+                aept_trigger_index_rebuild();
+            free(trig_dst);
+        }
+        free(trig_src);
     }
 
     /* Run postinst */
@@ -720,7 +740,8 @@ static void remove_info_files(const char *name)
 {
     const char *exts[] = {
         "list", "control",
-        "preinst", "postinst", "prerm", "postrm", NULL
+        "preinst", "postinst", "prerm", "postrm",
+        "trigger", "triggers", NULL
     };
 
     for (int i = 0; exts[i]; i++) {
@@ -1000,7 +1021,9 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
     free(ctrl_path);
     ctrl_path = NULL;
 
-    const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", NULL};
+    const char *scripts[] = {
+        "preinst", "postinst", "prerm", "postrm", "trigger", NULL
+    };
     for (int i = 0; scripts[i]; i++) {
         char *src = NULL, *dst = NULL;
         aept_asprintf(&src, "%s/%s", tmpdir, scripts[i]);
@@ -1012,6 +1035,23 @@ static int do_upgrade_package(const char *ipk_path, Pool *pool, Id p,
             free(dst);
         }
         free(src);
+    }
+
+    /* Copy triggers file to info_dir and rebuild index */
+    {
+        char *trig_src = NULL, *trig_dst = NULL;
+        aept_asprintf(&trig_src, "%s/triggers", tmpdir);
+        if (aept_file_exists(trig_src)) {
+            aept_asprintf(&trig_dst, "%s/%s.triggers",
+                          aept_cfg->info_dir, name);
+            if (rename(trig_src, trig_dst) < 0
+                    && aept_file_copy(trig_src, trig_dst) < 0)
+                aept_log_warning("failed to install triggers for '%s'", name);
+            else
+                aept_trigger_index_rebuild();
+            free(trig_dst);
+        }
+        free(trig_src);
     }
 
     /* Record file list (remove_info_files deleted the earlier copy) */
@@ -1266,6 +1306,9 @@ int aept_op_install(const char **names, int name_count,
     int fileset_sorted = 0;
     aept_fileset_init(&installed_files);
 
+    aept_trigger_ctx_t tctx;
+    aept_trigger_ctx_init(&tctx);
+
     for (i = 0; i < trans->steps.count; i++) {
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
@@ -1294,6 +1337,7 @@ int aept_op_install(const char **names, int name_count,
                 fileset_sorted = 1;
             }
 
+            aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
             r = aept_do_remove(pkg_name, NULL, &installed_files);
             if (r < 0 && !aept_cfg->force_depends)
                 goto fileset_cleanup;
@@ -1327,12 +1371,23 @@ int aept_op_install(const char **names, int name_count,
                     fileset_sorted = 1;
                 }
 
+                aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
                 r = do_upgrade_package(ipk_paths[i], pool, p,
                                        old_ver, new_ver,
                                        &installed_files);
                 fileset_sorted = 0;
+
+                if (r == 0) {
+                    aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
+                    aept_trigger_ctx_add_fresh(&tctx, pkg_name);
+                }
             } else {
                 r = do_install_package(ipk_paths[i], pool, p, NULL);
+
+                if (r == 0) {
+                    aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
+                    aept_trigger_ctx_add_fresh(&tctx, pkg_name);
+                }
             }
 
             if (r < 0)
@@ -1413,6 +1468,10 @@ int aept_op_install(const char **names, int name_count,
 
     aept_fileset_free(&installed_files);
 
+    /* Fire triggers for directories modified during the transaction */
+    aept_trigger_run_all(&tctx);
+    aept_trigger_ctx_free(&tctx);
+
     /* Reinstall phase — download and reinstall requested packages
      * that were not covered by the solver transaction. */
     if (aept_cfg->reinstall && names) {
@@ -1426,6 +1485,7 @@ int aept_op_install(const char **names, int name_count,
 
 fileset_cleanup:
     aept_fileset_free(&installed_files);
+    aept_trigger_ctx_free(&tctx);
 
 download_cleanup:
     for (i = 0; i < trans->steps.count; i++)

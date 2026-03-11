@@ -20,6 +20,7 @@
 #include "aept/remove.h"
 #include "aept/solver.h"
 #include "aept/status.h"
+#include "aept/trigger.h"
 #include "aept/util.h"
 
 /* Mark solvable p as needed and recursively mark its dependencies. */
@@ -156,19 +157,27 @@ int aept_op_autoremove(void)
         goto out_needed;
     }
 
+    aept_trigger_ctx_t tctx;
+    aept_trigger_ctx_init(&tctx);
+
     for (i = 0; i < ncandidates; i++) {
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
             r = -1;
-            goto out_needed;
+            goto out_trigger;
         }
 
+        aept_trigger_ctx_collect_dirs(&tctx, candidates[i]);
         r = aept_do_remove(candidates[i], NULL, NULL);
         if (r < 0 && !aept_cfg->force_depends)
-            goto out_needed;
+            goto out_trigger;
     }
 
+    aept_trigger_run_all(&tctx);
     r = 0;
+
+out_trigger:
+    aept_trigger_ctx_free(&tctx);
 
 out_needed:
     free(candidates_evr);

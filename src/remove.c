@@ -25,6 +25,7 @@
 #include "aept/script.h"
 #include "aept/solver.h"
 #include "aept/status.h"
+#include "aept/trigger.h"
 #include "aept/util.h"
 
 /* Sort directories by path length descending (deepest first) */
@@ -165,7 +166,8 @@ static void remove_info_files(const char *name)
 {
     const char *exts[] = {
         "list", "control", "conffiles",
-        "preinst", "postinst", "prerm", "postrm", NULL
+        "preinst", "postinst", "prerm", "postrm",
+        "trigger", "triggers", NULL
     };
 
     for (int i = 0; exts[i]; i++) {
@@ -205,8 +207,9 @@ int aept_do_remove(const char *name, const char *new_version,
     if (r != 0)
         aept_log_warning("postrm failed for '%s', continuing", name);
 
-    /* Remove info files */
+    /* Remove info files and rebuild trigger index */
     remove_info_files(name);
+    aept_trigger_index_rebuild();
 
     /* Update status */
     aept_status_remove(name);
@@ -280,11 +283,14 @@ int aept_op_remove(const char **names, int count)
         goto out;
     }
 
+    aept_trigger_ctx_t tctx;
+    aept_trigger_ctx_init(&tctx);
+
     for (i = 0; i < trans->steps.count; i++) {
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
             r = -1;
-            goto out;
+            goto trigger_cleanup;
         }
 
         Id p = trans->steps.elements[i];
@@ -298,12 +304,17 @@ int aept_op_remove(const char **names, int count)
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
 
+        aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
         r = aept_do_remove(pkg_name, NULL, NULL);
         if (r < 0 && !aept_cfg->force_depends)
-            goto out;
+            goto trigger_cleanup;
     }
 
+    aept_trigger_run_all(&tctx);
     r = 0;
+
+trigger_cleanup:
+    aept_trigger_ctx_free(&tctx);
 
 out:
     aept_solver_fini();

@@ -16,6 +16,7 @@ libaept_la_SOURCES = \
     remove.c \
     update.c \
     status.c \
+    trigger.c \
     util.c \
     msg.c \
     pin.c \
