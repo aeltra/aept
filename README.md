@@ -411,6 +411,13 @@ inspect packages:
 >
 > - *pkg.preinst*, *pkg.postinst*, *pkg.prerm*, *pkg.postrm* —
 >   maintainer scripts
+>
+> - *pkg.triggers* — trigger interest declarations (directory patterns)
+>
+> - *pkg.trigger* — trigger script
+>
+> - *triggers-index* — aggregated trigger interest index (rebuilt
+>   automatically)
 
 */var/lib/aept/lists/*
 

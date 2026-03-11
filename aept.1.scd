@@ -396,6 +396,9 @@ _/var/lib/aept/info/_
 	- _pkg.list_ — list of installed files
 	- _pkg.conffiles_ — conffile paths and MD5 checksums
 	- _pkg.preinst_, _pkg.postinst_, _pkg.prerm_, _pkg.postrm_ — maintainer scripts
+	- _pkg.triggers_ — trigger interest declarations (directory patterns)
+	- _pkg.trigger_ — trigger script
+	- _triggers-index_ — aggregated trigger interest index (rebuilt automatically)
 
 _/var/lib/aept/lists/_
 	Downloaded package lists, one file per source.
