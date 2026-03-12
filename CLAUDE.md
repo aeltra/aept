@@ -31,9 +31,13 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 
 ## Architecture
 
-**Global config singleton** (`aept_cfg` in config.c) — `aept_config_t` holds all paths, sources, flags, and architectures. Initialized from `/etc/aept/aept.conf` by `aept_config_load()`, freed by `aept_config_free()`.
+**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots); `aept_cancel()` is safe to call from any thread.
 
-**Command flow** (main.c): parse CLI opts → `aept_config_load()` → dispatch to `aept_update()`, `aept_install()`, `aept_remove()`, or `aept_upgrade()` → `aept_config_free()`.
+**Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
+
+**Context parameter conventions:** public API and orchestrators take `aept_ctx_t *ctx`; pure config functions take `struct aept_config *cfg`; pure solver accessors take `aept_solver_t *s`; pure utilities take no context.
+
+**Command flow** (main.c): parse CLI opts → `aept_init()` → `aept_load_config(ctx, path)` → dispatch to `aept_update(ctx)`, `aept_install(ctx, ...)`, etc. → `aept_cleanup(ctx)`.
 
 **Key subsystems:**
 
