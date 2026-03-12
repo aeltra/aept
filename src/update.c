@@ -45,24 +45,24 @@ static int decompress_gz(const char *gz_path, const char *out_path)
     return r;
 }
 
-static int is_active_source(const char *name)
+static int is_active_source(struct aept_ctx *ctx, const char *name)
 {
     int i;
 
-    for (i = 0; i < aept_cfg->nsources; i++) {
-        if (strcmp(name, aept_cfg->sources[i].name) == 0)
+    for (i = 0; i < ctx->config.nsources; i++) {
+        if (strcmp(name, ctx->config.sources[i].name) == 0)
             return 1;
     }
 
     return 0;
 }
 
-static void prune_stale_lists(void)
+static void prune_stale_lists(struct aept_ctx *ctx)
 {
     DIR *d;
     struct dirent *ent;
 
-    d = opendir(aept_cfg->lists_dir);
+    d = opendir(ctx->config.lists_dir);
     if (!d)
         return;
 
@@ -83,8 +83,8 @@ static void prune_stale_lists(void)
         if (len > 4 && strcmp(base + len - 4, ".sig") == 0)
             base[len - 4] = '\0';
 
-        if (!is_active_source(base)) {
-            aept_asprintf(&path, "%s/%s", aept_cfg->lists_dir, name);
+        if (!is_active_source(ctx, base)) {
+            aept_asprintf(&path, "%s/%s", ctx->config.lists_dir, name);
             unlink(path);
             free(path);
         }
@@ -95,27 +95,27 @@ static void prune_stale_lists(void)
     closedir(d);
 }
 
-int aept_op_update(void)
+int aept_op_update(struct aept_ctx *ctx)
 {
     int i;
     int errors = 0;
 
-    aept_file_mkdir_hier(aept_cfg->lists_dir, 0755);
+    aept_file_mkdir_hier(ctx->config.lists_dir, 0755);
 
-    for (i = 0; i < aept_cfg->nsources; i++) {
-        if (strncmp(aept_cfg->sources[i].url, "https://", 8) != 0)
+    for (i = 0; i < ctx->config.nsources; i++) {
+        if (strncmp(ctx->config.sources[i].url, "https://", 8) != 0)
             aept_log_warning("source '%s' uses insecure transport",
-                        aept_cfg->sources[i].name);
+                        ctx->config.sources[i].name);
     }
 
-    for (i = 0; i < aept_cfg->nsources; i++) {
-        aept_source_t *src = &aept_cfg->sources[i];
+    for (i = 0; i < ctx->config.nsources; i++) {
+        aept_source_t *src = &ctx->config.sources[i];
         char *url = NULL;
         char *dest = NULL;
         char *list_path = NULL;
         int r;
 
-        aept_asprintf(&list_path, "%s/%s", aept_cfg->lists_dir, src->name);
+        aept_asprintf(&list_path, "%s/%s", ctx->config.lists_dir, src->name);
 
         if (src->gzip) {
             char *gz_path = NULL;
@@ -123,7 +123,7 @@ int aept_op_update(void)
             aept_asprintf(&url, "%s/Packages.gz", src->url);
             aept_asprintf(&gz_path, "%s.gz", list_path);
 
-            r = aept_download(url, gz_path, url);
+            r = aept_download(ctx,url, gz_path, url);
             if (r < 0) {
                 errors++;
                 goto next;
@@ -142,21 +142,21 @@ int aept_op_update(void)
         } else {
             aept_asprintf(&url, "%s/Packages", src->url);
 
-            r = aept_download(url, list_path, "Packages");
+            r = aept_download(ctx,url, list_path, "Packages");
             if (r < 0) {
                 errors++;
                 goto next;
             }
         }
 
-        if (aept_cfg->check_signature) {
+        if (ctx->config.check_signature) {
             char *sig_url = NULL;
             char *sig_path = NULL;
 
             aept_asprintf(&sig_url, "%s/Packages.sig", src->url);
             aept_asprintf(&sig_path, "%s.sig", list_path);
 
-            r = aept_download(sig_url, sig_path, sig_url);
+            r = aept_download(ctx,sig_url, sig_path, sig_url);
             if (r < 0) {
                 aept_log_error("failed to download signature for '%s'",
                           src->name);
@@ -167,7 +167,7 @@ int aept_op_update(void)
                 goto next;
             }
 
-            r = aept_verify_signature(list_path, sig_path);
+            r = aept_verify_signature(ctx,list_path, sig_path);
             if (r < 0) {
                 unlink(list_path);
                 unlink(sig_path);
@@ -189,7 +189,7 @@ int aept_op_update(void)
         free(list_path);
     }
 
-    prune_stale_lists();
+    prune_stale_lists(ctx);
 
     return errors ? -1 : 0;
 }

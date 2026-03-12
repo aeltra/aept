@@ -14,7 +14,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/msg.h"
 #include "aept/util.h"
@@ -471,7 +470,8 @@ struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
     return ar;
 }
 
-struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename)
+struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename,
+                                              int ignore_uid)
 {
     struct archive *inner = open_ipk_tar(filename, "data.tar");
     if (!inner)
@@ -484,7 +484,7 @@ struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename)
         ARCHIVE_EXTRACT_NO_OVERWRITE | ARCHIVE_EXTRACT_SECURE_SYMLINKS |
         ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
-    if (aept_cfg->ignore_uid)
+    if (ignore_uid)
         ar->extract_flags &= ~ARCHIVE_EXTRACT_OWNER;
 
     return ar;
@@ -598,9 +598,10 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl)
     aept_ar_file_list_init(fl);
 }
 
-int aept_ar_list_data_paths(const char *ipk_path, aept_ar_file_list_t *out)
+int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
+                            aept_ar_file_list_t *out)
 {
-    struct aept_ar *ar = aept_ar_open_pkg_data_archive(ipk_path);
+    struct aept_ar *ar = aept_ar_open_pkg_data_archive(ipk_path, ignore_uid);
     if (!ar)
         return -1;
 

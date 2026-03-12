@@ -7,6 +7,8 @@
 #ifndef SCRIPT_H_7BF97F
 #define SCRIPT_H_7BF97F
 
+struct aept_ctx;
+
 /* Run a maintainer script.
  *
  * script_dir: directory containing the script
@@ -20,8 +22,8 @@
  *
  * Returns 0 on success, script exit code on failure,
  * 0 if script does not exist. */
-int aept_run_script(const char *script_dir, const char *pkg_name,
-               const char *script, const char *action,
-               const char *version);
+int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
+                    const char *pkg_name, const char *script,
+                    const char *action, const char *version);
 
 #endif

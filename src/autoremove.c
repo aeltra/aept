@@ -58,7 +58,7 @@ static void mark_needed(Pool *pool, Id p, char *needed, int ninstalled)
     }
 }
 
-int aept_op_autoremove(void)
+int aept_op_autoremove(struct aept_ctx *ctx)
 {
     Pool *pool;
     Repo *installed;
@@ -72,15 +72,15 @@ int aept_op_autoremove(void)
     Solvable *s;
     int i, r;
 
-    r = aept_solver_init();
+    r = aept_solver_init(ctx);
     if (r < 0)
         return -1;
 
-    r = aept_status_load();
+    r = aept_status_load(ctx);
     if (r < 0)
         goto out;
 
-    pool = aept_solver_pool();
+    pool = aept_solver_pool(ctx->solver);
     installed = pool->installed;
 
     if (!installed || installed->end <= installed->start) {
@@ -92,7 +92,7 @@ int aept_op_autoremove(void)
     pool_createwhatprovides(pool);
 
     aept_fileset_init(&auto_set);
-    r = aept_status_load_auto_set(&auto_set);
+    r = aept_status_load_auto_set(ctx, &auto_set);
     if (r < 0)
         goto out_fileset;
 
@@ -151,7 +151,7 @@ int aept_op_autoremove(void)
         goto out_needed;
     }
 
-    if (aept_cfg->noaction) {
+    if (ctx->config.noaction) {
         aept_log_info("dry run, not removing");
         r = 0;
         goto out_needed;
@@ -167,13 +167,13 @@ int aept_op_autoremove(void)
             goto out_trigger;
         }
 
-        aept_trigger_ctx_collect_dirs(&tctx, candidates[i]);
-        r = aept_do_remove(candidates[i], NULL, NULL);
-        if (r < 0 && !aept_cfg->force_depends)
+        aept_trigger_ctx_collect_dirs(ctx, &tctx, candidates[i]);
+        r = aept_do_remove(ctx, candidates[i], NULL, NULL);
+        if (r < 0 && !ctx->config.force_depends)
             goto out_trigger;
     }
 
-    aept_trigger_run_all(&tctx);
+    aept_trigger_run_all(ctx, &tctx);
     r = 0;
 
 out_trigger:
@@ -186,6 +186,6 @@ out_needed:
 out_fileset:
     aept_fileset_free(&auto_set);
 out:
-    aept_solver_fini();
+    aept_solver_fini(ctx);
     return r;
 }

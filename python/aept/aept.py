@@ -110,7 +110,9 @@ class Aept:
         self._display_cb_handle = None
         self._confirm_cb_handle = None
         self._pending_exc = None
-        self._call(lib.aept_init(), "aept_init() failed")
+        self._ctx = lib.aept_init()
+        if self._ctx == ffi.NULL:
+            raise AeptError("aept_init() failed")
 
     def __enter__(self):
         return self
@@ -127,7 +129,8 @@ class Aept:
         if self._closed:
             return
         self._closed = True
-        lib.aept_cleanup()
+        lib.aept_cleanup(self._ctx)
+        self._ctx = ffi.NULL
         self._log_cb_handle = None
         self._display_cb_handle = None
         self._confirm_cb_handle = None
@@ -146,21 +149,22 @@ class Aept:
     # --- Configuration ----------------------------------------------------
 
     def load_config(self, path: Optional[str] = None):
-        self._call(lib.aept_load_config(str_to_c(path)), "aept_load_config() failed")
+        self._call(lib.aept_load_config(self._ctx, str_to_c(path)),
+                   "aept_load_config() failed")
 
     def set_offline_root(self, path: Optional[str]):
-        lib.aept_set_offline_root(str_to_c(path))
+        lib.aept_set_offline_root(self._ctx, str_to_c(path))
 
     def set_verbosity(self, level: int):
-        lib.aept_set_verbosity(int(level))
+        lib.aept_set_verbosity(self._ctx, int(level))
 
     # --- Flags ------------------------------------------------------------
 
     def set_flag(self, flag: int, value: bool):
-        lib.aept_set_flag(int(flag), int(value))
+        lib.aept_set_flag(self._ctx, int(flag), int(value))
 
     def get_flag(self, flag: int) -> bool:
-        return bool(lib.aept_get_flag(int(flag)))
+        return bool(lib.aept_get_flag(self._ctx, int(flag)))
 
     # --- Callbacks --------------------------------------------------------
 
@@ -170,7 +174,7 @@ class Aept:
         fn signature: fn(level: LogLevel, msg: str)
         """
         if fn is None:
-            lib.aept_set_log_fn(ffi.NULL, ffi.NULL)
+            lib.aept_set_log_fn(self._ctx, ffi.NULL, ffi.NULL)
             self._log_cb_handle = None
             return
 
@@ -183,7 +187,7 @@ class Aept:
                     self._pending_exc = sys.exc_info()
 
         self._log_cb_handle = _cb
-        lib.aept_set_log_fn(_cb, ffi.NULL)
+        lib.aept_set_log_fn(self._ctx, _cb, ffi.NULL)
 
     def set_display_callback(self, fn: Optional[Callable[[Transaction], None]]):
         """Set a Python display callback, or None to clear.
@@ -191,7 +195,7 @@ class Aept:
         fn signature: fn(txn: Transaction)
         """
         if fn is None:
-            lib.aept_set_display_fn(ffi.NULL, ffi.NULL)
+            lib.aept_set_display_fn(self._ctx, ffi.NULL, ffi.NULL)
             self._display_cb_handle = None
             return
 
@@ -204,7 +208,7 @@ class Aept:
                     self._pending_exc = sys.exc_info()
 
         self._display_cb_handle = _cb
-        lib.aept_set_display_fn(_cb, ffi.NULL)
+        lib.aept_set_display_fn(self._ctx, _cb, ffi.NULL)
 
     def set_confirm_callback(self, fn: Optional[Callable[[], bool]]):
         """Set a Python confirm callback, or None to clear.
@@ -212,7 +216,7 @@ class Aept:
         fn signature: fn() -> bool  (True to proceed, False to abort)
         """
         if fn is None:
-            lib.aept_set_confirm_fn(ffi.NULL, ffi.NULL)
+            lib.aept_set_confirm_fn(self._ctx, ffi.NULL, ffi.NULL)
             self._confirm_cb_handle = None
             return
 
@@ -226,58 +230,64 @@ class Aept:
                 return 0
 
         self._confirm_cb_handle = _cb
-        lib.aept_set_confirm_fn(_cb, ffi.NULL)
+        lib.aept_set_confirm_fn(self._ctx, _cb, ffi.NULL)
 
     # --- Cancellation -----------------------------------------------------
 
-    @staticmethod
-    def cancel():
+    def cancel(self):
         """Signal cancellation (async-signal-safe)."""
-        lib.aept_cancel()
+        lib.aept_cancel(self._ctx)
 
     # --- Mutating operations ----------------------------------------------
 
     def update(self):
-        self._call(lib.aept_update(), "aept_update() failed")
+        self._call(lib.aept_update(self._ctx), "aept_update() failed")
 
     def install(self, names: Optional[List[str]] = None,
                 local_paths: Optional[List[str]] = None):
         c_names, ka1, n_names = str_list_to_c(names or [])
         c_paths, ka2, n_paths = str_list_to_c(local_paths or [])
-        self._call(lib.aept_install(c_names, n_names, c_paths, n_paths),
+        self._call(lib.aept_install(self._ctx, c_names, n_names,
+                                    c_paths, n_paths),
                "aept_install() failed")
 
     def upgrade(self):
-        self._call(lib.aept_upgrade(), "aept_upgrade() failed")
+        self._call(lib.aept_upgrade(self._ctx), "aept_upgrade() failed")
 
     def remove(self, names: List[str]):
         c_names, ka, count = str_list_to_c(names)
-        self._call(lib.aept_remove(c_names, count), "aept_remove() failed")
+        self._call(lib.aept_remove(self._ctx, c_names, count),
+                   "aept_remove() failed")
 
     def autoremove(self):
-        self._call(lib.aept_autoremove(), "aept_autoremove() failed")
+        self._call(lib.aept_autoremove(self._ctx), "aept_autoremove() failed")
 
     def clean(self):
-        self._call(lib.aept_clean(), "aept_clean() failed")
+        self._call(lib.aept_clean(self._ctx), "aept_clean() failed")
 
     def pin(self, specs: List[str]):
         c_specs, ka, count = str_list_to_c(specs)
-        self._call(lib.aept_pin(c_specs, count), "aept_pin() failed")
+        self._call(lib.aept_pin(self._ctx, c_specs, count),
+                   "aept_pin() failed")
 
     def unpin(self, names: List[str]):
         c_names, ka, count = str_list_to_c(names)
-        self._call(lib.aept_unpin(c_names, count), "aept_unpin() failed")
+        self._call(lib.aept_unpin(self._ctx, c_names, count),
+                   "aept_unpin() failed")
 
     def mark_auto(self, names: List[str]):
         c_names, ka, count = str_list_to_c(names)
-        self._call(lib.aept_mark_auto(c_names, count), "aept_mark_auto() failed")
+        self._call(lib.aept_mark_auto(self._ctx, c_names, count),
+                   "aept_mark_auto() failed")
 
     def mark_manual(self, names: List[str]):
         c_names, ka, count = str_list_to_c(names)
-        self._call(lib.aept_mark_manual(c_names, count), "aept_mark_manual() failed")
+        self._call(lib.aept_mark_manual(self._ctx, c_names, count),
+                   "aept_mark_manual() failed")
 
     def mark_manual_all(self):
-        self._call(lib.aept_mark_manual_all(), "aept_mark_manual_all() failed")
+        self._call(lib.aept_mark_manual_all(self._ctx),
+                   "aept_mark_manual_all() failed")
 
     # --- Query: list ------------------------------------------------------
 
@@ -286,8 +296,8 @@ class Aept:
                       upgradable: bool = False) -> List[PkgEntry]:
         out = ffi.new("aept_pkg_list_t *")
         try:
-            self._call(lib.aept_list(str_to_c(pattern),
-                                 int(installed), int(upgradable), out),
+            self._call(lib.aept_list(self._ctx, str_to_c(pattern),
+                                     int(installed), int(upgradable), out),
                    "aept_list() failed")
             result = []
             for i in range(out.count):
@@ -308,7 +318,7 @@ class Aept:
     def show(self, name: str) -> Optional[PkgInfo]:
         out = ffi.new("aept_pkg_info_t *")
         try:
-            rc = self._call(lib.aept_show(str_to_c(name), out),
+            rc = self._call(lib.aept_show(self._ctx, str_to_c(name), out),
                         "aept_show() failed")
             if rc == 1:
                 return None
@@ -338,7 +348,8 @@ class Aept:
     def files(self, name: str) -> Optional[List[str]]:
         paths_out = ffi.new("char ***")
         count_out = ffi.new("int *")
-        rc = self._call(lib.aept_files(str_to_c(name), paths_out, count_out),
+        rc = self._call(lib.aept_files(self._ctx, str_to_c(name),
+                                       paths_out, count_out),
                      "aept_files() failed")
         if rc == 1:
             return None
@@ -347,7 +358,8 @@ class Aept:
     def owns(self, path: str) -> Optional[List[str]]:
         owners_out = ffi.new("char ***")
         count_out = ffi.new("int *")
-        rc = self._call(lib.aept_owns(str_to_c(path), owners_out, count_out),
+        rc = self._call(lib.aept_owns(self._ctx, str_to_c(path),
+                                      owners_out, count_out),
                      "aept_owns() failed")
         if rc == 1:
             return None
@@ -356,6 +368,6 @@ class Aept:
     def architectures(self) -> List[str]:
         archs_out = ffi.new("char ***")
         count_out = ffi.new("int *")
-        self._call(lib.aept_architectures(archs_out, count_out),
+        self._call(lib.aept_architectures(self._ctx, archs_out, count_out),
                "aept_architectures() failed")
         return c_str_array_to_list(archs_out[0], count_out[0])

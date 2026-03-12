@@ -19,87 +19,86 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
-static aept_config_t _cfg;
-aept_config_t *aept_cfg = &_cfg;
-
-void aept_config_set_defaults(void)
+void aept_config_set_defaults(struct aept_config *cfg)
 {
-    memset(aept_cfg, 0, sizeof(*aept_cfg));
+    memset(cfg, 0, sizeof(*cfg));
 
-    aept_cfg->info_dir = aept_strdup("/var/lib/aept/info");
-    aept_cfg->lists_dir = aept_strdup("/var/lib/aept/lists");
-    aept_cfg->status_file = aept_strdup("/var/lib/aept/status");
-    aept_cfg->cache_dir = aept_strdup("/var/cache/aept");
-    aept_cfg->tmp_dir = aept_strdup("/tmp");
-    aept_cfg->lock_file = aept_strdup("/var/lib/aept/lock");
-    aept_cfg->usign_keydir = aept_strdup("/etc/aept/usign/trustdb");
-    aept_cfg->auto_file = aept_strdup("/var/lib/aept/auto-installed");
-    aept_cfg->pin_file = aept_strdup("/var/lib/aept/pinned-packages");
+    cfg->info_dir = aept_strdup("/var/lib/aept/info");
+    cfg->lists_dir = aept_strdup("/var/lib/aept/lists");
+    cfg->status_file = aept_strdup("/var/lib/aept/status");
+    cfg->cache_dir = aept_strdup("/var/cache/aept");
+    cfg->tmp_dir = aept_strdup("/tmp");
+    cfg->lock_file = aept_strdup("/var/lib/aept/lock");
+    cfg->usign_keydir = aept_strdup("/etc/aept/usign/trustdb");
+    cfg->auto_file = aept_strdup("/var/lib/aept/auto-installed");
+    cfg->pin_file = aept_strdup("/var/lib/aept/pinned-packages");
 
-    aept_cfg->check_signature = 1;
-    aept_cfg->verbosity = AEPT_INFO;
+    cfg->check_signature = 1;
+    cfg->verbosity = AEPT_INFO;
 }
 
-static void add_source(const char *name, const char *url, int gzip)
+static void add_source(struct aept_config *cfg, const char *name,
+                        const char *url, int gzip)
 {
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_warning("ignoring source with unsafe name '%s'", name);
         return;
     }
 
-    aept_cfg->nsources++;
-    aept_cfg->sources = aept_realloc(aept_cfg->sources,
-                            aept_cfg->nsources * sizeof(aept_source_t));
+    cfg->nsources++;
+    cfg->sources = aept_realloc(cfg->sources,
+                            cfg->nsources * sizeof(aept_source_t));
 
-    aept_source_t *src = &aept_cfg->sources[aept_cfg->nsources - 1];
+    aept_source_t *src = &cfg->sources[cfg->nsources - 1];
     src->name = aept_strdup(name);
     src->url = aept_strdup(url);
     src->gzip = gzip;
 }
 
-static void add_arch(const char *arch)
+static void add_arch(struct aept_config *cfg, const char *arch)
 {
-    aept_cfg->narchs++;
-    aept_cfg->archs = aept_realloc(aept_cfg->archs, aept_cfg->narchs * sizeof(char *));
-    aept_cfg->archs[aept_cfg->narchs - 1] = aept_strdup(arch);
+    cfg->narchs++;
+    cfg->archs = aept_realloc(cfg->archs, cfg->narchs * sizeof(char *));
+    cfg->archs[cfg->narchs - 1] = aept_strdup(arch);
 }
 
-static void set_option(const char *key, const char *value)
+static void set_option(struct aept_config *cfg, const char *key,
+                        const char *value)
 {
     char **strp = NULL;
 
     if (strcmp(key, "offline_root") == 0)
-        strp = &aept_cfg->offline_root;
+        strp = &cfg->offline_root;
     else if (strcmp(key, "info_dir") == 0)
-        strp = &aept_cfg->info_dir;
+        strp = &cfg->info_dir;
     else if (strcmp(key, "lists_dir") == 0)
-        strp = &aept_cfg->lists_dir;
+        strp = &cfg->lists_dir;
     else if (strcmp(key, "status_file") == 0)
-        strp = &aept_cfg->status_file;
+        strp = &cfg->status_file;
     else if (strcmp(key, "cache_dir") == 0)
-        strp = &aept_cfg->cache_dir;
+        strp = &cfg->cache_dir;
     else if (strcmp(key, "tmp_dir") == 0)
-        strp = &aept_cfg->tmp_dir;
+        strp = &cfg->tmp_dir;
     else if (strcmp(key, "lock_file") == 0)
-        strp = &aept_cfg->lock_file;
+        strp = &cfg->lock_file;
     else if (strcmp(key, "usign_keydir") == 0)
-        strp = &aept_cfg->usign_keydir;
+        strp = &cfg->usign_keydir;
     else if (strcmp(key, "auto_file") == 0)
-        strp = &aept_cfg->auto_file;
+        strp = &cfg->auto_file;
     else if (strcmp(key, "pin_file") == 0)
-        strp = &aept_cfg->pin_file;
+        strp = &cfg->pin_file;
     else if (strcmp(key, "ssl_client_cert") == 0)
-        strp = &aept_cfg->ssl_client_cert;
+        strp = &cfg->ssl_client_cert;
     else if (strcmp(key, "ssl_client_key") == 0)
-        strp = &aept_cfg->ssl_client_key;
+        strp = &cfg->ssl_client_key;
     else if (strcmp(key, "check_signature") == 0) {
-        aept_cfg->check_signature = atoi(value);
+        cfg->check_signature = atoi(value);
         return;
     } else if (strcmp(key, "ignore_uid") == 0) {
-        aept_cfg->ignore_uid = atoi(value);
+        cfg->ignore_uid = atoi(value);
         return;
     } else if (strcmp(key, "allow_downgrade") == 0) {
-        aept_cfg->allow_downgrade = atoi(value);
+        cfg->allow_downgrade = atoi(value);
         return;
     } else {
         aept_log_warning("unknown option '%s'", key);
@@ -110,48 +109,48 @@ static void set_option(const char *key, const char *value)
     *strp = aept_strdup(value);
 }
 
-void aept_config_apply_offline_root(void)
+void aept_config_apply_offline_root(struct aept_config *cfg)
 {
     char *tmp;
 
-    if (!aept_cfg->offline_root)
+    if (!cfg->offline_root)
         return;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->lists_dir);
-    free(aept_cfg->lists_dir);
-    aept_cfg->lists_dir = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->lists_dir);
+    free(cfg->lists_dir);
+    cfg->lists_dir = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->cache_dir);
-    free(aept_cfg->cache_dir);
-    aept_cfg->cache_dir = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->cache_dir);
+    free(cfg->cache_dir);
+    cfg->cache_dir = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->info_dir);
-    free(aept_cfg->info_dir);
-    aept_cfg->info_dir = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->info_dir);
+    free(cfg->info_dir);
+    cfg->info_dir = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->status_file);
-    free(aept_cfg->status_file);
-    aept_cfg->status_file = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->status_file);
+    free(cfg->status_file);
+    cfg->status_file = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->lock_file);
-    free(aept_cfg->lock_file);
-    aept_cfg->lock_file = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->lock_file);
+    free(cfg->lock_file);
+    cfg->lock_file = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->auto_file);
-    free(aept_cfg->auto_file);
-    aept_cfg->auto_file = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->auto_file);
+    free(cfg->auto_file);
+    cfg->auto_file = tmp;
 
-    aept_asprintf(&tmp, "%s%s", aept_cfg->offline_root, aept_cfg->pin_file);
-    free(aept_cfg->pin_file);
-    aept_cfg->pin_file = tmp;
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->pin_file);
+    free(cfg->pin_file);
+    cfg->pin_file = tmp;
 }
 
-int aept_config_load(const char *filename)
+int aept_config_load(struct aept_config *cfg, const char *filename)
 {
     FILE *fp;
     char buf[4096];
 
-    aept_config_set_defaults();
+    aept_config_set_defaults(cfg);
 
     fp = fopen(filename, "r");
     if (!fp) {
@@ -187,21 +186,21 @@ int aept_config_load(const char *filename)
             char *name = strsep(&line, " \t");
             char *url = strsep(&line, " \t");
             if (name && url)
-                add_source(name, url, 1);
+                add_source(cfg, name, url, 1);
         } else if (strcmp(token, "src") == 0) {
             char *name = strsep(&line, " \t");
             char *url = strsep(&line, " \t");
             if (name && url)
-                add_source(name, url, 0);
+                add_source(cfg, name, url, 0);
         } else if (strcmp(token, "option") == 0) {
             char *key = strsep(&line, " \t");
             char *value = strsep(&line, " \t");
             if (key && value)
-                set_option(key, value);
+                set_option(cfg, key, value);
         } else if (strcmp(token, "arch") == 0) {
             char *arch = strsep(&line, " \t");
             if (arch)
-                add_arch(arch);
+                add_arch(cfg, arch);
         } else {
             aept_log_warning("unknown config directive '%s'", token);
         }
@@ -221,28 +220,28 @@ static int validate_dir(const char *name, const char *path)
     return 0;
 }
 
-int aept_config_validate(void)
+int aept_config_validate(const struct aept_config *cfg)
 {
     int r = 0;
 
-    if (aept_cfg->offline_root) {
-        if (!aept_file_exists(aept_cfg->offline_root)) {
+    if (cfg->offline_root) {
+        if (!aept_file_exists(cfg->offline_root)) {
             aept_log_error("offline_root '%s' does not exist",
-                      aept_cfg->offline_root);
+                      cfg->offline_root);
             return -1;
         }
-        if (!aept_file_is_dir(aept_cfg->offline_root)) {
+        if (!aept_file_is_dir(cfg->offline_root)) {
             aept_log_error("offline_root '%s' is not a directory",
-                      aept_cfg->offline_root);
+                      cfg->offline_root);
             return -1;
         }
     }
 
-    r |= validate_dir("info_dir", aept_cfg->info_dir);
-    r |= validate_dir("lists_dir", aept_cfg->lists_dir);
-    r |= validate_dir("cache_dir", aept_cfg->cache_dir);
-    r |= validate_dir("tmp_dir", aept_cfg->tmp_dir);
-    r |= validate_dir("usign_keydir", aept_cfg->usign_keydir);
+    r |= validate_dir("info_dir", cfg->info_dir);
+    r |= validate_dir("lists_dir", cfg->lists_dir);
+    r |= validate_dir("cache_dir", cfg->cache_dir);
+    r |= validate_dir("tmp_dir", cfg->tmp_dir);
+    r |= validate_dir("usign_keydir", cfg->usign_keydir);
 
     if (aept_file_exists(AEPT_USIGN_BIN) && aept_file_is_dir(AEPT_USIGN_BIN)) {
         aept_log_error("usign_bin '%s' is a directory", AEPT_USIGN_BIN);
@@ -252,78 +251,76 @@ int aept_config_validate(void)
     return r;
 }
 
-void aept_config_free(void)
+void aept_config_free(struct aept_config *cfg)
 {
     int i;
 
-    for (i = 0; i < aept_cfg->nsources; i++) {
-        free(aept_cfg->sources[i].name);
-        free(aept_cfg->sources[i].url);
+    for (i = 0; i < cfg->nsources; i++) {
+        free(cfg->sources[i].name);
+        free(cfg->sources[i].url);
     }
-    free(aept_cfg->sources);
+    free(cfg->sources);
 
-    for (i = 0; i < aept_cfg->narchs; i++)
-        free(aept_cfg->archs[i]);
-    free(aept_cfg->archs);
+    for (i = 0; i < cfg->narchs; i++)
+        free(cfg->archs[i]);
+    free(cfg->archs);
 
-    free(aept_cfg->offline_root);
-    free(aept_cfg->info_dir);
-    free(aept_cfg->lists_dir);
-    free(aept_cfg->status_file);
-    free(aept_cfg->cache_dir);
-    free(aept_cfg->tmp_dir);
-    free(aept_cfg->lock_file);
-    free(aept_cfg->usign_keydir);
-    free(aept_cfg->auto_file);
-    free(aept_cfg->pin_file);
-    free(aept_cfg->ssl_client_cert);
-    free(aept_cfg->ssl_client_key);
+    free(cfg->offline_root);
+    free(cfg->info_dir);
+    free(cfg->lists_dir);
+    free(cfg->status_file);
+    free(cfg->cache_dir);
+    free(cfg->tmp_dir);
+    free(cfg->lock_file);
+    free(cfg->usign_keydir);
+    free(cfg->auto_file);
+    free(cfg->pin_file);
+    free(cfg->ssl_client_cert);
+    free(cfg->ssl_client_key);
 
-    memset(aept_cfg, 0, sizeof(*aept_cfg));
+    memset(cfg, 0, sizeof(*cfg));
 }
 
-char *aept_config_root_path(const char *path)
+char *aept_config_root_path(const struct aept_config *cfg, const char *path)
 {
     char *result;
     aept_asprintf(&result, "%s%s",
-              aept_cfg->offline_root ? aept_cfg->offline_root : "", path);
+              cfg->offline_root ? cfg->offline_root : "", path);
     return result;
 }
 
-static int lock_fd = -1;
-
-int aept_config_lock(void)
+int aept_config_lock(struct aept_ctx *ctx)
 {
-    char *dir = aept_strdup(aept_cfg->lock_file);
+    char *dir = aept_strdup(ctx->config.lock_file);
     aept_file_mkdir_hier(dirname(dir), 0755);
     free(dir);
 
-    lock_fd = open(aept_cfg->lock_file, O_CREAT | O_RDWR, 0644);
-    if (lock_fd < 0) {
+    ctx->lock_fd = open(ctx->config.lock_file, O_CREAT | O_RDWR, 0644);
+    if (ctx->lock_fd < 0) {
         aept_log_error("cannot open lock file '%s': %s",
-                  aept_cfg->lock_file, strerror(errno));
+                  ctx->config.lock_file, strerror(errno));
         return -1;
     }
 
-    if (flock(lock_fd, LOCK_EX | LOCK_NB) < 0) {
+    if (flock(ctx->lock_fd, LOCK_EX | LOCK_NB) < 0) {
         if (errno == EWOULDBLOCK)
             aept_log_error("another aept instance is running");
         else
             aept_log_error("cannot lock '%s': %s",
-                      aept_cfg->lock_file, strerror(errno));
-        close(lock_fd);
-        lock_fd = -1;
+                      ctx->config.lock_file, strerror(errno));
+        close(ctx->lock_fd);
+        ctx->lock_fd = -1;
         return -1;
     }
 
     return 0;
 }
 
-void aept_config_unlock(void)
+void aept_config_unlock(struct aept_ctx *ctx)
 {
-    if (lock_fd >= 0) {
-        flock(lock_fd, LOCK_UN);
-        close(lock_fd);
-        lock_fd = -1;
+    if (ctx->lock_fd >= 0) {
+        flock(ctx->lock_fd, LOCK_UN);
+        close(ctx->lock_fd);
+        ctx->lock_fd = -1;
     }
 }

@@ -32,78 +32,53 @@
 #include "aept/update.h"
 #include "aept/util.h"
 
-/* ── Static context ──────────────────────────────────────────────── */
-
-static struct {
-    aept_config_t config;
-    int config_loaded;
-
-    aept_log_fn     log_fn;
-    void           *log_userdata;
-
-    aept_display_fn display_fn;
-    void           *display_userdata;
-
-    aept_confirm_fn confirm_fn;
-    void           *confirm_userdata;
-
-    volatile int cancelled;
-} ctx;
-
 /* ── Lifecycle ───────────────────────────────────────────────────── */
 
-int aept_init(void)
+aept_ctx_t *aept_init(void)
 {
-    memset(&ctx, 0, sizeof(ctx));
-    aept_cfg = &ctx.config;
-    aept_log_cb = NULL;
-    aept_log_cb_data = NULL;
-    aept_display_cb = NULL;
-    aept_display_cb_data = NULL;
-    aept_confirm_cb = NULL;
-    aept_confirm_cb_data = NULL;
-    return 0;
+    aept_ctx_t *ctx = aept_malloc(sizeof(*ctx));
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->lock_fd = -1;
+    ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
+    aept_log_set_ctx(ctx);
+    return ctx;
 }
 
-void aept_cleanup(void)
+void aept_cleanup(aept_ctx_t *ctx)
 {
-    if (ctx.config_loaded) {
-        aept_config_free();
-        ctx.config_loaded = 0;
+    if (!ctx)
+        return;
+
+    if (ctx->config_loaded) {
+        aept_config_free(&ctx->config);
+        ctx->config_loaded = 0;
     }
 
-    aept_log_cb = NULL;
-    aept_log_cb_data = NULL;
-    aept_display_cb = NULL;
-    aept_display_cb_data = NULL;
-    aept_confirm_cb = NULL;
-    aept_confirm_cb_data = NULL;
-
-    memset(&ctx, 0, sizeof(ctx));
-    aept_cfg = &ctx.config;
+    aept_log_set_ctx(NULL);
+    free(ctx);
 }
 
 /* ── Configuration ───────────────────────────────────────────────── */
 
-int aept_load_config(const char *path)
+int aept_load_config(aept_ctx_t *ctx, const char *path)
 {
-    char *root_override = ctx.config.offline_root;
+    char *root_override = ctx->config.offline_root;
     int r = 0;
 
-    ctx.config.offline_root = NULL;
+    ctx->config.offline_root = NULL;
 
-    if (ctx.config_loaded) {
-        aept_config_free();
-        ctx.config_loaded = 0;
+    if (ctx->config_loaded) {
+        aept_config_free(&ctx->config);
+        ctx->config_loaded = 0;
     }
 
     if (!path)
         path = "/etc/aept/aept.conf";
 
     if (access(path, R_OK) < 0 && errno == ENOENT)
-        aept_config_set_defaults();
+        aept_config_set_defaults(&ctx->config);
     else
-        r = aept_config_load(path);
+        r = aept_config_load(&ctx->config, path);
 
     if (r < 0) {
         free(root_override);
@@ -111,25 +86,25 @@ int aept_load_config(const char *path)
     }
 
     if (root_override) {
-        free(aept_cfg->offline_root);
-        aept_cfg->offline_root = root_override;
+        free(ctx->config.offline_root);
+        ctx->config.offline_root = root_override;
     }
 
-    aept_config_apply_offline_root();
-    ctx.config_loaded = 1;
+    aept_config_apply_offline_root(&ctx->config);
+    ctx->config_loaded = 1;
 
     return 0;
 }
 
-void aept_set_offline_root(const char *path)
+void aept_set_offline_root(aept_ctx_t *ctx, const char *path)
 {
-    free(ctx.config.offline_root);
-    ctx.config.offline_root = path ? aept_strdup(path) : NULL;
+    free(ctx->config.offline_root);
+    ctx->config.offline_root = path ? aept_strdup(path) : NULL;
 }
 
-void aept_set_verbosity(int level)
+void aept_set_verbosity(aept_ctx_t *ctx, int level)
 {
-    ctx.config.verbosity = level;
+    ctx->config.verbosity = level;
 }
 
 /* ── Flags ───────────────────────────────────────────────────────── */
@@ -153,139 +128,128 @@ static int *flag_ptr(aept_config_t *cfg, int flag)
     }
 }
 
-void aept_set_flag(int flag, int value)
+void aept_set_flag(aept_ctx_t *ctx, int flag, int value)
 {
-    int *p = flag_ptr(&ctx.config, flag);
+    int *p = flag_ptr(&ctx->config, flag);
     if (p)
         *p = value;
 }
 
-int aept_get_flag(int flag)
+int aept_get_flag(aept_ctx_t *ctx, int flag)
 {
-    int *p = flag_ptr(&ctx.config, flag);
+    int *p = flag_ptr(&ctx->config, flag);
     return p ? *p : 0;
 }
 
 /* ── Callbacks ───────────────────────────────────────────────────── */
 
-void aept_set_log_fn(aept_log_fn fn, void *userdata)
+void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata)
 {
-    ctx.log_fn = fn;
-    ctx.log_userdata = userdata;
-    aept_log_cb = fn;
-    aept_log_cb_data = userdata;
+    ctx->log_fn = fn;
+    ctx->log_userdata = userdata;
 }
 
-void aept_set_display_fn(aept_display_fn fn, void *userdata)
+void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata)
 {
-    ctx.display_fn = fn;
-    ctx.display_userdata = userdata;
-    aept_display_cb = fn;
-    aept_display_cb_data = userdata;
+    ctx->display_fn = fn;
+    ctx->display_userdata = userdata;
 }
 
-void aept_set_confirm_fn(aept_confirm_fn fn, void *userdata)
+void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata)
 {
-    ctx.confirm_fn = fn;
-    ctx.confirm_userdata = userdata;
-    aept_confirm_cb = fn;
-    aept_confirm_cb_data = userdata;
+    ctx->confirm_fn = fn;
+    ctx->confirm_userdata = userdata;
 }
 
 /* ── Cancellation ────────────────────────────────────────────────── */
 
-void aept_cancel(void)
+void aept_cancel(aept_ctx_t *ctx)
 {
-    ctx.cancelled = 1;
-}
-
-int aept_cancelled(void)
-{
-    return ctx.cancelled;
+    ctx->cancelled = 1;
 }
 
 /* ── Mutating operations ─────────────────────────────────────────── */
 
-int aept_update(void)
+int aept_update(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_update();
+    r = aept_op_update(ctx);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_install(const char **names, int name_count,
+int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
                  const char **local_paths, int local_count)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_install(names, name_count, local_paths, local_count);
+    r = aept_op_install(ctx, names, name_count, local_paths, local_count);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_upgrade(void)
+int aept_upgrade(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_install(NULL, 0, NULL, 0);
+    r = aept_op_install(ctx, NULL, 0, NULL, 0);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_remove(const char **names, int count)
+int aept_remove(aept_ctx_t *ctx, const char **names, int count)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_remove(names, count);
+    r = aept_op_remove(ctx, names, count);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_autoremove(void)
+int aept_autoremove(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_autoremove();
+    r = aept_op_autoremove(ctx);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_clean(void)
+int aept_clean(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate() < 0) return -1;
-    if (aept_config_lock() < 0)     return -1;
+    if (aept_config_validate(&ctx->config) < 0) return -1;
+    if (aept_config_lock(ctx) < 0)               return -1;
 
-    r = aept_op_clean();
+    r = aept_op_clean(ctx);
 
-    aept_config_unlock();
+    aept_config_unlock(ctx);
     return r;
 }
 
-int aept_pin(const char **specs, int count)
+int aept_pin(aept_ctx_t *ctx, const char **specs, int count)
 {
     int i, r = 0;
     int solver_ready = 0;
@@ -304,102 +268,103 @@ int aept_pin(const char **specs, int count)
             name = copy;
 
             if (!solver_ready) {
-                if (aept_solver_init() < 0 || aept_status_load() < 0) {
-                    aept_solver_fini();
+                if (aept_solver_init(ctx) < 0 ||
+                        aept_status_load(ctx) < 0) {
+                    aept_solver_fini(ctx);
                     free(copy);
                     return -1;
                 }
                 solver_ready = 1;
             }
 
-            version = aept_solver_installed_version(name);
+            version = aept_solver_installed_version(ctx->solver, name);
             if (!version) {
                 free(copy);
                 continue;
             }
         }
 
-        if (aept_pin_add(name, version) < 0)
+        if (aept_pin_add(ctx, name, version) < 0)
             r = -1;
 
         free(copy);
     }
 
     if (solver_ready)
-        aept_solver_fini();
+        aept_solver_fini(ctx);
 
     return r;
 }
 
-int aept_unpin(const char **names, int count)
+int aept_unpin(aept_ctx_t *ctx, const char **names, int count)
 {
     int i, r = 0;
 
     for (i = 0; i < count; i++) {
-        if (aept_pin_remove(names[i]) < 0)
+        if (aept_pin_remove(ctx, names[i]) < 0)
             r = -1;
     }
 
     return r;
 }
 
-int aept_mark_auto(const char **names, int count)
-{
-    int i, r = 0;
-
-    for (i = 0; i < count; i++) {
-        char *list_path = NULL;
-        aept_asprintf(&list_path, "%s/%s.list",
-                  aept_cfg->info_dir, names[i]);
-        if (!aept_file_exists(list_path)) {
-            free(list_path);
-            continue;
-        }
-        free(list_path);
-        if (aept_status_mark_auto(names[i]) < 0)
-            r = -1;
-    }
-
-    return r;
-}
-
-int aept_mark_manual(const char **names, int count)
+int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
 {
     int i, r = 0;
 
     for (i = 0; i < count; i++) {
         char *list_path = NULL;
         aept_asprintf(&list_path, "%s/%s.list",
-                  aept_cfg->info_dir, names[i]);
+                  ctx->config.info_dir, names[i]);
         if (!aept_file_exists(list_path)) {
             free(list_path);
             continue;
         }
         free(list_path);
-        if (aept_status_unmark_auto(names[i]) < 0)
+        if (aept_status_mark_auto(ctx, names[i]) < 0)
             r = -1;
     }
 
     return r;
 }
 
-int aept_mark_manual_all(void)
+int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
 {
-    return aept_status_clear_auto();
+    int i, r = 0;
+
+    for (i = 0; i < count; i++) {
+        char *list_path = NULL;
+        aept_asprintf(&list_path, "%s/%s.list",
+                  ctx->config.info_dir, names[i]);
+        if (!aept_file_exists(list_path)) {
+            free(list_path);
+            continue;
+        }
+        free(list_path);
+        if (aept_status_unmark_auto(ctx, names[i]) < 0)
+            r = -1;
+    }
+
+    return r;
+}
+
+int aept_mark_manual_all(aept_ctx_t *ctx)
+{
+    return aept_status_clear_auto(ctx);
 }
 
 /* ── Query helpers ───────────────────────────────────────────────── */
 
-static int query_load_repos(void)
+static int query_load_repos(aept_ctx_t *ctx)
 {
     int i;
 
-    for (i = 0; i < aept_cfg->nsources; i++) {
+    for (i = 0; i < ctx->config.nsources; i++) {
         char *list_path = NULL;
         FILE *fp;
 
         aept_asprintf(&list_path, "%s/%s",
-                  aept_cfg->lists_dir, aept_cfg->sources[i].name);
+                  ctx->config.lists_dir, ctx->config.sources[i].name);
 
         fp = fopen(list_path, "r");
         if (!fp) {
@@ -407,7 +372,7 @@ static int query_load_repos(void)
             continue;
         }
 
-        aept_solver_load_repo(aept_cfg->sources[i].name, fp, i);
+        aept_solver_load_repo(ctx, ctx->config.sources[i].name, fp, i);
         fclose(fp);
         free(list_path);
     }
@@ -488,7 +453,7 @@ static int cmp_api_list_entry(const void *a, const void *b)
                  pool_id2str(api_sort_pool, eb->name_id));
 }
 
-int aept_list(const char *pattern,
+int aept_list(aept_ctx_t *ctx, const char *pattern,
               int filter_installed, int filter_upgradable,
               aept_pkg_list_t *out)
 {
@@ -501,13 +466,13 @@ int aept_list(const char *pattern,
 
     memset(out, 0, sizeof(*out));
 
-    if (aept_solver_init() < 0)
+    if (aept_solver_init(ctx) < 0)
         return -1;
 
-    aept_status_load();
-    query_load_repos();
+    aept_status_load(ctx);
+    query_load_repos(ctx);
 
-    pool = aept_solver_pool();
+    pool = aept_solver_pool(ctx->solver);
 
     FOR_POOL_SOLVABLES(p) {
         struct api_list_entry *e;
@@ -580,7 +545,7 @@ int aept_list(const char *pattern,
 
 cleanup:
     free(entries);
-    aept_solver_fini();
+    aept_solver_fini(ctx);
     return r;
 }
 
@@ -602,7 +567,7 @@ void aept_pkg_list_free(aept_pkg_list_t *list)
 
 /* ── Query: show ─────────────────────────────────────────────────── */
 
-int aept_show(const char *name, aept_pkg_info_t *out)
+int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     Pool *pool;
     Id name_id, p;
@@ -613,13 +578,13 @@ int aept_show(const char *name, aept_pkg_info_t *out)
 
     memset(out, 0, sizeof(*out));
 
-    if (aept_solver_init() < 0)
+    if (aept_solver_init(ctx) < 0)
         return -1;
 
-    aept_status_load();
-    query_load_repos();
+    aept_status_load(ctx);
+    query_load_repos(ctx);
 
-    pool = aept_solver_pool();
+    pool = aept_solver_pool(ctx->solver);
 
     name_id = pool_str2id(pool, name, 0);
     if (!name_id)
@@ -680,7 +645,7 @@ int aept_show(const char *name, aept_pkg_info_t *out)
 not_found:
     r = 1;
 cleanup:
-    aept_solver_fini();
+    aept_solver_fini(ctx);
     return r;
 }
 
@@ -708,7 +673,8 @@ void aept_pkg_info_free(aept_pkg_info_t *info)
 
 /* ── Query: files ────────────────────────────────────────────────── */
 
-int aept_files(const char *name, char ***paths_out, int *count_out)
+int aept_files(aept_ctx_t *ctx, const char *name,
+               char ***paths_out, int *count_out)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -722,7 +688,7 @@ int aept_files(const char *name, char ***paths_out, int *count_out)
     if (!aept_pkg_name_is_safe(name))
         return -1;
 
-    aept_asprintf(&list_path, "%s/%s.list", aept_cfg->info_dir, name);
+    aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
     fp = fopen(list_path, "r");
     free(list_path);
@@ -783,7 +749,8 @@ static size_t owns_path_len(const char *p)
     return len;
 }
 
-int aept_owns(const char *path, char ***owners_out, int *count_out)
+int aept_owns(aept_ctx_t *ctx, const char *path,
+              char ***owners_out, int *count_out)
 {
     DIR *dir;
     struct dirent *ent;
@@ -803,7 +770,7 @@ int aept_owns(const char *path, char ***owners_out, int *count_out)
         needle = ".";
     needle_len = owns_path_len(needle);
 
-    dir = opendir(aept_cfg->info_dir);
+    dir = opendir(ctx->config.info_dir);
     if (!dir)
         return 1;
 
@@ -817,7 +784,7 @@ int aept_owns(const char *path, char ***owners_out, int *count_out)
         if (!dot || strcmp(dot, ".list") != 0)
             continue;
 
-        aept_asprintf(&list_path, "%s/%s", aept_cfg->info_dir, ent->d_name);
+        aept_asprintf(&list_path, "%s/%s", ctx->config.info_dir, ent->d_name);
         fp = fopen(list_path, "r");
         free(list_path);
 
@@ -875,23 +842,23 @@ int aept_owns(const char *path, char ***owners_out, int *count_out)
 
 /* ── Query: architectures ────────────────────────────────────────── */
 
-int aept_architectures(char ***archs_out, int *count_out)
+int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
 {
     int i;
 
     *archs_out = NULL;
     *count_out = 0;
 
-    if (aept_cfg->narchs > 0) {
-        char **archs = malloc(aept_cfg->narchs * sizeof(char *));
+    if (ctx->config.narchs > 0) {
+        char **archs = malloc(ctx->config.narchs * sizeof(char *));
         if (!archs)
             return -1;
 
-        for (i = 0; i < aept_cfg->narchs; i++)
-            archs[i] = strdup(aept_cfg->archs[i]);
+        for (i = 0; i < ctx->config.narchs; i++)
+            archs[i] = strdup(ctx->config.archs[i]);
 
         *archs_out = archs;
-        *count_out = aept_cfg->narchs;
+        *count_out = ctx->config.narchs;
     }
 
     return 0;

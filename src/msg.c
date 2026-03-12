@@ -16,15 +16,9 @@
 #include "aept/internal.h"
 #include "aept/msg.h"
 
-static int use_color;
-
-/* Callback globals (set by API entry points, NULL by default) */
-aept_log_fn     aept_log_cb;
-void           *aept_log_cb_data;
-aept_display_fn aept_display_cb;
-void           *aept_display_cb_data;
-aept_confirm_fn aept_confirm_cb;
-void           *aept_confirm_cb_data;
+/* Global logging context pointer.  Set once by aept_init() via
+ * aept_log_set_ctx(), cleared by aept_cleanup().  Read-only after init. */
+static struct aept_ctx *aept_log_ctx;
 
 static const char *level_name[] = {
     [AEPT_ERROR]   = "error",
@@ -40,23 +34,24 @@ static const char *level_color[] = {
     [AEPT_DEBUG]   = "\033[34m"
 };
 
-void aept_log_init(void)
+void aept_log_set_ctx(struct aept_ctx *ctx)
 {
-    use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
+    aept_log_ctx = ctx;
 }
 
 void aept_log(int level, const char *file, int line, const char *fmt, ...)
 {
     va_list ap;
     FILE *out;
+    int use_color;
 
     if (level < 0 || level > AEPT_DEBUG)
         return;
 
-    if (aept_cfg && level > aept_cfg->verbosity)
+    if (aept_log_ctx && level > aept_log_ctx->config.verbosity)
         return;
 
-    if (aept_log_cb) {
+    if (aept_log_ctx && aept_log_ctx->log_fn) {
         char buf[1024];
         int n;
 
@@ -69,10 +64,11 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
             snprintf(buf + n, sizeof(buf) - n, " (%s:%d)", file, line);
         }
 
-        aept_log_cb(level, buf, aept_log_cb_data);
+        aept_log_ctx->log_fn(level, buf, aept_log_ctx->log_userdata);
         return;
     }
 
+    use_color = aept_log_ctx ? aept_log_ctx->use_color : 0;
     out = (level <= AEPT_WARNING) ? stderr : stdout;
 
     if (use_color) {
@@ -94,8 +90,8 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
 
 void aept_display_transaction(const struct aept_transaction *txn)
 {
-    if (aept_display_cb) {
-        aept_display_cb(txn, aept_display_cb_data);
+    if (aept_log_ctx && aept_log_ctx->display_fn) {
+        aept_log_ctx->display_fn(txn, aept_log_ctx->display_userdata);
         return;
     }
 
@@ -131,11 +127,11 @@ int aept_confirm_continue(void)
     struct termios old_tio, new_tio;
     int ch;
 
-    if (aept_cfg->non_interactive)
+    if (aept_log_ctx && aept_log_ctx->config.non_interactive)
         return 1;
 
-    if (aept_confirm_cb)
-        return aept_confirm_cb(aept_confirm_cb_data);
+    if (aept_log_ctx && aept_log_ctx->confirm_fn)
+        return aept_log_ctx->confirm_fn(aept_log_ctx->confirm_userdata);
 
     printf("Do you want to continue? [Y/n] ");
     fflush(stdout);
@@ -161,6 +157,7 @@ int aept_confirm_continue(void)
 void aept_print_heading(const char *fmt, ...)
 {
     va_list ap;
+    int use_color = aept_log_ctx ? aept_log_ctx->use_color : 0;
 
     if (use_color)
         printf("\033[1m");
@@ -218,4 +215,9 @@ void aept_print_names(const char **list, int count)
     }
 
     putchar('\n');
+}
+
+int aept_cancelled(void)
+{
+    return aept_log_ctx ? aept_log_ctx->cancelled : 0;
 }

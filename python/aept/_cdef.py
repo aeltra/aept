@@ -4,16 +4,20 @@
 # no compiler attributes -- only plain C declarations that CFFI can parse.
 
 CDEF = """\
+/* --- Opaque context handle ----------------------------------------------- */
+
+typedef struct aept_ctx aept_ctx_t;
+
 /* --- Lifecycle ----------------------------------------------------------- */
 
-int  aept_init(void);
-void aept_cleanup(void);
+aept_ctx_t *aept_init(void);
+void aept_cleanup(aept_ctx_t *ctx);
 
 /* --- Configuration ------------------------------------------------------- */
 
-int  aept_load_config(const char *path);
-void aept_set_offline_root(const char *path);
-void aept_set_verbosity(int level);
+int  aept_load_config(aept_ctx_t *ctx, const char *path);
+void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
+void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
 /* --- Flags --------------------------------------------------------------- */
 
@@ -32,8 +36,8 @@ enum {
     AEPT_FLAG_IGNORE_UID,
 };
 
-void aept_set_flag(int flag, int value);
-int  aept_get_flag(int flag);
+void aept_set_flag(aept_ctx_t *ctx, int flag, int value);
+int  aept_get_flag(aept_ctx_t *ctx, int flag);
 
 /* --- Callbacks ----------------------------------------------------------- */
 
@@ -45,7 +49,7 @@ enum {
 };
 
 typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
-void aept_set_log_fn(aept_log_fn fn, void *userdata);
+void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
 
 typedef struct aept_transaction {
     const char **install;   int n_install;
@@ -55,30 +59,30 @@ typedef struct aept_transaction {
 } aept_transaction_t;
 
 typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
-void aept_set_display_fn(aept_display_fn fn, void *userdata);
+void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);
 
 typedef int (*aept_confirm_fn)(void *userdata);
-void aept_set_confirm_fn(aept_confirm_fn fn, void *userdata);
+void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
 
 /* --- Cancellation -------------------------------------------------------- */
 
-void aept_cancel(void);
+void aept_cancel(aept_ctx_t *ctx);
 
 /* --- Mutating operations ------------------------------------------------- */
 
-int aept_update(void);
-int aept_install(const char **names, int name_count,
+int aept_update(aept_ctx_t *ctx);
+int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
                  const char **local_paths, int local_count);
-int aept_upgrade(void);
-int aept_remove(const char **names, int count);
-int aept_autoremove(void);
-int aept_clean(void);
+int aept_upgrade(aept_ctx_t *ctx);
+int aept_remove(aept_ctx_t *ctx, const char **names, int count);
+int aept_autoremove(aept_ctx_t *ctx);
+int aept_clean(aept_ctx_t *ctx);
 
-int aept_pin(const char **specs, int count);
-int aept_unpin(const char **names, int count);
-int aept_mark_auto(const char **names, int count);
-int aept_mark_manual(const char **names, int count);
-int aept_mark_manual_all(void);
+int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
+int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
+int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
+int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
+int aept_mark_manual_all(aept_ctx_t *ctx);
 
 /* --- Query: list --------------------------------------------------------- */
 
@@ -95,7 +99,7 @@ typedef struct {
     int count;
 } aept_pkg_list_t;
 
-int  aept_list(const char *pattern,
+int  aept_list(aept_ctx_t *ctx, const char *pattern,
                int filter_installed, int filter_upgradable,
                aept_pkg_list_t *out);
 void aept_pkg_list_free(aept_pkg_list_t *list);
@@ -121,16 +125,18 @@ typedef struct {
     int   is_installed;
 } aept_pkg_info_t;
 
-int  aept_show(const char *name, aept_pkg_info_t *out);
+int  aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
 void aept_pkg_info_free(aept_pkg_info_t *info);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 
-int aept_files(const char *name, char ***paths_out, int *count_out);
+int aept_files(aept_ctx_t *ctx, const char *name,
+               char ***paths_out, int *count_out);
 
-int aept_owns(const char *path, char ***owners_out, int *count_out);
+int aept_owns(aept_ctx_t *ctx, const char *path,
+              char ***owners_out, int *count_out);
 
-int aept_architectures(char ***archs_out, int *count_out);
+int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
 """
 
 LIBC_CDEF = """\

@@ -10,63 +10,64 @@
 #include <stdio.h>
 
 #include <solv/pool.h>
+#include <solv/solver.h>
 #include <solv/transaction.h>
 
-/* Initialize the solver pool. */
-int aept_solver_init(void);
+struct aept_ctx;
 
-/* Load a Packages file into the pool as an available repo.
- * source_index is the index into aept_cfg->sources for download URL mapping. */
-int aept_solver_load_repo(const char *name, FILE *fp, int source_index);
+#define AEPT_MAX_REPOS   64
+#define AEPT_MAX_CMDLINE 256
 
-/* Load the installed package database into the pool. */
-int aept_solver_load_installed(FILE *fp);
+typedef struct {
+    Id id;
+    char *path;
+} aept_cmdline_entry_t;
 
-/* Load a local .ipk file into the pool as a "commandline" solvable.
- * Returns the solvable Id, or 0 on error. */
-Id aept_solver_load_local(const char *path);
+typedef struct {
+    char *name;
+    char *version;
+} aept_pin_entry_t;
 
-/* Check whether a solvable belongs to the commandline repo. */
-int aept_solver_is_commandline(Id p);
+typedef struct aept_solver {
+    Pool *pool;
+    Repo *installed_repo;
+    Repo *repos[AEPT_MAX_REPOS];
+    int repo_source_index[AEPT_MAX_REPOS];
+    int nrepos;
+    Solver *solv;
+    Transaction *trans;
+    Repo *commandline_repo;
+    aept_cmdline_entry_t cmdline_entries[AEPT_MAX_CMDLINE];
+    int ncmdline;
+    aept_pin_entry_t *pins;
+    int npins;
+} aept_solver_t;
 
-/* Get the original file path for a commandline solvable.
- * Returns NULL if p is not a commandline solvable. */
-const char *aept_solver_commandline_path(Id p);
+/* --- Functions that need the full context (config + logging) ------------- */
 
-/* Resolve: install named packages and/or specific local solvable Ids.
- * If all params are NULL/0, upgrade all. */
-int aept_solver_resolve_install(const char **names, int count,
-                           const Id *local_ids, int local_count);
+int  aept_solver_init(struct aept_ctx *ctx);
+void aept_solver_fini(struct aept_ctx *ctx);
+int  aept_solver_load_repo(struct aept_ctx *ctx, const char *name,
+                           FILE *fp, int source_index);
+int  aept_solver_load_installed(struct aept_ctx *ctx, FILE *fp);
+Id   aept_solver_load_local(struct aept_ctx *ctx, const char *path);
+int  aept_solver_resolve_install(struct aept_ctx *ctx,
+                                 const char **names, int count,
+                                 const Id *local_ids, int local_count);
+int  aept_solver_resolve_remove(struct aept_ctx *ctx,
+                                const char **names, int count);
 
-/* Resolve: remove named packages. */
-int aept_solver_resolve_remove(const char **names, int count);
+/* --- Pure solver accessors (no config/logging needed) ------------------- */
 
-/* Access the computed transaction. NULL if no solve has been done. */
-Transaction *aept_solver_transaction(void);
-
-/* Get the pool. */
-Pool *aept_solver_pool(void);
-
-/* Get the source index for a solvable (which repo/source it came from). */
-int aept_solver_solvable_source_index(Id p);
-
-/* Find the best available (non-installed) solvable for a package name.
- * Returns the solvable Id, or 0 if not found. */
-Id aept_solver_find_available(const char *name);
-
-/* Register a version pin. The solver will lock this package during
- * upgrade-all, and install the exact pinned version during install. */
-void aept_solver_add_pin(const char *name, const char *version);
-
-/* Clear all registered pins (called by aept_solver_fini). */
-void aept_solver_clear_pins(void);
-
-/* Look up the installed version of a package by name.
- * Returns the version string (valid until aept_solver_fini), or NULL if not
- * installed. */
-const char *aept_solver_installed_version(const char *name);
-
-/* Free all solver state. */
-void aept_solver_fini(void);
+int aept_solver_is_commandline(aept_solver_t *s, Id p);
+const char *aept_solver_commandline_path(aept_solver_t *s, Id p);
+Transaction *aept_solver_transaction(aept_solver_t *s);
+Pool *aept_solver_pool(aept_solver_t *s);
+int aept_solver_solvable_source_index(aept_solver_t *s, Id p);
+Id aept_solver_find_available(aept_solver_t *s, const char *name);
+void aept_solver_add_pin(aept_solver_t *s, const char *name,
+                         const char *version);
+void aept_solver_clear_pins(aept_solver_t *s);
+const char *aept_solver_installed_version(aept_solver_t *s, const char *name);
 
 #endif

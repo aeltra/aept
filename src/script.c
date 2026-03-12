@@ -14,21 +14,21 @@
 #include "aept/script.h"
 #include "aept/util.h"
 
-static const char *strip_offline_root(const char *path)
+static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
 {
-    if (!aept_cfg->offline_root)
+    if (!ctx->config.offline_root)
         return path;
 
-    size_t len = strlen(aept_cfg->offline_root);
-    if (strncmp(path, aept_cfg->offline_root, len) == 0)
+    size_t len = strlen(ctx->config.offline_root);
+    if (strncmp(path, ctx->config.offline_root, len) == 0)
         return path + len;
 
     return path;
 }
 
-int aept_run_script(const char *script_dir, const char *pkg_name,
-               const char *script, const char *action,
-               const char *version)
+int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
+                    const char *pkg_name, const char *script,
+                    const char *action, const char *version)
 {
     char *path = NULL;
     int r;
@@ -49,18 +49,18 @@ int aept_run_script(const char *script_dir, const char *pkg_name,
              version ? version : "");
 
     const char *run_path = path;
-    if (aept_cfg->offline_root)
-        run_path = strip_offline_root(path);
+    if (ctx->config.offline_root)
+        run_path = strip_offline_root(ctx, path);
 
     if (action && version) {
         const char *argv[] = {"/bin/sh", run_path, action, version, NULL};
-        r = aept_system_offline_root(argv);
+        r = aept_system_offline_root(ctx, argv);
     } else if (action) {
         const char *argv[] = {"/bin/sh", run_path, action, NULL};
-        r = aept_system_offline_root(argv);
+        r = aept_system_offline_root(ctx, argv);
     } else {
         const char *argv[] = {"/bin/sh", run_path, NULL};
-        r = aept_system_offline_root(argv);
+        r = aept_system_offline_root(ctx, argv);
     }
 
     free(path);

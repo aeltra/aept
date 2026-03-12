@@ -407,7 +407,7 @@ void aept_fileset_free(aept_fileset_t *fs)
     aept_fileset_init(fs);
 }
 
-int aept_system_offline_root(const char *argv[])
+int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
 {
     int status;
     pid_t pid;
@@ -420,15 +420,15 @@ int aept_system_offline_root(const char *argv[])
         aept_log_error("%s: fork: %s", argv[0], strerror(errno));
         return -1;
     case 0:
-        if (aept_cfg->offline_root) {
+        if (ctx->config.offline_root) {
             if (geteuid() != 0) {
                 if (unshare_and_map_user() != 0)
                     _exit(AEPT_EXIT_SETUP_FAILED);
             }
 
-            if (chroot(aept_cfg->offline_root) != 0) {
+            if (chroot(ctx->config.offline_root) != 0) {
                 aept_log_error("failed to chroot to '%s': %s",
-                          aept_cfg->offline_root, strerror(errno));
+                          ctx->config.offline_root, strerror(errno));
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
             if (chdir("/") != 0) {

@@ -16,7 +16,7 @@
 #include "aept/status.h"
 #include "aept/util.h"
 
-int aept_status_load(void)
+int aept_status_load(struct aept_ctx *ctx)
 {
     FILE *fp, *mem;
     char *buf = NULL;
@@ -27,13 +27,13 @@ int aept_status_load(void)
     static const char unpacked_status[] = "Status: install ok unpacked";
     static const char installed_status[] = "Status: install ok installed";
 
-    if (!aept_file_exists(aept_cfg->status_file))
+    if (!aept_file_exists(ctx->config.status_file))
         return 0;
 
-    fp = fopen(aept_cfg->status_file, "r");
+    fp = fopen(ctx->config.status_file, "r");
     if (!fp) {
         aept_log_error("cannot open status file '%s': %s",
-                  aept_cfg->status_file, strerror(errno));
+                  ctx->config.status_file, strerror(errno));
         return -1;
     }
 
@@ -67,7 +67,7 @@ int aept_status_load(void)
         return -1;
     }
 
-    r = aept_solver_load_installed(fp);
+    r = aept_solver_load_installed(ctx, fp);
     fclose(fp);
     free(buf);
 
@@ -75,7 +75,8 @@ int aept_status_load(void)
 }
 
 
-int aept_status_add(const char *control_path, const char *state)
+int aept_status_add(struct aept_ctx *ctx, const char *control_path,
+                    const char *state)
 {
     FILE *src, *old, *dst;
     char *tmp_path = NULL;
@@ -88,7 +89,7 @@ int aept_status_add(const char *control_path, const char *state)
         return -1;
     }
 
-    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->status_file);
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.status_file);
     dst = fopen(tmp_path, "w");
     if (!dst) {
         aept_log_error("cannot open status file '%s': %s",
@@ -99,7 +100,7 @@ int aept_status_add(const char *control_path, const char *state)
     }
 
     /* Copy existing status file */
-    old = fopen(aept_cfg->status_file, "r");
+    old = fopen(ctx->config.status_file, "r");
     if (old) {
         while (fgets(buf, sizeof(buf), old))
             fputs(buf, dst);
@@ -121,7 +122,7 @@ int aept_status_add(const char *control_path, const char *state)
         return -1;
     }
 
-    if (rename(tmp_path, aept_cfg->status_file) < 0) {
+    if (rename(tmp_path, ctx->config.status_file) < 0) {
         aept_log_error("cannot rename status file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
@@ -132,7 +133,7 @@ int aept_status_add(const char *control_path, const char *state)
     return 0;
 }
 
-int aept_status_remove(const char *name)
+int aept_status_remove(struct aept_ctx *ctx, const char *name)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
@@ -140,11 +141,11 @@ int aept_status_remove(const char *name)
     int skip = 0;
     int continuation = 0;
 
-    fp = fopen(aept_cfg->status_file, "r");
+    fp = fopen(ctx->config.status_file, "r");
     if (!fp)
         return 0;
 
-    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->status_file);
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.status_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         fclose(fp);
@@ -179,7 +180,7 @@ int aept_status_remove(const char *name)
         return -1;
     }
 
-    if (rename(tmp_path, aept_cfg->status_file) < 0) {
+    if (rename(tmp_path, ctx->config.status_file) < 0) {
         aept_log_error("cannot rename status file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
@@ -190,15 +191,15 @@ int aept_status_remove(const char *name)
     return 0;
 }
 
-int aept_status_mark_auto(const char *name)
+int aept_status_mark_auto(struct aept_ctx *ctx, const char *name)
 {
-    if (aept_status_is_auto(name))
+    if (aept_status_is_auto(ctx, name))
         return 0;
 
-    FILE *fp = fopen(aept_cfg->auto_file, "a");
+    FILE *fp = fopen(ctx->config.auto_file, "a");
     if (!fp) {
         aept_log_error("cannot open auto-installed file '%s': %s",
-                  aept_cfg->auto_file, strerror(errno));
+                  ctx->config.auto_file, strerror(errno));
         return -1;
     }
 
@@ -206,25 +207,25 @@ int aept_status_mark_auto(const char *name)
 
     if (ferror(fp) || fclose(fp) != 0) {
         aept_log_error("failed to write auto-installed file '%s'",
-                  aept_cfg->auto_file);
+                  ctx->config.auto_file);
         return -1;
     }
 
     return 0;
 }
 
-int aept_status_unmark_auto(const char *name)
+int aept_status_unmark_auto(struct aept_ctx *ctx, const char *name)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
     char buf[256];
     int found = 0;
 
-    fp = fopen(aept_cfg->auto_file, "r");
+    fp = fopen(ctx->config.auto_file, "r");
     if (!fp)
         return 0;
 
-    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->auto_file);
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.auto_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         fclose(fp);
@@ -262,7 +263,7 @@ int aept_status_unmark_auto(const char *name)
         return -1;
     }
 
-    if (rename(tmp_path, aept_cfg->auto_file) < 0) {
+    if (rename(tmp_path, ctx->config.auto_file) < 0) {
         aept_log_error("cannot rename auto-installed file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
@@ -273,12 +274,12 @@ int aept_status_unmark_auto(const char *name)
     return 0;
 }
 
-int aept_status_is_auto(const char *name)
+int aept_status_is_auto(struct aept_ctx *ctx, const char *name)
 {
     FILE *fp;
     char buf[256];
 
-    fp = fopen(aept_cfg->auto_file, "r");
+    fp = fopen(ctx->config.auto_file, "r");
     if (!fp)
         return 0;
 
@@ -299,24 +300,24 @@ int aept_status_is_auto(const char *name)
     return 0;
 }
 
-int aept_status_clear_auto(void)
+int aept_status_clear_auto(struct aept_ctx *ctx)
 {
-    FILE *fp = fopen(aept_cfg->auto_file, "w");
+    FILE *fp = fopen(ctx->config.auto_file, "w");
     if (!fp) {
         aept_log_error("cannot open auto-installed file '%s': %s",
-                  aept_cfg->auto_file, strerror(errno));
+                  ctx->config.auto_file, strerror(errno));
         return -1;
     }
     fclose(fp);
     return 0;
 }
 
-int aept_status_load_auto_set(aept_fileset_t *set)
+int aept_status_load_auto_set(struct aept_ctx *ctx, aept_fileset_t *set)
 {
     FILE *fp;
     char buf[256];
 
-    fp = fopen(aept_cfg->auto_file, "r");
+    fp = fopen(ctx->config.auto_file, "r");
     if (!fp)
         return 0;
 

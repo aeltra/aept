@@ -7,6 +7,9 @@
 #ifndef MSG_H_7BF97F
 #define MSG_H_7BF97F
 
+struct aept_ctx;
+struct aept_transaction;
+
 enum aept_log_level {
     AEPT_ERROR,
     AEPT_WARNING,
@@ -14,7 +17,10 @@ enum aept_log_level {
     AEPT_DEBUG
 };
 
-void aept_log_init(void);
+/* Set the global logging context.  Called once by aept_init(),
+ * cleared by aept_cleanup().  Immutable after aept_init() returns. */
+void aept_log_set_ctx(struct aept_ctx *ctx);
+
 void aept_log(int level, const char *file, int line, const char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
 
@@ -33,20 +39,7 @@ void aept_print_heading(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
 void aept_print_names(const char **list, int count);
 
-/* Callback types (matching public API in aept/aept.h) */
-typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
-
-struct aept_transaction;
-typedef void (*aept_display_fn)(const struct aept_transaction *txn,
-                                void *userdata);
-typedef int (*aept_confirm_fn)(void *userdata);
-
-/* Global callback pointers (set/restored by API entry points) */
-extern aept_log_fn     aept_log_cb;
-extern void           *aept_log_cb_data;
-extern aept_display_fn aept_display_cb;
-extern void           *aept_display_cb_data;
-extern aept_confirm_fn aept_confirm_cb;
-extern void           *aept_confirm_cb_data;
+/* Check whether the current operation has been cancelled. */
+int aept_cancelled(void);
 
 #endif

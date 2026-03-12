@@ -7,6 +7,8 @@
 #ifndef CONFFILE_H_7BF97F
 #define CONFFILE_H_7BF97F
 
+struct aept_ctx;
+
 typedef struct {
     char *path;
     char *md5;
@@ -34,18 +36,20 @@ int aept_conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs);
 
 /* Load saved conffile metadata from {info_dir}/{name}.conffiles.
  * Format: "md5sum  path\n". Returns 0 on success (empty set if no file). */
-int aept_conffile_load(const char *name, aept_conffile_set_t *cs);
+int aept_conffile_load(struct aept_ctx *ctx, const char *name,
+                       aept_conffile_set_t *cs);
 
 /* Save conffile metadata to {info_dir}/{name}.conffiles.
  * Returns 0 on success, -1 on error. */
-int aept_conffile_save(const char *name, const aept_conffile_set_t *cs);
+int aept_conffile_save(struct aept_ctx *ctx, const char *name,
+                       const aept_conffile_set_t *cs);
 
 /* Handle conffile conflicts during upgrade. For each new conffile,
  * compares the on-disk version against the ".aept-new" version placed
  * next to it during extraction and the saved old metadata.
  * Applies decisions (rename new / keep old / prompt) and saves metadata.
  * Returns 0 on success, -1 on error. */
-int aept_conffile_resolve_upgrade(const char *name,
+int aept_conffile_resolve_upgrade(struct aept_ctx *ctx, const char *name,
                              const aept_conffile_set_t *old_conffiles,
                              const aept_conffile_set_t *new_conffiles);
 

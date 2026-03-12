@@ -1,4 +1,4 @@
-/* internal.h - global configuration and forward declarations
+/* internal.h - context structure and configuration
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -7,13 +7,15 @@
 #ifndef INTERNAL_H_7BF97F
 #define INTERNAL_H_7BF97F
 
+#include "aept/aept.h"
+
 typedef struct {
     char *name;
     char *url;
     int gzip;
 } aept_source_t;
 
-typedef struct {
+typedef struct aept_config {
     aept_source_t *sources;
     int nsources;
 
@@ -48,7 +50,27 @@ typedef struct {
     int verbosity;
 } aept_config_t;
 
-extern aept_config_t *aept_cfg;
+/* Forward declaration */
+struct aept_solver;
+
+/* Full definition of the opaque context handle (aept_ctx_t). */
+struct aept_ctx {
+    aept_config_t config;
+    struct aept_solver *solver;   /* NULL until aept_solver_init() */
+    int lock_fd;
+
+    /* Callbacks — set once, read-only after init */
+    aept_log_fn     log_fn;
+    void           *log_userdata;
+    aept_display_fn display_fn;
+    void           *display_userdata;
+    aept_confirm_fn confirm_fn;
+    void           *confirm_userdata;
+
+    volatile int cancelled;
+    int use_color;
+    int config_loaded;
+};
 
 #define AEPT_USIGN_BIN "/usr/bin/usign"
 

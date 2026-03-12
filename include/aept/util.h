@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+struct aept_ctx;
+
 typedef struct {
     char **paths;
     int count;
@@ -33,10 +35,8 @@ int aept_file_is_dir(const char *path);
 int aept_file_copy(const char *src, const char *dst);
 int aept_file_mkdir_hier(const char *path, mode_t mode);
 
-int aept_cancelled(void);
-
 int aept_system(const char *argv[]);
-int aept_system_offline_root(const char *argv[]);
+int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[]);
 
 void aept_fileset_init(aept_fileset_t *fs);
 void aept_fileset_add(aept_fileset_t *fs, const char *path);

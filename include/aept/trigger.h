@@ -7,6 +7,8 @@
 #ifndef TRIGGER_H_7BF97F
 #define TRIGGER_H_7BF97F
 
+struct aept_ctx;
+
 /* Transaction-scoped trigger context.  Accumulates modified directories
  * during a transaction; fires trigger scripts after all steps complete. */
 typedef struct {
@@ -20,25 +22,27 @@ typedef struct {
     int fresh_alloc;
 } aept_trigger_ctx_t;
 
-void aept_trigger_ctx_init(aept_trigger_ctx_t *ctx);
-void aept_trigger_ctx_free(aept_trigger_ctx_t *ctx);
+void aept_trigger_ctx_init(aept_trigger_ctx_t *tctx);
+void aept_trigger_ctx_free(aept_trigger_ctx_t *tctx);
 
 /* Record a directory path as modified.  Deduplicates. */
-void aept_trigger_ctx_add_dir(aept_trigger_ctx_t *ctx, const char *dir);
+void aept_trigger_ctx_add_dir(aept_trigger_ctx_t *tctx, const char *dir);
 
 /* Record a package as freshly installed/upgraded. */
-void aept_trigger_ctx_add_fresh(aept_trigger_ctx_t *ctx, const char *name);
+void aept_trigger_ctx_add_fresh(aept_trigger_ctx_t *tctx, const char *name);
 
-/* Collect parent directories of all files in a .list file into ctx. */
-int aept_trigger_ctx_collect_dirs(aept_trigger_ctx_t *ctx, const char *name);
+/* Collect parent directories of all files in a .list file into tctx. */
+int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx,
+                                  aept_trigger_ctx_t *tctx,
+                                  const char *name);
 
 /* Fire all pending triggers after transaction completes.
  * Reads triggers-index to find interested packages. */
-int aept_trigger_run_all(aept_trigger_ctx_t *ctx);
+int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx);
 
 /* Rebuild the aggregated triggers-index file by scanning
  * all *.triggers files in info_dir.  Called after installing
  * or removing a package that has a .triggers file. */
-int aept_trigger_index_rebuild(void);
+int aept_trigger_index_rebuild(struct aept_ctx *ctx);
 
 #endif

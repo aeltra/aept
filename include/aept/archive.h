@@ -19,8 +19,10 @@ struct aept_ar {
 /* Open the control tarball from an IPK file. */
 struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename);
 
-/* Open the data tarball from an IPK file. */
-struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename);
+/* Open the data tarball from an IPK file.
+ * If ignore_uid is non-zero, extracted files will not preserve ownership. */
+struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename,
+                                              int ignore_uid);
 
 /* Open a gzip-compressed file for streaming decompression. */
 struct aept_ar *aept_ar_open_compressed_file(const char *filename);
@@ -65,7 +67,8 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl);
 /* List non-directory file paths from an IPK's data archive.
  * Fills out with archive paths (e.g. "./usr/bin/foo") and symlink
  * targets where applicable.  Returns 0 on success, -1 on error. */
-int aept_ar_list_data_paths(const char *ipk_path, aept_ar_file_list_t *out);
+int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
+                            aept_ar_file_list_t *out);
 
 /* Close and free archive handle. */
 void aept_ar_close(struct aept_ar *ar);

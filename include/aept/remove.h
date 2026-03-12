@@ -9,19 +9,22 @@
 
 #include "aept/util.h"
 
+struct aept_ctx;
+
 /* Remove package files listed in {info_dir}/{name}.list.
  * Files present in protected are skipped. */
-int aept_remove_files(const char *name, aept_fileset_t *protected);
+int aept_remove_files(struct aept_ctx *ctx, const char *name,
+                      aept_fileset_t *protected);
 
 /* Remove packages by name. Resolves reverse dependencies via solver. */
-int aept_op_remove(const char **names, int count);
+int aept_op_remove(struct aept_ctx *ctx, const char **names, int count);
 
 /* Remove a single package (used internally by install for upgrades).
  * new_version: version of the replacing package (NULL for pure removal).
  * Controls maintainer script arguments: "upgrade <ver>" vs "remove".
  * protected: files installed earlier in the same transaction (skipped
  * during removal). May be NULL. */
-int aept_do_remove(const char *name, const char *new_version,
-                   aept_fileset_t *protected);
+int aept_do_remove(struct aept_ctx *ctx, const char *name,
+                   const char *new_version, aept_fileset_t *protected);
 
 #endif

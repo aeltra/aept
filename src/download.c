@@ -16,7 +16,8 @@
 #include "aept/download.h"
 #include "aept/msg.h"
 
-int aept_download(const char *url, const char *dest, const char *name)
+int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
+                  const char *name)
 {
     fetchIO *fio = NULL;
     FILE *fp = NULL;
@@ -27,10 +28,10 @@ int aept_download(const char *url, const char *dest, const char *name)
     aept_log_info("downloading %s", name);
 
     /* Pass client cert config to libfetch via env vars */
-    if (aept_cfg->ssl_client_cert)
-        setenv("SSL_CLIENT_CERT_FILE", aept_cfg->ssl_client_cert, 1);
-    if (aept_cfg->ssl_client_key)
-        setenv("SSL_CLIENT_KEY_FILE", aept_cfg->ssl_client_key, 1);
+    if (ctx->config.ssl_client_cert)
+        setenv("SSL_CLIENT_CERT_FILE", ctx->config.ssl_client_cert, 1);
+    if (ctx->config.ssl_client_key)
+        setenv("SSL_CLIENT_KEY_FILE", ctx->config.ssl_client_key, 1);
 
     unlink(dest);
 

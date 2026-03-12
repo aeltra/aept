@@ -9,29 +9,32 @@
 
 #include "aept/util.h"
 
+struct aept_ctx;
+
 /* Load the status file into the solver as the installed repo. */
-int aept_status_load(void);
+int aept_status_load(struct aept_ctx *ctx);
 
 /* Append a package entry to the status file.
  * state: "installed" or "unpacked" (postinst failed). */
-int aept_status_add(const char *control_path, const char *state);
+int aept_status_add(struct aept_ctx *ctx, const char *control_path,
+                    const char *state);
 
 /* Remove a package entry from the status file by name. */
-int aept_status_remove(const char *name);
+int aept_status_remove(struct aept_ctx *ctx, const char *name);
 
 /* Mark a package as auto-installed. */
-int aept_status_mark_auto(const char *name);
+int aept_status_mark_auto(struct aept_ctx *ctx, const char *name);
 
 /* Unmark a package as auto-installed. */
-int aept_status_unmark_auto(const char *name);
+int aept_status_unmark_auto(struct aept_ctx *ctx, const char *name);
 
 /* Check whether a package is marked auto-installed. */
-int aept_status_is_auto(const char *name);
+int aept_status_is_auto(struct aept_ctx *ctx, const char *name);
 
 /* Clear all auto-installed marks. */
-int aept_status_clear_auto(void);
+int aept_status_clear_auto(struct aept_ctx *ctx);
 
 /* Load the set of auto-installed package names into a fileset. */
-int aept_status_load_auto_set(aept_fileset_t *set);
+int aept_status_load_auto_set(struct aept_ctx *ctx, aept_fileset_t *set);
 
 #endif

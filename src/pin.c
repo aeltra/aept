@@ -16,14 +16,14 @@
 #include "aept/solver.h"
 #include "aept/util.h"
 
-int aept_pin_add(const char *name, const char *version)
+int aept_pin_add(struct aept_ctx *ctx, const char *name, const char *version)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
     char buf[512];
     int replaced = 0;
 
-    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->pin_file);
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.pin_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         aept_log_error("cannot open pin file '%s': %s",
@@ -32,7 +32,7 @@ int aept_pin_add(const char *name, const char *version)
         return -1;
     }
 
-    fp = fopen(aept_cfg->pin_file, "r");
+    fp = fopen(ctx->config.pin_file, "r");
     if (fp) {
         while (fgets(buf, sizeof(buf), fp)) {
             if (aept_fgets_is_truncated(buf, sizeof(buf))) {
@@ -61,7 +61,7 @@ int aept_pin_add(const char *name, const char *version)
         return -1;
     }
 
-    if (rename(tmp_path, aept_cfg->pin_file) < 0) {
+    if (rename(tmp_path, ctx->config.pin_file) < 0) {
         aept_log_error("cannot rename pin file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
@@ -72,18 +72,18 @@ int aept_pin_add(const char *name, const char *version)
     return 0;
 }
 
-int aept_pin_remove(const char *name)
+int aept_pin_remove(struct aept_ctx *ctx, const char *name)
 {
     FILE *fp, *tmp;
     char *tmp_path = NULL;
     char buf[512];
     int found = 0;
 
-    fp = fopen(aept_cfg->pin_file, "r");
+    fp = fopen(ctx->config.pin_file, "r");
     if (!fp)
         return 0;
 
-    aept_asprintf(&tmp_path, "%s.tmp", aept_cfg->pin_file);
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.pin_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         fclose(fp);
@@ -121,7 +121,7 @@ int aept_pin_remove(const char *name)
         return -1;
     }
 
-    if (rename(tmp_path, aept_cfg->pin_file) < 0) {
+    if (rename(tmp_path, ctx->config.pin_file) < 0) {
         aept_log_error("cannot rename pin file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
@@ -132,12 +132,12 @@ int aept_pin_remove(const char *name)
     return 0;
 }
 
-char *aept_pin_lookup(const char *name)
+char *aept_pin_lookup(struct aept_ctx *ctx, const char *name)
 {
     FILE *fp;
     char buf[512];
 
-    fp = fopen(aept_cfg->pin_file, "r");
+    fp = fopen(ctx->config.pin_file, "r");
     if (!fp)
         return NULL;
 
@@ -158,12 +158,12 @@ char *aept_pin_lookup(const char *name)
     return NULL;
 }
 
-int aept_pin_load_into_solver(void)
+int aept_pin_load_into_solver(struct aept_ctx *ctx)
 {
     FILE *fp;
     char buf[512];
 
-    fp = fopen(aept_cfg->pin_file, "r");
+    fp = fopen(ctx->config.pin_file, "r");
     if (!fp)
         return 0;
 
@@ -176,7 +176,7 @@ int aept_pin_load_into_solver(void)
         }
 
         if (sscanf(buf, "%255s %255s", name, version) == 2)
-            aept_solver_add_pin(name, version);
+            aept_solver_add_pin(ctx->solver, name, version);
     }
 
     fclose(fp);

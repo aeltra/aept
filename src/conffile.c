@@ -129,13 +129,14 @@ int aept_conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
     return 0;
 }
 
-int aept_conffile_load(const char *name, aept_conffile_set_t *cs)
+int aept_conffile_load(struct aept_ctx *ctx, const char *name,
+                       aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
     char buf[4096];
 
-    aept_asprintf(&path, "%s/%s.conffiles", aept_cfg->info_dir, name);
+    aept_asprintf(&path, "%s/%s.conffiles", ctx->config.info_dir, name);
     fp = fopen(path, "r");
     free(path);
 
@@ -169,12 +170,13 @@ int aept_conffile_load(const char *name, aept_conffile_set_t *cs)
     return 0;
 }
 
-int aept_conffile_save(const char *name, const aept_conffile_set_t *cs)
+int aept_conffile_save(struct aept_ctx *ctx, const char *name,
+                       const aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
 
-    aept_asprintf(&path, "%s/%s.conffiles", aept_cfg->info_dir, name);
+    aept_asprintf(&path, "%s/%s.conffiles", ctx->config.info_dir, name);
     fp = fopen(path, "w");
     if (!fp) {
         aept_log_error("cannot write '%s': %s", path, strerror(errno));
@@ -200,13 +202,13 @@ int aept_conffile_save(const char *name, const aept_conffile_set_t *cs)
 
 /* Prompt the user to decide what to do with a modified conffile.
  * Returns 1 to install the new version, 0 to keep the old one. */
-static int conffile_prompt(const char *cf_path,
+static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
                            const char *disk_path,
                            const char *new_path)
 {
-    if (aept_cfg->force_confnew)
+    if (ctx->config.force_confnew)
         return 1;
-    if (aept_cfg->force_confold)
+    if (ctx->config.force_confold)
         return 0;
 
     if (!isatty(STDIN_FILENO)) {
@@ -273,7 +275,7 @@ static int conffile_prompt(const char *cf_path,
     }
 }
 
-int aept_conffile_resolve_upgrade(const char *name,
+int aept_conffile_resolve_upgrade(struct aept_ctx *ctx, const char *name,
                              const aept_conffile_set_t *old_conffiles,
                              const aept_conffile_set_t *new_conffiles)
 {
@@ -283,7 +285,7 @@ int aept_conffile_resolve_upgrade(const char *name,
 
     for (int i = 0; i < new_conffiles->count; i++) {
         const char *cf_path = new_conffiles->entries[i].path;
-        char *disk_path = aept_config_root_path(cf_path);
+        char *disk_path = aept_config_root_path(&ctx->config, cf_path);
         char *new_path = NULL;
         const char *old_md5;
         char *current_md5;
@@ -314,7 +316,7 @@ int aept_conffile_resolve_upgrade(const char *name,
             install_new = 0;
         } else {
             /* Both changed: prompt */
-            install_new = conffile_prompt(cf_path, disk_path, new_path);
+            install_new = conffile_prompt(ctx, cf_path, disk_path, new_path);
         }
 
         if (install_new > 0 && new_md5) {
@@ -337,7 +339,7 @@ int aept_conffile_resolve_upgrade(const char *name,
         free(new_md5);
     }
 
-    aept_conffile_save(name, &result);
+    aept_conffile_save(ctx, name, &result);
     aept_conffile_set_free(&result);
     return 0;
 }

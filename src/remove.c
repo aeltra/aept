@@ -39,7 +39,8 @@ static int dir_depth_cmp(const void *a, const void *b)
     return 0;
 }
 
-int aept_remove_files(const char *name, aept_fileset_t *protected)
+int aept_remove_files(struct aept_ctx *ctx, const char *name,
+                      aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -50,10 +51,10 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
     int dirs_cap = 0;
 
     aept_conffile_set_init(&conffiles);
-    if (!aept_cfg->purge)
-        aept_conffile_load(name, &conffiles);
+    if (!ctx->config.purge)
+        aept_conffile_load(ctx, name, &conffiles);
 
-    aept_asprintf(&list_path, "%s/%s.list", aept_cfg->info_dir, name);
+    aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
     fp = fopen(list_path, "r");
     free(list_path);
@@ -103,7 +104,7 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
 
         char *full_path = NULL;
         aept_asprintf(&full_path, "%s/%s",
-                  aept_cfg->offline_root ? aept_cfg->offline_root : "", path);
+                  ctx->config.offline_root ? ctx->config.offline_root : "", path);
 
         /* Collect directories for removal after files */
         if (S_ISDIR(mode)) {
@@ -162,7 +163,7 @@ int aept_remove_files(const char *name, aept_fileset_t *protected)
     return 0;
 }
 
-static void remove_info_files(const char *name)
+static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
     const char *exts[] = {
         "list", "control", "conffiles",
@@ -172,14 +173,14 @@ static void remove_info_files(const char *name)
 
     for (int i = 0; exts[i]; i++) {
         char *path = NULL;
-        aept_asprintf(&path, "%s/%s.%s", aept_cfg->info_dir, name, exts[i]);
+        aept_asprintf(&path, "%s/%s.%s", ctx->config.info_dir, name, exts[i]);
         unlink(path);
         free(path);
     }
 }
 
-int aept_do_remove(const char *name, const char *new_version,
-                   aept_fileset_t *protected)
+int aept_do_remove(struct aept_ctx *ctx, const char *name,
+                   const char *new_version, aept_fileset_t *protected)
 {
     int r;
 
@@ -191,7 +192,7 @@ int aept_do_remove(const char *name, const char *new_version,
     aept_log_info("removing %s", name);
 
     /* Run prerm */
-    r = aept_run_script(aept_cfg->info_dir, name, "prerm",
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "prerm",
                    new_version ? "upgrade" : "remove", new_version);
     if (r != 0) {
         aept_log_error("prerm failed for '%s', aborting removal", name);
@@ -199,48 +200,48 @@ int aept_do_remove(const char *name, const char *new_version,
     }
 
     /* Remove files */
-    aept_remove_files(name, protected);
+    aept_remove_files(ctx, name, protected);
 
     /* Run postrm */
-    r = aept_run_script(aept_cfg->info_dir, name, "postrm",
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "postrm",
                    new_version ? "upgrade" : "remove", new_version);
     if (r != 0)
         aept_log_warning("postrm failed for '%s', continuing", name);
 
     /* Remove info files and rebuild trigger index */
-    remove_info_files(name);
-    aept_trigger_index_rebuild();
+    remove_info_files(ctx, name);
+    aept_trigger_index_rebuild(ctx);
 
     /* Update status */
-    aept_status_remove(name);
-    aept_status_unmark_auto(name);
-    aept_pin_remove(name);
+    aept_status_remove(ctx, name);
+    aept_status_unmark_auto(ctx, name);
+    aept_pin_remove(ctx, name);
 
     aept_log_debug("removed %s", name);
 
     return 0;
 }
 
-int aept_op_remove(const char **names, int count)
+int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
 {
     Transaction *trans;
     Pool *pool;
     int i, r;
 
-    r = aept_solver_init();
+    r = aept_solver_init(ctx);
     if (r < 0)
         return -1;
 
-    r = aept_status_load();
+    r = aept_status_load(ctx);
     if (r < 0)
         goto out;
 
-    r = aept_solver_resolve_remove(names, count);
+    r = aept_solver_resolve_remove(ctx, names, count);
     if (r < 0)
         goto out;
 
-    trans = aept_solver_transaction();
-    pool = aept_solver_pool();
+    trans = aept_solver_transaction(ctx->solver);
+    pool = aept_solver_pool(ctx->solver);
 
     if (!trans || trans->steps.count == 0) {
         aept_log_info("nothing to do");
@@ -277,7 +278,7 @@ int aept_op_remove(const char **names, int count)
         goto out;
     }
 
-    if (aept_cfg->noaction) {
+    if (ctx->config.noaction) {
         aept_log_info("dry run, not removing");
         r = 0;
         goto out;
@@ -304,19 +305,19 @@ int aept_op_remove(const char **names, int count)
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
 
-        aept_trigger_ctx_collect_dirs(&tctx, pkg_name);
-        r = aept_do_remove(pkg_name, NULL, NULL);
-        if (r < 0 && !aept_cfg->force_depends)
+        aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
+        r = aept_do_remove(ctx, pkg_name, NULL, NULL);
+        if (r < 0 && !ctx->config.force_depends)
             goto trigger_cleanup;
     }
 
-    aept_trigger_run_all(&tctx);
+    aept_trigger_run_all(ctx, &tctx);
     r = 0;
 
 trigger_cleanup:
     aept_trigger_ctx_free(&tctx);
 
 out:
-    aept_solver_fini();
+    aept_solver_fini(ctx);
     return r;
 }

@@ -85,13 +85,14 @@ static char *parent_dir(const char *path)
     return strndup(path, slash - path);
 }
 
-int aept_trigger_ctx_collect_dirs(aept_trigger_ctx_t *ctx, const char *name)
+int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx,
+                                  aept_trigger_ctx_t *tctx, const char *name)
 {
     char *list_path = NULL;
     FILE *fp;
     char buf[4096];
 
-    aept_asprintf(&list_path, "%s/%s.list", aept_cfg->info_dir, name);
+    aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
     fp = fopen(list_path, "r");
     free(list_path);
@@ -129,12 +130,12 @@ int aept_trigger_ctx_collect_dirs(aept_trigger_ctx_t *ctx, const char *name)
 
         if (S_ISDIR(mode)) {
             /* Directory entry itself */
-            aept_trigger_ctx_add_dir(ctx, path);
+            aept_trigger_ctx_add_dir(tctx, path);
         } else {
             /* Regular file: add its parent directory */
             char *dir = parent_dir(path);
             if (dir) {
-                aept_trigger_ctx_add_dir(ctx, dir);
+                aept_trigger_ctx_add_dir(tctx, dir);
                 free(dir);
             }
         }
@@ -188,25 +189,25 @@ static int has_glob_chars(const char *s)
     return 0;
 }
 
-static const char *strip_offline_root(const char *path)
+static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
 {
-    if (!aept_cfg->offline_root)
+    if (!ctx->config.offline_root)
         return path;
 
-    size_t len = strlen(aept_cfg->offline_root);
-    if (strncmp(path, aept_cfg->offline_root, len) == 0)
+    size_t len = strlen(ctx->config.offline_root);
+    if (strncmp(path, ctx->config.offline_root, len) == 0)
         return path + len;
 
     return path;
 }
 
-static int run_trigger_script(const char *pkg_name,
+static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name,
                               const char **dirs, int n_dirs)
 {
     char *path = NULL;
     int r;
 
-    aept_asprintf(&path, "%s/%s.trigger", aept_cfg->info_dir, pkg_name);
+    aept_asprintf(&path, "%s/%s.trigger", ctx->config.info_dir, pkg_name);
 
     if (!aept_file_exists(path)) {
         free(path);
@@ -215,7 +216,7 @@ static int run_trigger_script(const char *pkg_name,
 
     aept_log_info("running trigger for %s", pkg_name);
 
-    const char *run_path = strip_offline_root(path);
+    const char *run_path = strip_offline_root(ctx, path);
 
     /* Build argv: /bin/sh <script> <dir1> <dir2> ... NULL */
     int argc = 2 + n_dirs;
@@ -226,7 +227,7 @@ static int run_trigger_script(const char *pkg_name,
         argv[2 + i] = dirs[i];
     argv[argc] = NULL;
 
-    r = aept_system_offline_root(argv);
+    r = aept_system_offline_root(ctx, argv);
 
     free(argv);
     free(path);
@@ -247,7 +248,7 @@ typedef struct {
     int modify_only;    /* pattern had '+' prefix */
 } trigger_entry_t;
 
-int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
+int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
 {
     char *index_path = NULL;
     FILE *fp;
@@ -256,10 +257,10 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
     int n_entries = 0;
     int entries_alloc = 0;
 
-    if (ctx->n_dirs == 0)
+    if (tctx->n_dirs == 0)
         return 0;
 
-    aept_asprintf(&index_path, "%s/triggers-index", aept_cfg->info_dir);
+    aept_asprintf(&index_path, "%s/triggers-index", ctx->config.info_dir);
     fp = fopen(index_path, "r");
     free(index_path);
 
@@ -267,7 +268,7 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
         return 0;
 
     /* Sort & deduplicate collected directories */
-    sort_and_dedup(ctx->dirs, &ctx->n_dirs);
+    sort_and_dedup(tctx->dirs, &tctx->n_dirs);
 
     /* Parse triggers-index */
     while (fgets(buf, sizeof(buf), fp)) {
@@ -322,7 +323,7 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
             continue;   /* already processed */
 
         const char *pkg = entries[i].pkg_name;
-        int pkg_is_fresh = is_fresh(ctx, pkg);
+        int pkg_is_fresh = is_fresh(tctx, pkg);
 
         /* Collect matched directories for this package */
         const char **matched = NULL;
@@ -338,10 +339,10 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
             const char *pat = entries[e].pattern;
 
             /* Match against collected directories */
-            for (int d = 0; d < ctx->n_dirs; d++) {
+            for (int d = 0; d < tctx->n_dirs; d++) {
                 /* Trigger patterns are absolute, dirs are relative */
                 char *abs_dir = NULL;
-                aept_asprintf(&abs_dir, "/%s", ctx->dirs[d]);
+                aept_asprintf(&abs_dir, "/%s", tctx->dirs[d]);
 
                 if (fnmatch(pat, abs_dir, FNM_PATHNAME) == 0) {
                     /* Deduplicate matched dirs */
@@ -369,13 +370,13 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
 
             /* For fresh packages with non-modify-only patterns:
              * if the pattern is a concrete path and exists on disk,
-             * add it even if it wasn't in ctx->dirs. */
+             * add it even if it wasn't in tctx->dirs. */
             if (pkg_is_fresh && !entries[e].modify_only
                     && !has_glob_chars(pat)) {
                 char *full_path = NULL;
-                if (aept_cfg->offline_root)
+                if (ctx->config.offline_root)
                     aept_asprintf(&full_path, "%s%s",
-                                  aept_cfg->offline_root, pat);
+                                  ctx->config.offline_root, pat);
                 else
                     full_path = aept_strdup(pat);
 
@@ -411,7 +412,7 @@ int aept_trigger_run_all(aept_trigger_ctx_t *ctx)
         }
 
         if (n_matched > 0)
-            run_trigger_script(pkg, matched, n_matched);
+            run_trigger_script(ctx, pkg, matched, n_matched);
 
         for (int m = 0; m < n_matched; m++)
             free((char *)matched[m]);
@@ -431,7 +432,7 @@ cleanup:
     return 0;
 }
 
-int aept_trigger_index_rebuild(void)
+int aept_trigger_index_rebuild(struct aept_ctx *ctx)
 {
     DIR *dp;
     struct dirent *de;
@@ -440,8 +441,8 @@ int aept_trigger_index_rebuild(void)
     FILE *out = NULL;
     int r = -1;
 
-    aept_asprintf(&index_path, "%s/triggers-index", aept_cfg->info_dir);
-    aept_asprintf(&tmp_path, "%s/triggers-index.tmp", aept_cfg->info_dir);
+    aept_asprintf(&index_path, "%s/triggers-index", ctx->config.info_dir);
+    aept_asprintf(&tmp_path, "%s/triggers-index.tmp", ctx->config.info_dir);
 
     out = fopen(tmp_path, "w");
     if (!out) {
@@ -449,10 +450,10 @@ int aept_trigger_index_rebuild(void)
         goto cleanup;
     }
 
-    dp = opendir(aept_cfg->info_dir);
+    dp = opendir(ctx->config.info_dir);
     if (!dp) {
         aept_log_error("cannot open '%s': %s",
-                       aept_cfg->info_dir, strerror(errno));
+                       ctx->config.info_dir, strerror(errno));
         goto cleanup;
     }
 
@@ -473,7 +474,7 @@ int aept_trigger_index_rebuild(void)
 
         /* Parse the triggers file */
         char *trig_path = NULL;
-        aept_asprintf(&trig_path, "%s/%s", aept_cfg->info_dir, de->d_name);
+        aept_asprintf(&trig_path, "%s/%s", ctx->config.info_dir, de->d_name);
 
         FILE *tfp = fopen(trig_path, "r");
         free(trig_path);
