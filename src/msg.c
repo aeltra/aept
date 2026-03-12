@@ -16,9 +16,10 @@
 #include "aept/internal.h"
 #include "aept/msg.h"
 
-/* Global logging context pointer.  Set once by aept_init() via
- * aept_log_set_ctx(), cleared by aept_cleanup().  Read-only after init. */
-static struct aept_ctx *aept_log_ctx;
+/* Thread-local logging context pointer.  Each thread that calls aept_init()
+ * gets its own context, enabling concurrent contexts on different offline
+ * roots in different threads. */
+static _Thread_local struct aept_ctx *aept_log_ctx;
 
 static const char *level_name[] = {
     [AEPT_ERROR]   = "error",

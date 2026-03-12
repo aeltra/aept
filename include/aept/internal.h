@@ -7,6 +7,8 @@
 #ifndef INTERNAL_H_7BF97F
 #define INTERNAL_H_7BF97F
 
+#include <stdatomic.h>
+
 #include "aept/aept.h"
 
 typedef struct {
@@ -67,7 +69,7 @@ struct aept_ctx {
     aept_confirm_fn confirm_fn;
     void           *confirm_userdata;
 
-    volatile int cancelled;
+    _Atomic int cancelled;
     int use_color;
     int config_loaded;
 };

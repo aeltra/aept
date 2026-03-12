@@ -9,6 +9,10 @@
 
 /* --- Opaque context handle ----------------------------------------------- */
 
+/* An aept_ctx_t is not thread-safe: all calls on a given context must be
+ * serialized by the caller.  aept_cancel() is the sole exception (safe to
+ * call from any thread or signal handler).  Different threads may operate
+ * on independent contexts concurrently (e.g. different offline roots). */
 typedef struct aept_ctx aept_ctx_t;
 
 /* --- Lifecycle ----------------------------------------------------------- */
