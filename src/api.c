@@ -18,6 +18,8 @@
 #include <solv/queue.h>
 #include <solv/solvable.h>
 
+#include <fetch.h>
+
 #include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/autoremove.h"
@@ -41,6 +43,7 @@ aept_ctx_t *aept_init(void)
     ctx->lock_fd = -1;
     ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
     aept_log_set_ctx(ctx);
+    fetchConnectionCacheInit(4, 2);
     return ctx;
 }
 
@@ -48,6 +51,8 @@ void aept_cleanup(aept_ctx_t *ctx)
 {
     if (!ctx)
         return;
+
+    fetchConnectionCacheClose();
 
     if (ctx->config_loaded) {
         aept_config_free(&ctx->config);

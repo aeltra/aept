@@ -23,7 +23,7 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
     fetchIO *fio = NULL;
     FILE *fp = NULL;
     char *tmp = NULL;
-    char buf[8192];
+    char buf[65536];
     ssize_t n;
     int ret = -1;
 
