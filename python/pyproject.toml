@@ -9,3 +9,6 @@ description = "Python bindings for libaept"
 license = "MIT"
 requires-python = ">=3.9"
 dependencies = ["cffi>=1.15"]
+
+[tool.setuptools.packages.find]
+include = ["aeltra.*"]

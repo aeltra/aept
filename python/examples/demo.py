@@ -4,7 +4,7 @@
 import os
 import tempfile
 
-from aept import Aept, Flag, LogLevel
+from aeltra.aept import Aept, Flag, LogLevel
 
 AEPT_CONF = """\
 src/gz main http://archive.aeltra.eu/dists/pasteur/core/aarch64/musl/main
