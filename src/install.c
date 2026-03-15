@@ -529,16 +529,13 @@ static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
             continue;
         }
 
-        if (owner) {
-            aept_log_error("package '%s' wants to install '%s'\n"
-                      "  but that file is already provided by package '%s'",
-                      pkg_name, stripped, owner);
-            free(owner);
-        } else {
-            aept_log_error("package '%s' wants to install '%s'\n"
-                      "  but that file already exists on the filesystem",
-                      pkg_name, stripped);
-        }
+        if (!owner)
+            continue;
+
+        aept_log_error("package '%s' wants to install '%s'\n"
+                  "  but that file is already provided by package '%s'",
+                  pkg_name, stripped, owner);
+        free(owner);
         clashes++;
     }
 
