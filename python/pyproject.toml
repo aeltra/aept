@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aept"
 version = "0.1.0"
 description = "Python bindings for libaept"
-license = "MIT"
+license = {text = "MIT"}
 requires-python = ">=3.9"
 dependencies = ["cffi>=1.15"]
 
