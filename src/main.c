@@ -45,6 +45,10 @@ static void setup_signals(void)
 
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+
+    sa.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &sa, NULL);
 }
 
 /* ── shared helpers ───────────────────────────────────────────────── */
