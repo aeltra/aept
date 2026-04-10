@@ -1272,6 +1272,12 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
     if (!ctx->config.no_cache) {
         for (i = 0; i < trans->steps.count; i++) {
+            if (aept_cancelled()) {
+                aept_log_warning("interrupted, stopping");
+                r = -1;
+                goto download_cleanup;
+            }
+
             Id p = trans->steps.elements[i];
             int type = transaction_type(trans, p,
                 SOLVER_TRANSACTION_SHOW_ACTIVE |

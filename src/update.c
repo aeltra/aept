@@ -115,6 +115,12 @@ int aept_op_update(struct aept_ctx *ctx)
         char *list_path = NULL;
         int r;
 
+        if (aept_cancelled()) {
+            aept_log_warning("interrupted, stopping");
+            errors++;
+            break;
+        }
+
         aept_asprintf(&list_path, "%s/%s", ctx->config.lists_dir, src->name);
 
         if (src->gzip) {
