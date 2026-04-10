@@ -62,6 +62,27 @@ static void add_arch(struct aept_config *cfg, const char *arch)
     cfg->archs[cfg->narchs - 1] = aept_strdup(arch);
 }
 
+/*
+ * Parse a boolean option value.  Accepts the usual aliases for
+ * truthiness and falsiness.  On unrecognized input, logs a warning and
+ * returns `safe_default` — callers pass the security-preserving value
+ * (e.g. 1 for check_signature) so a typo never silently weakens the
+ * configuration.
+ */
+static int parse_bool(const char *key, const char *value, int safe_default)
+{
+    if (strcmp(value, "1") == 0 || strcmp(value, "true") == 0 ||
+            strcmp(value, "yes") == 0 || strcmp(value, "on") == 0)
+        return 1;
+    if (strcmp(value, "0") == 0 || strcmp(value, "false") == 0 ||
+            strcmp(value, "no") == 0 || strcmp(value, "off") == 0)
+        return 0;
+
+    aept_log_warning("invalid boolean value '%s' for option '%s', "
+                "using default '%d'", value, key, safe_default);
+    return safe_default;
+}
+
 static void set_option(struct aept_config *cfg, const char *key,
                         const char *value)
 {
@@ -92,13 +113,13 @@ static void set_option(struct aept_config *cfg, const char *key,
     else if (strcmp(key, "ssl_client_key") == 0)
         strp = &cfg->ssl_client_key;
     else if (strcmp(key, "check_signature") == 0) {
-        cfg->check_signature = atoi(value);
+        cfg->check_signature = parse_bool(key, value, 1);
         return;
     } else if (strcmp(key, "ignore_uid") == 0) {
-        cfg->ignore_uid = atoi(value);
+        cfg->ignore_uid = parse_bool(key, value, 0);
         return;
     } else if (strcmp(key, "allow_downgrade") == 0) {
-        cfg->allow_downgrade = atoi(value);
+        cfg->allow_downgrade = parse_bool(key, value, 0);
         return;
     } else {
         aept_log_warning("unknown option '%s'", key);

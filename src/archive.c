@@ -150,6 +150,21 @@ static char *safe_join(const char *prefix, const char *entry_path)
     return resolved;
 }
 
+/*
+ * Look up an archive entry path in a fileset, normalizing the entry
+ * path with full ".." resolution first.  Without this, a crafted entry
+ * named "etc/../etc/foo.conf" would not match the canonical
+ * "etc/foo.conf" stored in the set, because aept_fileset_contains()
+ * does not resolve ".." components.
+ */
+static int fileset_contains_entry(aept_fileset_t *fs, const char *entry_path)
+{
+    char *norm = normalize_path(entry_path);
+    int r = aept_fileset_contains(fs, norm);
+    free(norm);
+    return r;
+}
+
 /* Rewrite the pathname of an entry.  Returns 0 on success, 1 to skip. */
 static int rewrite_pathname(struct archive_entry *entry, const char *dest)
 {
@@ -409,8 +424,23 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
         if (!entry)
             goto cleanup;
 
+        /*
+         * Reject pathnames containing consecutive dots ("..") or other
+         * disallowed characters before doing any work.  safe_join() would
+         * still resolve ".." into a safe path, but the entry would then
+         * be silently dropped from the .list file (which uses the same
+         * is-safe check), leaving an extracted-but-untracked file behind
+         * that `aept remove` could not clean up.  Real packages never
+         * have consecutive dots in entry pathnames.
+         */
+        const char *raw_path = archive_entry_pathname(entry);
+        if (!aept_archive_path_is_safe(raw_path)) {
+            aept_log_error("refusing unsafe archive path '%s'", raw_path);
+            goto cleanup;
+        }
+
         int is_cf = have_cf &&
-            aept_fileset_contains(conffiles, archive_entry_pathname(entry));
+            fileset_contains_entry(conffiles, raw_path);
 
         int skip = rewrite_all_paths(entry, dest);
         if (skip == 1)
@@ -674,7 +704,7 @@ int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,
         if (!entry)
             goto cleanup;
 
-        if (!aept_fileset_contains(selected, archive_entry_pathname(entry)))
+        if (!fileset_contains_entry(selected, archive_entry_pathname(entry)))
             continue;
 
         int skip = rewrite_all_paths(entry, prefix);
