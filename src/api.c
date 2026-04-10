@@ -44,6 +44,7 @@ aept_ctx_t *aept_init(void)
     ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
     aept_log_set_ctx(ctx);
     fetchConnectionCacheInit(4, 2);
+    fetchRestartCalls = 0;
     return ctx;
 }
 

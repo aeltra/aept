@@ -52,20 +52,22 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
         goto cleanup;
     }
 
-    while ((n = fetchIO_read(fio, buf, sizeof(buf))) > 0) {
+    for (;;) {
+        n = fetchIO_read(fio, buf, sizeof(buf));
         if (aept_cancelled())
             goto cleanup;
+        if (n == 0)
+            break;
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            aept_log_error("failed to download '%s'", url);
+            goto cleanup;
+        }
         if (fwrite(buf, 1, n, fp) != (size_t)n) {
             aept_log_error("write error for '%s': %s", tmp, strerror(errno));
             goto cleanup;
         }
-    }
-
-    if (n < 0) {
-        if (aept_cancelled())
-            goto cleanup;
-        aept_log_error("failed to download '%s'", url);
-        goto cleanup;
     }
 
     if (fclose(fp) != 0) {
