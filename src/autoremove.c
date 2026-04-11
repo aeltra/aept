@@ -168,7 +168,7 @@ int aept_op_autoremove(struct aept_ctx *ctx)
         }
 
         aept_trigger_ctx_collect_dirs(ctx, &tctx, candidates[i]);
-        r = aept_do_remove(ctx, candidates[i], NULL, NULL);
+        r = aept_do_remove(ctx, candidates[i], NULL, NULL, NULL);
         if (r < 0 && !ctx->config.force_depends)
             goto out_trigger;
     }

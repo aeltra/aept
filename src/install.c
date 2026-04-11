@@ -28,6 +28,7 @@
 #include "aept/config.h"
 #include "aept/download.h"
 #include "aept/msg.h"
+#include "aept/owner_index.h"
 #include "aept/pin.h"
 #include "aept/remove.h"
 #include "aept/script.h"
@@ -317,82 +318,6 @@ static int download_package(struct aept_ctx *ctx, Id p, Pool *pool,
     return 0;
 }
 
-/* Return the name of the installed package that owns path, or NULL.
- * path uses archive format (e.g. "./usr/bin/foo").  Caller must free. */
-static char *find_file_owner(struct aept_ctx *ctx, const char *path)
-{
-    DIR *dir;
-    struct dirent *ent;
-    const char *needle;
-
-    needle = path;
-    while (needle[0] == '.' && needle[1] == '/')
-        needle += 2;
-    while (needle[0] == '/')
-        needle++;
-    if (needle[0] == '\0')
-        return NULL;
-
-    dir = opendir(ctx->config.info_dir);
-    if (!dir)
-        return NULL;
-
-    while ((ent = readdir(dir)) != NULL) {
-        const char *dot;
-        char *list_path = NULL;
-        FILE *fp;
-        char buf[4096];
-
-        dot = strrchr(ent->d_name, '.');
-        if (!dot || strcmp(dot, ".list") != 0)
-            continue;
-
-        aept_asprintf(&list_path, "%s/%s", ctx->config.info_dir, ent->d_name);
-        fp = fopen(list_path, "r");
-        free(list_path);
-
-        if (!fp)
-            continue;
-
-        while (fgets(buf, sizeof(buf), fp)) {
-            const char *entry;
-            char *tab;
-
-            if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-                aept_fgets_drain_line(fp);
-                continue;
-            }
-            buf[strcspn(buf, "\n")] = '\0';
-
-            tab = strchr(buf, '\t');
-            if (tab)
-                *tab = '\0';
-
-            entry = buf;
-            while (entry[0] == '.' && entry[1] == '/')
-                entry += 2;
-            while (entry[0] == '/')
-                entry++;
-
-            if (entry[0] != '\0' && strcmp(entry, needle) == 0) {
-                fclose(fp);
-                closedir(dir);
-
-                size_t name_len = (size_t)(dot - ent->d_name);
-                char *name = aept_malloc(name_len + 1);
-                memcpy(name, ent->d_name, name_len);
-                name[name_len] = '\0';
-                return name;
-            }
-        }
-
-        fclose(fp);
-    }
-
-    closedir(dir);
-    return NULL;
-}
-
 /* Check whether solvable s declares Replaces for owner_name. */
 static int solvable_replaces(Pool *pool, Solvable *s, const char *owner_name)
 {
@@ -461,10 +386,12 @@ static int same_dir_symlink(const char *disk_path, const char *archive_target)
 
 /* Check for file clashes before extracting a package.
  * old_files: fileset of old version (for upgrades), or NULL.
+ * owners: file→owner index covering the current transaction state.
  * Returns the number of clashes (0 = OK). */
 static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
                                Pool *pool, Id p,
-                               aept_fileset_t *old_files)
+                               aept_fileset_t *old_files,
+                               aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *pkg_name = pool_id2str(pool, s->name);
@@ -485,7 +412,7 @@ static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
         const char *stripped = path;
         char *disk_path = NULL;
         struct stat st;
-        char *owner;
+        const char *owner;
 
         while (stripped[0] == '.' && stripped[1] == '/')
             stripped += 2;
@@ -515,27 +442,21 @@ static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
         if (old_files && aept_fileset_contains(old_files, path))
             continue;
 
-        owner = find_file_owner(ctx, path);
+        owner = owners ? aept_owner_index_find(owners, path) : NULL;
+        if (!owner)
+            continue;
 
         /* Same package (reinstall) */
-        if (owner && strcmp(owner, pkg_name) == 0) {
-            free(owner);
+        if (strcmp(owner, pkg_name) == 0)
             continue;
-        }
 
         /* New package declares Replaces for the owner */
-        if (owner && solvable_replaces(pool, s, owner)) {
-            free(owner);
-            continue;
-        }
-
-        if (!owner)
+        if (solvable_replaces(pool, s, owner))
             continue;
 
         aept_log_error("package '%s' wants to install '%s'\n"
                   "  but that file is already provided by package '%s'",
                   pkg_name, stripped, owner);
-        free(owner);
         clashes++;
     }
 
@@ -544,7 +465,8 @@ static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
 }
 
 static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
-                              Pool *pool, Id p, const char *old_version)
+                              Pool *pool, Id p, const char *old_version,
+                              aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
@@ -593,7 +515,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         goto cleanup;
 
     /* Check for file conflicts before extraction */
-    r = check_file_clashes(ctx, ipk_path, pool, p, NULL);
+    r = check_file_clashes(ctx, ipk_path, pool, p, NULL, owners);
     if (r != 0) {
         r = -1;
         goto cleanup;
@@ -719,6 +641,9 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     free(ctrl_path);
     ctrl_path = NULL;
 
+    if (owners && list_path)
+        aept_owner_index_add_owner_files(owners, name, list_path);
+
     aept_log_debug("installed %s", name);
     r = 0;
 
@@ -754,7 +679,8 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
 static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
                               Pool *pool, Id p, const char *old_version,
                               const char *new_version,
-                              aept_fileset_t *installed_files)
+                              aept_fileset_t *installed_files,
+                              aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
@@ -846,8 +772,14 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         }
     }
 
-    /* 5. Check for file conflicts before extraction */
-    r = check_file_clashes(ctx, ipk_path, pool, p, &old_files);
+    /* 5. Check for file conflicts before extraction.  Drop the old
+     * version's claim on its files up-front so entries left behind
+     * after the upgrade (files not part of the new version) no longer
+     * generate false clashes for later packages in the transaction. */
+    if (owners)
+        aept_owner_index_drop_owner(owners, name);
+
+    r = check_file_clashes(ctx, ipk_path, pool, p, &old_files, owners);
     if (r != 0) {
         r = -1;
         goto cleanup_filesets;
@@ -1084,6 +1016,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     free(ctrl_path);
     ctrl_path = NULL;
 
+    if (owners)
+        aept_owner_index_add_owner_files(owners, name, list_path);
+
     aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
     r = 0;
     goto cleanup;
@@ -1107,7 +1042,8 @@ cleanup:
 }
 
 static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
-                        Transaction *trans, Pool *pool)
+                        Transaction *trans, Pool *pool,
+                        aept_owner_index_t *owners)
 {
     int i, r = 0;
 
@@ -1143,7 +1079,8 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
                 return r;
         }
 
-        r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver, NULL);
+        r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver,
+                                NULL, owners);
         if (ctx->config.no_cache && !is_local)
             unlink(ipk_path);
         free(ipk_path);
@@ -1312,6 +1249,13 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     int fileset_sorted = 0;
     aept_fileset_init(&installed_files);
 
+    /* Build the file→owner index once, up-front.  Replaces the
+     * per-file directory scan that check_file_clashes used to do and
+     * is the dominant speedup for large transactions. */
+    aept_owner_index_t owner_idx;
+    aept_owner_index_init(&owner_idx);
+    aept_owner_index_build(ctx, &owner_idx);
+
     aept_trigger_ctx_t tctx;
     aept_trigger_ctx_init(&tctx);
 
@@ -1344,7 +1288,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             }
 
             aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-            r = aept_do_remove(ctx, pkg_name, NULL, &installed_files);
+            r = aept_do_remove(ctx, pkg_name, NULL, &installed_files,
+                                &owner_idx);
             if (r < 0 && !ctx->config.force_depends)
                 goto fileset_cleanup;
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
@@ -1380,7 +1325,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
                 r = do_upgrade_package(ctx, ipk_paths[i], pool, p,
                                        old_ver, new_ver,
-                                       &installed_files);
+                                       &installed_files, &owner_idx);
                 fileset_sorted = 0;
 
                 if (r == 0) {
@@ -1388,7 +1333,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     aept_trigger_ctx_add_fresh(&tctx, pkg_name);
                 }
             } else {
-                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL);
+                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL,
+                                        &owner_idx);
 
                 if (r == 0) {
                     aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
@@ -1481,17 +1427,20 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     /* Reinstall phase — download and reinstall requested packages
      * that were not covered by the solver transaction. */
     if (ctx->config.reinstall && names) {
-        r = do_reinstall(ctx, names, name_count, trans, pool);
+        r = do_reinstall(ctx, names, name_count, trans, pool, &owner_idx);
         if (r < 0)
-            goto download_cleanup;
+            goto owner_cleanup;
     }
 
     r = 0;
-    goto download_cleanup;
+    goto owner_cleanup;
 
 fileset_cleanup:
     aept_fileset_free(&installed_files);
     aept_trigger_ctx_free(&tctx);
+
+owner_cleanup:
+    aept_owner_index_free(&owner_idx);
 
 download_cleanup:
     for (i = 0; i < trans->steps.count; i++)

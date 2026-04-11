@@ -10,6 +10,7 @@
 #include "aept/util.h"
 
 struct aept_ctx;
+struct aept_owner_index;
 
 /* Remove package files listed in {info_dir}/{name}.list.
  * Files present in protected are skipped. */
@@ -23,8 +24,11 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count);
  * new_version: version of the replacing package (NULL for pure removal).
  * Controls maintainer script arguments: "upgrade <ver>" vs "remove".
  * protected: files installed earlier in the same transaction (skipped
- * during removal). May be NULL. */
+ * during removal). May be NULL.
+ * owners: in-transaction file→owner index to invalidate on success.
+ * May be NULL. */
 int aept_do_remove(struct aept_ctx *ctx, const char *name,
-                   const char *new_version, aept_fileset_t *protected);
+                   const char *new_version, aept_fileset_t *protected,
+                   struct aept_owner_index *owners);
 
 #endif

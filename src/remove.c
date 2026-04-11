@@ -20,6 +20,7 @@
 #include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/msg.h"
+#include "aept/owner_index.h"
 #include "aept/pin.h"
 #include "aept/remove.h"
 #include "aept/script.h"
@@ -180,7 +181,8 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
 }
 
 int aept_do_remove(struct aept_ctx *ctx, const char *name,
-                   const char *new_version, aept_fileset_t *protected)
+                   const char *new_version, aept_fileset_t *protected,
+                   aept_owner_index_t *owners)
 {
     int r;
 
@@ -216,6 +218,9 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name,
     aept_status_remove(ctx, name);
     aept_status_unmark_auto(ctx, name);
     aept_pin_remove(ctx, name);
+
+    if (owners)
+        aept_owner_index_drop_owner(owners, name);
 
     aept_log_debug("removed %s", name);
 
@@ -306,7 +311,7 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
         const char *pkg_name = pool_id2str(pool, s->name);
 
         aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-        r = aept_do_remove(ctx, pkg_name, NULL, NULL);
+        r = aept_do_remove(ctx, pkg_name, NULL, NULL, NULL);
         if (r < 0 && !ctx->config.force_depends)
             goto trigger_cleanup;
     }
