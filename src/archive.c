@@ -398,9 +398,12 @@ static struct archive *new_disk_writer(int flags)
  */
 static int do_extract_all(struct archive *ar, const char *dest, int flags,
                           unsigned long *size, aept_fileset_t *conffiles,
-                          const char *cf_suffix)
+                          const char *cf_suffix,
+                          aept_ar_file_list_t *recorded)
 {
     int ret = -1;
+    char *keep_path = NULL;
+    char *keep_link = NULL;
 
     struct archive *disk = new_disk_writer(flags);
     if (!disk)
@@ -439,14 +442,37 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
             goto cleanup;
         }
 
+        /*
+         * Capture the archive-relative metadata before rewrite_all_paths
+         * overwrites the entry pathname — so the caller can build a
+         * .list file without re-opening the archive.
+         */
+        unsigned int keep_mode = 0;
+        if (recorded) {
+            const struct stat *st = archive_entry_stat(entry);
+            keep_mode = (unsigned int)st->st_mode;
+            keep_path = aept_strdup(raw_path);
+            if (S_ISLNK(st->st_mode)) {
+                const char *tgt = archive_entry_symlink(entry);
+                if (!tgt || !aept_symlink_target_is_safe(tgt))
+                    tgt = "<redacted>";
+                keep_link = aept_strdup(tgt);
+            }
+        }
+
         int is_cf = have_cf &&
             fileset_contains_entry(conffiles, raw_path);
 
         int skip = rewrite_all_paths(entry, dest);
-        if (skip == 1)
-            continue;
-        if (skip < 0)
+        if (skip != 0) {
+            free(keep_path);
+            free(keep_link);
+            keep_path = NULL;
+            keep_link = NULL;
+            if (skip == 1)
+                continue;
             goto cleanup;
+        }
 
         if (is_cf && cf_suffix) {
             const char *pathname = archive_entry_pathname(entry);
@@ -472,10 +498,26 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
 
         if (size)
             *size += archive_entry_size(entry);
+
+        if (recorded && keep_path) {
+            if (recorded->count >= recorded->alloc) {
+                recorded->alloc = recorded->alloc ? recorded->alloc * 2 : 256;
+                recorded->entries = aept_realloc(recorded->entries,
+                        recorded->alloc * sizeof(*recorded->entries));
+            }
+            recorded->entries[recorded->count].path = keep_path;
+            recorded->entries[recorded->count].link_target = keep_link;
+            recorded->entries[recorded->count].mode = keep_mode;
+            recorded->count++;
+            keep_path = NULL;
+            keep_link = NULL;
+        }
     }
 
     ret = 0;
 cleanup:
+    free(keep_path);
+    free(keep_link);
     if (cf_disk)
         archive_write_free(cf_disk);
     archive_write_free(disk);
@@ -574,43 +616,6 @@ int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,
     }
 }
 
-int aept_ar_extract_paths_to_stream(struct aept_ar *ar, FILE *stream)
-{
-    for (;;) {
-        int eof;
-        struct archive_entry *entry = next_header(ar->ar, &eof);
-        if (eof)
-            return 0;
-        if (!entry)
-            return -1;
-
-        const char *path = archive_entry_pathname(entry);
-
-        if (!aept_archive_path_is_safe(path)) {
-            aept_log_error("refusing unsafe archive path '%s'", path);
-            return -1;
-        }
-
-        const struct stat *st = archive_entry_stat(entry);
-        int r;
-        if (S_ISLNK(st->st_mode)) {
-            const char *target = archive_entry_symlink(entry);
-            if (!aept_symlink_target_is_safe(target))
-                target = "<redacted>";
-            r = fprintf(stream, "%s\t%#03o\t%s\n", path,
-                        (unsigned int)st->st_mode, target);
-        } else {
-            r = fprintf(stream, "%s\t%#03o\n", path,
-                        (unsigned int)st->st_mode);
-        }
-        if (r <= 0) {
-            aept_log_error("failed to write path to stream: %s",
-                      strerror(errno));
-            return -1;
-        }
-    }
-}
-
 void aept_ar_file_list_init(aept_ar_file_list_t *fl)
 {
     fl->entries = NULL;
@@ -671,6 +676,7 @@ int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
         out->entries[out->count].path = aept_strdup(path);
         out->entries[out->count].link_target =
             target ? aept_strdup(target) : NULL;
+        out->entries[out->count].mode = (unsigned int)st->st_mode;
         out->count++;
     }
 
@@ -678,12 +684,30 @@ int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
     return 0;
 }
 
+int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream)
+{
+    for (int i = 0; i < fl->count; i++) {
+        const aept_ar_file_entry_t *e = &fl->entries[i];
+        int r;
+
+        if (e->link_target)
+            r = fprintf(stream, "%s\t%#03o\t%s\n", e->path, e->mode,
+                        e->link_target);
+        else
+            r = fprintf(stream, "%s\t%#03o\n", e->path, e->mode);
+
+        if (r <= 0)
+            return -1;
+    }
+    return 0;
+}
+
 int aept_ar_extract_all(struct aept_ar *ar, const char *prefix,
                    unsigned long *size, aept_fileset_t *conffiles,
-                   const char *cf_suffix)
+                   const char *cf_suffix, aept_ar_file_list_t *recorded)
 {
     return do_extract_all(ar->ar, prefix, ar->extract_flags, size,
-                          conffiles, cf_suffix);
+                          conffiles, cf_suffix, recorded);
 }
 
 int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,

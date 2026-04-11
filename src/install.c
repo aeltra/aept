@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include <dirent.h>
 #include <errno.h>
 #include <libgen.h>
 #include <stdio.h>
@@ -499,7 +498,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         goto cleanup;
     }
 
-    r = aept_ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL);
+    r = aept_ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL, NULL);
     aept_ar_close(ctrl_ar);
     ctrl_ar = NULL;
 
@@ -521,40 +520,48 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         goto cleanup;
     }
 
-    /* Extract data archive to root */
+    /* Extract data archive to root, recording each entry so the
+     * .list file can be written without re-opening the archive. */
+    aept_ar_file_list_t extracted;
+    aept_ar_file_list_init(&extracted);
+
     data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
     if (!data_ar) {
         aept_log_error("failed to open data archive in '%s'", ipk_path);
+        aept_ar_file_list_free(&extracted);
         r = -1;
         goto cleanup;
     }
 
     char *extract_root = aept_config_root_path(&ctx->config, "/");
-    r = aept_ar_extract_all(data_ar, extract_root, NULL, NULL, NULL);
+    r = aept_ar_extract_all(data_ar, extract_root, NULL, NULL, NULL,
+                             &extracted);
     free(extract_root);
     aept_ar_close(data_ar);
     data_ar = NULL;
 
     if (r < 0) {
         aept_log_error("failed to extract data archive");
+        aept_ar_file_list_free(&extracted);
         goto cleanup;
     }
 
-    /* Record file list */
+    /* Record file list from the in-memory capture */
     aept_file_mkdir_hier(ctx->config.info_dir, 0755);
     aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
-    data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
-    if (data_ar) {
+    {
         FILE *list_fp = fopen(list_path, "w");
         if (list_fp) {
-            aept_ar_extract_paths_to_stream(data_ar, list_fp);
-            if (ferror(list_fp) || fclose(list_fp) != 0)
+            if (aept_ar_file_list_write(&extracted, list_fp) < 0
+                    || ferror(list_fp) || fclose(list_fp) != 0)
                 aept_log_warning("failed to write file list '%s'", list_path);
+        } else {
+            aept_log_warning("failed to write file list '%s'", list_path);
         }
-        aept_ar_close(data_ar);
-        data_ar = NULL;
     }
+
+    aept_ar_file_list_free(&extracted);
 
     /* Save conffile metadata */
     {
@@ -702,6 +709,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
 
     aept_log_info("%s %s", is_reinstall ? "reinstalling" : "upgrading", name);
 
+    aept_ar_file_list_t extracted;
+    aept_ar_file_list_init(&extracted);
+
     aept_asprintf(&tmpdir, "%s/aept-XXXXXX", ctx->config.tmp_dir);
 
     if (!mkdtemp(tmpdir)) {
@@ -719,7 +729,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         goto cleanup;
     }
 
-    r = aept_ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL);
+    r = aept_ar_extract_all(ctrl_ar, tmpdir, NULL, NULL, NULL, NULL);
     aept_ar_close(ctrl_ar);
     ctrl_ar = NULL;
 
@@ -815,7 +825,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         char *extract_root = aept_config_root_path(&ctx->config, "/");
         r = aept_ar_extract_all(data_ar, extract_root, NULL,
                            cf_paths.count > 0 ? &cf_paths : NULL,
-                           ".aept-new");
+                           ".aept-new", &extracted);
         free(extract_root);
         aept_ar_close(data_ar);
         data_ar = NULL;
@@ -834,37 +844,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         aept_conffile_set_free(&new_cf);
     }
 
-    /* 6. Record new file list */
-    data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
-    if (data_ar) {
-        FILE *list_fp = fopen(list_path, "w");
-        if (list_fp) {
-            aept_ar_extract_paths_to_stream(data_ar, list_fp);
-            if (ferror(list_fp) || fclose(list_fp) != 0)
-                aept_log_warning("failed to write file list '%s'", list_path);
-        }
-        aept_ar_close(data_ar);
-        data_ar = NULL;
-
-        /* Re-read the list to build new fileset */
-        FILE *lfp = fopen(list_path, "r");
-        if (lfp) {
-            char lbuf[4096];
-            while (fgets(lbuf, sizeof(lbuf), lfp)) {
-                char *tab;
-                if (aept_fgets_is_truncated(lbuf, sizeof(lbuf))) {
-                    aept_fgets_drain_line(lfp);
-                    continue;
-                }
-                lbuf[strcspn(lbuf, "\n")] = '\0';
-                tab = strchr(lbuf, '\t');
-                if (tab)
-                    *tab = '\0';
-                aept_fileset_add(&new_files, lbuf);
-            }
-            fclose(lfp);
-        }
-    }
+    /* 6. Build new_files fileset from the captured extraction list */
+    for (int i = 0; i < extracted.count; i++)
+        aept_fileset_add(&new_files, extracted.entries[i].path);
 
     aept_fileset_sort(&new_files);
 
@@ -986,17 +968,17 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         free(trig_src);
     }
 
-    /* Record file list (remove_info_files deleted the earlier copy) */
-    data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
-    if (data_ar) {
+    /* Record file list from the in-memory capture (remove_info_files
+     * deleted the earlier copy written before the filesets were freed). */
+    {
         FILE *list_fp = fopen(list_path, "w");
         if (list_fp) {
-            aept_ar_extract_paths_to_stream(data_ar, list_fp);
-            if (ferror(list_fp) || fclose(list_fp) != 0)
+            if (aept_ar_file_list_write(&extracted, list_fp) < 0
+                    || ferror(list_fp) || fclose(list_fp) != 0)
                 aept_log_warning("failed to write file list '%s'", list_path);
+        } else {
+            aept_log_warning("failed to write file list '%s'", list_path);
         }
-        aept_ar_close(data_ar);
-        data_ar = NULL;
     }
 
     /* 9. Run new-postinst */
@@ -1028,6 +1010,7 @@ cleanup_filesets:
     aept_fileset_free(&old_files);
 
 cleanup:
+    aept_ar_file_list_free(&extracted);
     if (have_old_cf)
         aept_conffile_set_free(&old_cf);
     free(list_path);
