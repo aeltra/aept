@@ -1431,6 +1431,8 @@ download_cleanup:
     free(ipk_paths);
 
 out:
+    if (aept_status_flush(ctx) < 0)
+        aept_log_warning("failed to persist status file");
     free(local_ids);
     aept_solver_fini(ctx);
     return r;

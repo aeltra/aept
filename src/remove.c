@@ -323,6 +323,8 @@ trigger_cleanup:
     aept_trigger_ctx_free(&tctx);
 
 out:
+    if (aept_status_flush(ctx) < 0)
+        aept_log_warning("failed to persist status file");
     aept_solver_fini(ctx);
     return r;
 }

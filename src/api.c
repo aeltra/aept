@@ -55,6 +55,8 @@ void aept_cleanup(aept_ctx_t *ctx)
 
     fetchConnectionCacheClose();
 
+    aept_status_cache_free(ctx);
+
     if (ctx->config_loaded) {
         aept_config_free(&ctx->config);
         ctx->config_loaded = 0;
