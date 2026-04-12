@@ -262,7 +262,7 @@ static int stream_entry(struct archive *ar, FILE *fp)
 }
 
 /*
- * Open the outer .ipk container (an AR or gzipped-tar archive).
+ * Open the outer .aep container (an AR or gzipped-tar archive).
  */
 static struct archive *open_outer(const char *path)
 {

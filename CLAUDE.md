@@ -14,7 +14,7 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 
 ## Project Overview
 
-**aept** (Aeltra Package Tool) is a minimal package manager for .ipk packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. External tools: wget (downloads), usign (signature verification).
+**aept** (Aeltra Package Tool) is a minimal package manager for .aep packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification).
 
 ## Coding Conventions
 
@@ -42,7 +42,7 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 **Key subsystems:**
 
 - **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos.
-- **archive.c** — Two-level IPK extraction (outer AR → inner tar). Adapted from opkg's `opkg_archive.c`. Handles nested decompression with libarchive callbacks. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
+- **archive.c** — Two-level AEP extraction (outer AR → inner tar). Adapted from opkg's `opkg_archive.c`. Handles nested decompression with libarchive callbacks. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.

@@ -27,7 +27,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Package management library for .aeltra packages
  libaept provides dependency resolution and package management
  functionality using libsolv and libarchive. It can be embedded
- into applications that need to manage .ipk packages.
+ into applications that need to manage .aep packages.
 
 Package: libaept-dev
 Section: libdevel

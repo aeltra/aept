@@ -812,7 +812,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
     pool = aept_solver_pool(ctx->solver);
 
-    /* Load local .ipk files into the solver.  Skip packages that are
+    /* Load local .aep files into the solver.  Skip packages that are
      * already installed at the same version (unless --reinstall). */
     int n_local_ids = 0;
     if (local_count > 0) {

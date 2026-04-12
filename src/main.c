@@ -162,7 +162,7 @@ static void usage_install(FILE *out)
         "Usage: aept install [options] <packages|paths...>\n"
         "\n"
         "Install packages and their dependencies.\n"
-        "Arguments starting with ./ or / are treated as local .ipk files.\n"
+        "Arguments starting with ./ or / are treated as local .aep files.\n"
         "\n"
         "Options:\n"
         "  -f, --force-depends   Ignore dependency errors\n"
@@ -482,11 +482,11 @@ static int cmd_install(int argc, char *argv[])
     }
 
     if (optind >= argc) {
-        aept_log_error("install requires at least one package name or .ipk path");
+        aept_log_error("install requires at least one package name or .aep path");
         return 1;
     }
 
-    /* Partition arguments into package names and local .ipk paths */
+    /* Partition arguments into package names and local .aep paths */
     int nargs = argc - optind;
     const char **pkg_names = aept_malloc(nargs * sizeof(char *));
     const char **local_paths = aept_malloc(nargs * sizeof(char *));
