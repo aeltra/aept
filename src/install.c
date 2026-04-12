@@ -5,17 +5,12 @@
  */
 
 #include <errno.h>
-#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
-#include <solv/chksum.h>
-#include <solv/knownid.h>
 #include <solv/pool.h>
-#include <solv/queue.h>
 #include <solv/repo.h>
 #include <solv/solvable.h>
 #include <solv/transaction.h>
@@ -23,6 +18,7 @@
 #include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/archive.h"
+#include "aept/clash.h"
 #include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/download.h"
@@ -198,271 +194,6 @@ static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
     return 0;
 }
 
-static int verify_checksum(const char *path, Pool *pool, Solvable *s)
-{
-    Id checksum_type;
-    const unsigned char *expected;
-    Chksum *chk;
-    FILE *fp;
-    char buf[4096];
-    size_t n;
-    const unsigned char *computed;
-    int len;
-    const char *name = pool_id2str(pool, s->name);
-
-    expected = solvable_lookup_bin_checksum(s, SOLVABLE_CHECKSUM,
-                                            &checksum_type);
-    if (!expected) {
-        aept_log_error("no checksum for '%s'", name);
-        return -1;
-    }
-
-    chk = solv_chksum_create(checksum_type);
-    if (!chk) {
-        aept_log_error("unsupported checksum type for '%s'", name);
-        return -1;
-    }
-
-    fp = fopen(path, "rb");
-    if (!fp) {
-        aept_log_error("cannot open '%s' for checksum verification: %s",
-                  path, strerror(errno));
-        solv_chksum_free(chk, NULL);
-        return -1;
-    }
-
-    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0)
-        solv_chksum_add(chk, buf, (int)n);
-
-    fclose(fp);
-
-    computed = solv_chksum_get(chk, &len);
-
-    if (len != solv_chksum_len(checksum_type) ||
-            memcmp(computed, expected, len) != 0) {
-        aept_log_error("%s checksum mismatch for '%s'",
-                  solv_chksum_type2str(checksum_type), name);
-        solv_chksum_free(chk, NULL);
-        unlink(path);
-        return -1;
-    }
-
-    solv_chksum_free(chk, NULL);
-    return 0;
-}
-
-static int download_package(struct aept_ctx *ctx, Id p, Pool *pool,
-                            char **dest_out)
-{
-    Solvable *s = pool_id2solvable(pool, p);
-    unsigned int medianr;
-    const char *location = solvable_lookup_location(s, &medianr);
-    int src_idx;
-    char *url = NULL;
-    char *dest = NULL;
-    char *location_copy = NULL;
-    char *base;
-    int r;
-
-    if (!location) {
-        aept_log_error("no download location for '%s'",
-                  pool_id2str(pool, s->name));
-        return -1;
-    }
-
-    src_idx = aept_solver_solvable_source_index(ctx->solver, p);
-    if (src_idx < 0 || src_idx >= ctx->config.nsources) {
-        aept_log_error("unknown source for '%s'",
-                  pool_id2str(pool, s->name));
-        return -1;
-    }
-
-    aept_asprintf(&url, "%s/%s", ctx->config.sources[src_idx].url, location);
-
-    location_copy = aept_strdup(location);
-    base = basename(location_copy);
-    aept_asprintf(&dest, "%s/%s", ctx->config.cache_dir, base);
-
-    aept_file_mkdir_hier(ctx->config.cache_dir, 0755);
-
-    /* Try cached copy first */
-    if (access(dest, F_OK) == 0) {
-        if (verify_checksum(dest, pool, s) == 0) {
-            aept_log_debug("using cached %s",
-                     pool_id2str(pool, s->name));
-            free(url);
-            free(location_copy);
-            *dest_out = dest;
-            return 0;
-        }
-        /* checksum failed — verify_checksum already deleted the file */
-    }
-
-    r = aept_download(ctx, url, dest, base);
-    free(url);
-    free(location_copy);
-
-    if (r < 0) {
-        free(dest);
-        return -1;
-    }
-
-    r = verify_checksum(dest, pool, s);
-    if (r < 0) {
-        free(dest);
-        return -1;
-    }
-
-    *dest_out = dest;
-    return 0;
-}
-
-/* Check whether solvable s declares Replaces for owner_name. */
-static int solvable_replaces(Pool *pool, Solvable *s, const char *owner_name)
-{
-    Queue q;
-    Id owner_id;
-    int i;
-
-    owner_id = pool_str2id(pool, owner_name, 0);
-    if (!owner_id)
-        return 0;
-
-    queue_init(&q);
-    solvable_lookup_deparray(s, SOLVABLE_OBSOLETES, &q, 0);
-
-    for (i = 0; i < q.count; i++) {
-        Id dep = q.elements[i];
-        Id name;
-
-        if (ISRELDEP(dep)) {
-            Reldep *rd = GETRELDEP(pool, dep);
-            name = rd->name;
-        } else {
-            name = dep;
-        }
-
-        if (name == owner_id) {
-            queue_free(&q);
-            return 1;
-        }
-    }
-
-    queue_free(&q);
-    return 0;
-}
-
-/* Check whether an on-disk symlink and an archive symlink point to the
- * same target, and that target is a directory.  These are treated like
- * shared directories and are not conflicts. */
-static int same_dir_symlink(const char *disk_path, const char *archive_target)
-{
-    char link_buf[4096];
-    ssize_t len;
-    char *resolved;
-    struct stat st;
-    int is_dir;
-
-    if (!archive_target)
-        return 0;
-
-    len = readlink(disk_path, link_buf, sizeof(link_buf) - 1);
-    if (len < 0)
-        return 0;
-    link_buf[len] = '\0';
-
-    if (strcmp(link_buf, archive_target) != 0)
-        return 0;
-
-    resolved = realpath(disk_path, NULL);
-    if (!resolved)
-        return 0;
-
-    is_dir = (lstat(resolved, &st) == 0 && S_ISDIR(st.st_mode));
-    free(resolved);
-    return is_dir;
-}
-
-/* Check for file clashes before extracting a package.
- * old_files: fileset of old version (for upgrades), or NULL.
- * owners: file→owner index covering the current transaction state.
- * Returns the number of clashes (0 = OK). */
-static int check_file_clashes(struct aept_ctx *ctx, const char *ipk_path,
-                               Pool *pool, Id p,
-                               aept_fileset_t *old_files,
-                               aept_owner_index_t *owners)
-{
-    Solvable *s = pool_id2solvable(pool, p);
-    const char *pkg_name = pool_id2str(pool, s->name);
-    aept_ar_file_list_t new_files;
-    int clashes = 0;
-    int i;
-
-    aept_ar_file_list_init(&new_files);
-
-    if (aept_ar_list_data_paths(ipk_path, ctx->config.ignore_uid, &new_files) < 0) {
-        aept_ar_file_list_free(&new_files);
-        return -1;
-    }
-
-    for (i = 0; i < new_files.count; i++) {
-        const char *path = new_files.entries[i].path;
-        const char *link_target = new_files.entries[i].link_target;
-        const char *stripped = path;
-        char *disk_path = NULL;
-        struct stat st;
-        const char *owner;
-
-        while (stripped[0] == '.' && stripped[1] == '/')
-            stripped += 2;
-        while (stripped[0] == '/')
-            stripped++;
-        if (stripped[0] == '\0')
-            continue;
-
-        aept_asprintf(&disk_path, "%s/%s",
-                  ctx->config.offline_root ? ctx->config.offline_root : "", stripped);
-
-        if (lstat(disk_path, &st) < 0) {
-            free(disk_path);
-            continue;
-        }
-
-        /* Both are symlinks to the same directory — shared like dirs */
-        if (S_ISLNK(st.st_mode) && link_target &&
-                same_dir_symlink(disk_path, link_target)) {
-            free(disk_path);
-            continue;
-        }
-
-        free(disk_path);
-
-        /* Expected from old version of this package */
-        if (old_files && aept_fileset_contains(old_files, path))
-            continue;
-
-        owner = owners ? aept_owner_index_find(owners, path) : NULL;
-        if (!owner)
-            continue;
-
-        /* Same package (reinstall) */
-        if (strcmp(owner, pkg_name) == 0)
-            continue;
-
-        /* New package declares Replaces for the owner */
-        if (solvable_replaces(pool, s, owner))
-            continue;
-
-        aept_log_error("package '%s' wants to install '%s'\n"
-                  "  but that file is already provided by package '%s'",
-                  pkg_name, stripped, owner);
-        clashes++;
-    }
-
-    aept_ar_file_list_free(&new_files);
-    return clashes;
-}
-
 static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
                               Pool *pool, Id p, const char *old_version,
                               aept_owner_index_t *owners)
@@ -514,7 +245,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         goto cleanup;
 
     /* Check for file conflicts before extraction */
-    r = check_file_clashes(ctx, ipk_path, pool, p, NULL, owners);
+    r = aept_clash_check(ctx, ipk_path, pool, p, NULL, owners);
     if (r != 0) {
         r = -1;
         goto cleanup;
@@ -781,7 +512,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     if (owners)
         aept_owner_index_drop_owner(owners, name);
 
-    r = check_file_clashes(ctx, ipk_path, pool, p, &old_files, owners);
+    r = aept_clash_check(ctx, ipk_path, pool, p, &old_files, owners);
     if (r != 0) {
         r = -1;
         goto cleanup_filesets;
@@ -1040,7 +771,7 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
         if (is_local) {
             ipk_path = aept_strdup(aept_solver_commandline_path(ctx->solver, avail));
         } else {
-            r = download_package(ctx, avail, pool, &ipk_path);
+            r = aept_download_package(ctx, avail, pool, &ipk_path);
             if (r < 0)
                 return r;
         }
@@ -1194,7 +925,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 continue;
             }
 
-            r = download_package(ctx, p, pool, &ipk_paths[i]);
+            r = aept_download_package(ctx, p, pool, &ipk_paths[i]);
             if (r < 0)
                 goto download_cleanup;
 
@@ -1216,7 +947,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     aept_fileset_init(&installed_files);
 
     /* Build the file→owner index once, up-front.  Replaces the
-     * per-file directory scan that check_file_clashes used to do and
+     * per-file directory scan that aept_clash_check used to do and
      * is the dominant speedup for large transactions. */
     aept_owner_index_t owner_idx;
     aept_owner_index_init(&owner_idx);
@@ -1263,7 +994,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 if (aept_solver_is_commandline(ctx->solver, p)) {
                     ipk_paths[i] = aept_strdup(aept_solver_commandline_path(ctx->solver, p));
                 } else {
-                    r = download_package(ctx, p, pool, &ipk_paths[i]);
+                    r = aept_download_package(ctx, p, pool, &ipk_paths[i]);
                     if (r < 0)
                         goto fileset_cleanup;
                 }

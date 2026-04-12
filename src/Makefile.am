@@ -4,6 +4,7 @@ bin_PROGRAMS = aept
 libaept_la_SOURCES = \
     api.c \
     autoremove.c \
+    clash.c \
     clean.c \
     conffile.c \
     config.c \
