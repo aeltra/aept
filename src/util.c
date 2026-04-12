@@ -88,7 +88,7 @@ int aept_pkg_name_is_safe(const char *name)
     return 1;
 }
 
-int aept_symlink_target_is_safe(const char *target)
+int aept_symlink_target_is_recordable(const char *target)
 {
     if (!target)
         return 0;

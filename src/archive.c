@@ -454,7 +454,7 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
             keep_path = aept_strdup(raw_path);
             if (S_ISLNK(st->st_mode)) {
                 const char *tgt = archive_entry_symlink(entry);
-                if (!tgt || !aept_symlink_target_is_safe(tgt))
+                if (!tgt || !aept_symlink_target_is_recordable(tgt))
                     tgt = "<redacted>";
                 keep_link = aept_strdup(tgt);
             }
