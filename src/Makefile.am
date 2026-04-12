@@ -1,3 +1,12 @@
+LIBFETCH_PATCH = $(top_srcdir)/patches/libfetch-fixes.patch
+LIBFETCH_STAMP = $(top_srcdir)/libfetch/.patched
+
+$(LIBFETCH_STAMP): $(LIBFETCH_PATCH)
+	cd $(top_srcdir) && patch -p1 --forward < patches/libfetch-fixes.patch
+	@touch $@
+
+BUILT_SOURCES = $(LIBFETCH_STAMP)
+
 lib_LTLIBRARIES = libaept.la
 bin_PROGRAMS = aept
 

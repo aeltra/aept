@@ -170,9 +170,12 @@ fetch_bind(int sd, int af, const char *addr)
 	if (getaddrinfo(addr, NULL, &hints, &res0))
 		return (-1);
 	for (res = res0; res; res = res->ai_next) {
-		if (bind(sd, res->ai_addr, res->ai_addrlen) == 0)
+		if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
+			freeaddrinfo(res0);
 			return (0);
+		}
 	}
+	freeaddrinfo(res0);
 	return (-1);
 }
 
@@ -372,14 +375,16 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
 
 	global_count = host_count = 0;
 	last = NULL;
-	for (iter = connection_cache; iter; last = iter, iter = next_cached) {
+	for (iter = connection_cache; iter; iter = next_cached) {
 		next_cached = iter->next_cached;
 		++global_count;
 		if (strcmp(conn->cache_url->host, iter->cache_url->host) == 0)
 			++host_count;
 		if (global_count < cache_global_limit &&
-		    host_count < cache_per_host_limit)
+		    host_count < cache_per_host_limit) {
+			last = iter;
 			continue;
+		}
 		--global_count;
 		if (last != NULL)
 			last->next_cached = iter->next_cached;
@@ -924,7 +929,7 @@ fetchAppendURLList(struct url_list *dst, const struct url_list *src)
 		dst->urls[j] = src->urls[i];
 		dst->urls[j].doc = strdup(src->urls[i].doc);
 		if (dst->urls[j].doc == NULL) {
-			while (i-- > 0)
+			while (j-- > dst->length)
 				free(dst->urls[j].doc);
 			fetch_syserr();
 			return -1;
@@ -977,7 +982,7 @@ fetch_netrc_auth(struct url *url)
 			return (-1);
 		}
 	} else {
-		if ((p = getenv("HOME")) != NULL) {
+		if ((p = getenv("HOME")) == NULL) {
 			struct passwd *pwd;
 
 			if ((pwd = getpwuid(getuid())) == NULL ||
@@ -1194,7 +1199,7 @@ fetchIO_read(fetchIO *f, void *buf, size_t len)
 ssize_t
 fetchIO_write(fetchIO *f, const void *buf, size_t len)
 {
-	if (f->io_read == NULL)
+	if (f->io_write == NULL)
 		return EBADF;
 	return (*f->io_write)(f->io_cookie, buf, len);
 }
