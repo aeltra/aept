@@ -584,17 +584,6 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         aept_conffile_set_free(&new_cf);
     }
 
-    /* Copy control files to info_dir */
-    aept_asprintf(&ctrl_path, "%s/control", tmpdir);
-    if (aept_file_exists(ctrl_path)) {
-        char *dest = NULL;
-        aept_asprintf(&dest, "%s/%s.control", ctx->config.info_dir, name);
-        if (rename(ctrl_path, dest) < 0 && aept_file_copy(ctrl_path, dest) < 0)
-            aept_log_warning("failed to install control file for '%s'", name);
-        free(dest);
-    }
-    free(ctrl_path);
-
     /* Copy scripts to info_dir */
     const char *scripts[] = {
         "preinst", "postinst", "prerm", "postrm", "trigger", NULL
@@ -612,7 +601,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         free(src);
     }
 
-    /* Copy triggers file to info_dir and rebuild index */
+    /* Copy triggers file to info_dir */
     {
         char *trig_src = NULL, *trig_dst = NULL;
         aept_asprintf(&trig_src, "%s/triggers", tmpdir);
@@ -622,8 +611,6 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
             if (rename(trig_src, trig_dst) < 0
                     && aept_file_copy(trig_src, trig_dst) < 0)
                 aept_log_warning("failed to install triggers for '%s'", name);
-            else
-                aept_trigger_index_rebuild(ctx);
             free(trig_dst);
         }
         free(trig_src);
@@ -640,13 +627,18 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         r = 0;
     }
 
-    /* Update status */
-    ctrl_path = NULL;
-    aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
-    aept_status_remove(ctx, name);
-    aept_status_add(ctx, ctrl_path, state);
-    free(ctrl_path);
-    ctrl_path = NULL;
+    /* Write the .control file with the install state.  This reads the
+     * raw control from tmpdir and writes it to info_dir in one step,
+     * replacing the separate copy + rewrite that used to happen. */
+    {
+        char *ctrl_src = NULL;
+        aept_asprintf(&ctrl_src, "%s/control", tmpdir);
+        aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
+        aept_status_add(ctx, ctrl_src, ctrl_path, state);
+        free(ctrl_src);
+        free(ctrl_path);
+        ctrl_path = NULL;
+    }
 
     if (owners && list_path)
         aept_owner_index_add_owner_files(owners, name, list_path);
@@ -924,17 +916,6 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     /* 8. Replace info files with new versions */
     remove_info_files(ctx, name);
 
-    aept_asprintf(&ctrl_path, "%s/control", tmpdir);
-    if (aept_file_exists(ctrl_path)) {
-        char *dest = NULL;
-        aept_asprintf(&dest, "%s/%s.control", ctx->config.info_dir, name);
-        if (rename(ctrl_path, dest) < 0 && aept_file_copy(ctrl_path, dest) < 0)
-            aept_log_warning("failed to install control file for '%s'", name);
-        free(dest);
-    }
-    free(ctrl_path);
-    ctrl_path = NULL;
-
     const char *scripts[] = {
         "preinst", "postinst", "prerm", "postrm", "trigger", NULL
     };
@@ -951,7 +932,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         free(src);
     }
 
-    /* Copy triggers file to info_dir and rebuild index */
+    /* Copy triggers file to info_dir */
     {
         char *trig_src = NULL, *trig_dst = NULL;
         aept_asprintf(&trig_src, "%s/triggers", tmpdir);
@@ -961,8 +942,6 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
             if (rename(trig_src, trig_dst) < 0
                     && aept_file_copy(trig_src, trig_dst) < 0)
                 aept_log_warning("failed to install triggers for '%s'", name);
-            else
-                aept_trigger_index_rebuild(ctx);
             free(trig_dst);
         }
         free(trig_src);
@@ -991,12 +970,16 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         r = 0;
     }
 
-    /* 10. Update status */
-    aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
-    aept_status_remove(ctx, name);
-    aept_status_add(ctx, ctrl_path, state);
-    free(ctrl_path);
-    ctrl_path = NULL;
+    /* 10. Write the .control file with the install state */
+    {
+        char *ctrl_src = NULL;
+        aept_asprintf(&ctrl_src, "%s/control", tmpdir);
+        aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
+        aept_status_add(ctx, ctrl_src, ctrl_path, state);
+        free(ctrl_src);
+        free(ctrl_path);
+        ctrl_path = NULL;
+    }
 
     if (owners)
         aept_owner_index_add_owner_files(owners, name, list_path);
@@ -1431,8 +1414,6 @@ download_cleanup:
     free(ipk_paths);
 
 out:
-    if (aept_status_flush(ctx) < 0)
-        aept_log_warning("failed to persist status file");
     free(local_ids);
     aept_solver_fini(ctx);
     return r;

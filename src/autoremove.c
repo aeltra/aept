@@ -186,8 +186,6 @@ out_needed:
 out_fileset:
     aept_fileset_free(&auto_set);
 out:
-    if (aept_status_flush(ctx) < 0)
-        aept_log_warning("failed to persist status file");
     aept_solver_fini(ctx);
     return r;
 }

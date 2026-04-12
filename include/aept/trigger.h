@@ -37,12 +37,7 @@ int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx,
                                   const char *name);
 
 /* Fire all pending triggers after transaction completes.
- * Reads triggers-index to find interested packages. */
+ * Scans info_dir/*.triggers directly to find interested packages. */
 int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx);
-
-/* Rebuild the aggregated triggers-index file by scanning
- * all *.triggers files in info_dir.  Called after installing
- * or removing a package that has a .triggers file. */
-int aept_trigger_index_rebuild(struct aept_ctx *ctx);
 
 #endif

@@ -24,7 +24,6 @@ typedef struct aept_config {
     char *offline_root;     /* NULL or path */
     char *info_dir;         /* default "/var/lib/aept/info" */
     char *lists_dir;        /* default "/var/lib/aept/lists" */
-    char *status_file;      /* default "/var/lib/aept/status" */
     char *cache_dir;        /* default "/var/cache/aept" */
     char *tmp_dir;          /* default "/tmp" */
     char *lock_file;        /* default "/var/lib/aept/lock" */
@@ -55,28 +54,10 @@ typedef struct aept_config {
 /* Forward declaration */
 struct aept_solver;
 
-/* In-memory mirror of the status file.  Populated by aept_status_load,
- * mutated by aept_status_add / aept_status_remove, and written back by
- * aept_status_flush — so a transaction that touches many packages pays
- * for one on-disk rewrite instead of two per package. */
-typedef struct {
-    char *name;        /* "Package:" value */
-    char *text;        /* full stanza, one trailing '\n', no blank line */
-} aept_status_entry_t;
-
-typedef struct {
-    aept_status_entry_t *entries;
-    int count;
-    int alloc;
-    int loaded;
-    int dirty;
-} aept_status_cache_t;
-
 /* Full definition of the opaque context handle (aept_ctx_t). */
 struct aept_ctx {
     aept_config_t config;
     struct aept_solver *solver;   /* NULL until aept_solver_init() */
-    aept_status_cache_t status_cache;
     int lock_fd;
 
     /* Callbacks — set once, read-only after init */

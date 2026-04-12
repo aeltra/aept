@@ -25,7 +25,6 @@ void aept_config_set_defaults(struct aept_config *cfg)
 
     cfg->info_dir = aept_strdup("/var/lib/aept/info");
     cfg->lists_dir = aept_strdup("/var/lib/aept/lists");
-    cfg->status_file = aept_strdup("/var/lib/aept/status");
     cfg->cache_dir = aept_strdup("/var/cache/aept");
     cfg->tmp_dir = aept_strdup("/tmp");
     cfg->lock_file = aept_strdup("/var/lib/aept/lock");
@@ -94,8 +93,6 @@ static void set_option(struct aept_config *cfg, const char *key,
         strp = &cfg->info_dir;
     else if (strcmp(key, "lists_dir") == 0)
         strp = &cfg->lists_dir;
-    else if (strcmp(key, "status_file") == 0)
-        strp = &cfg->status_file;
     else if (strcmp(key, "cache_dir") == 0)
         strp = &cfg->cache_dir;
     else if (strcmp(key, "tmp_dir") == 0)
@@ -148,10 +145,6 @@ void aept_config_apply_offline_root(struct aept_config *cfg)
     aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->info_dir);
     free(cfg->info_dir);
     cfg->info_dir = tmp;
-
-    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->status_file);
-    free(cfg->status_file);
-    cfg->status_file = tmp;
 
     aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->lock_file);
     free(cfg->lock_file);
@@ -289,7 +282,6 @@ void aept_config_free(struct aept_config *cfg)
     free(cfg->offline_root);
     free(cfg->info_dir);
     free(cfg->lists_dir);
-    free(cfg->status_file);
     free(cfg->cache_dir);
     free(cfg->tmp_dir);
     free(cfg->lock_file);

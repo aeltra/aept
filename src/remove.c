@@ -210,12 +210,10 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name,
     if (r != 0)
         aept_log_warning("postrm failed for '%s', continuing", name);
 
-    /* Remove info files and rebuild trigger index */
+    /* Remove info files.  Deleting the .control file removes the
+     * package from the installed-packages database. */
     remove_info_files(ctx, name);
-    aept_trigger_index_rebuild(ctx);
 
-    /* Update status */
-    aept_status_remove(ctx, name);
     aept_status_unmark_auto(ctx, name);
     aept_pin_remove(ctx, name);
 
@@ -323,8 +321,6 @@ trigger_cleanup:
     aept_trigger_ctx_free(&tctx);
 
 out:
-    if (aept_status_flush(ctx) < 0)
-        aept_log_warning("failed to persist status file");
     aept_solver_fini(ctx);
     return r;
 }

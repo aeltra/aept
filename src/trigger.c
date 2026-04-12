@@ -241,81 +241,112 @@ static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name,
     return 0;
 }
 
-/* A single entry from triggers-index. */
+/* A single trigger pattern entry. */
 typedef struct {
     char *pattern;
     char *pkg_name;
     int modify_only;    /* pattern had '+' prefix */
 } trigger_entry_t;
 
-int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
+/* Scan info_dir for *.triggers files and build the entry list on the
+ * fly, without an intermediate index file on disk. */
+static void load_trigger_entries(struct aept_ctx *ctx,
+                                 trigger_entry_t **out_entries,
+                                 int *out_count)
 {
-    char *index_path = NULL;
-    FILE *fp;
-    char buf[4096];
+    DIR *dp;
+    struct dirent *de;
     trigger_entry_t *entries = NULL;
     int n_entries = 0;
     int entries_alloc = 0;
 
+    dp = opendir(ctx->config.info_dir);
+    if (!dp) {
+        *out_entries = NULL;
+        *out_count = 0;
+        return;
+    }
+
+    while ((de = readdir(dp)) != NULL) {
+        const char *suffix = ".triggers";
+        size_t nlen = strlen(de->d_name);
+        size_t slen = strlen(suffix);
+
+        if (nlen <= slen)
+            continue;
+        if (strcmp(de->d_name + nlen - slen, suffix) != 0)
+            continue;
+
+        char *pkg_name = strndup(de->d_name, nlen - slen);
+        if (!pkg_name)
+            continue;
+
+        char *trig_path = NULL;
+        aept_asprintf(&trig_path, "%s/%s", ctx->config.info_dir, de->d_name);
+
+        FILE *tfp = fopen(trig_path, "r");
+        free(trig_path);
+
+        if (!tfp) {
+            free(pkg_name);
+            continue;
+        }
+
+        char line[1024];
+        while (fgets(line, sizeof(line), tfp)) {
+            line[strcspn(line, "\n")] = '\0';
+
+            const char *p = line;
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (*p == '\0' || *p == '#')
+                continue;
+
+            if (n_entries >= entries_alloc) {
+                entries_alloc = entries_alloc ? entries_alloc * 2 : 16;
+                entries = aept_realloc(entries,
+                                       entries_alloc * sizeof(*entries));
+            }
+
+            int modify_only = 0;
+            if (p[0] == '+') {
+                modify_only = 1;
+                p++;
+            }
+
+            entries[n_entries].pattern = aept_strdup(p);
+            entries[n_entries].pkg_name = aept_strdup(pkg_name);
+            entries[n_entries].modify_only = modify_only;
+            n_entries++;
+        }
+
+        fclose(tfp);
+        free(pkg_name);
+    }
+
+    closedir(dp);
+
+    *out_entries = entries;
+    *out_count = n_entries;
+}
+
+int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
+{
+    trigger_entry_t *entries = NULL;
+    int n_entries = 0;
+
     if (tctx->n_dirs == 0)
-        return 0;
-
-    aept_asprintf(&index_path, "%s/triggers-index", ctx->config.info_dir);
-    fp = fopen(index_path, "r");
-    free(index_path);
-
-    if (!fp)
         return 0;
 
     /* Sort & deduplicate collected directories */
     sort_and_dedup(tctx->dirs, &tctx->n_dirs);
 
-    /* Parse triggers-index */
-    while (fgets(buf, sizeof(buf), fp)) {
-        char *pattern, *pkg, *tab;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-
-        buf[strcspn(buf, "\n")] = '\0';
-
-        if (buf[0] == '\0' || buf[0] == '#')
-            continue;
-
-        tab = strchr(buf, '\t');
-        if (!tab)
-            continue;
-
-        *tab = '\0';
-        pattern = buf;
-        pkg = tab + 1;
-
-        if (n_entries >= entries_alloc) {
-            entries_alloc = entries_alloc ? entries_alloc * 2 : 16;
-            entries = aept_realloc(entries,
-                                   entries_alloc * sizeof(trigger_entry_t));
-        }
-
-        int modify_only = 0;
-        if (pattern[0] == '+') {
-            modify_only = 1;
-            pattern++;
-        }
-
-        entries[n_entries].pattern = aept_strdup(pattern);
-        entries[n_entries].pkg_name = aept_strdup(pkg);
-        entries[n_entries].modify_only = modify_only;
-        n_entries++;
-    }
-
-    fclose(fp);
+    load_trigger_entries(ctx, &entries, &n_entries);
 
     if (n_entries == 0)
-        goto cleanup;
+        return 0;
 
-    /* Process entries grouped by package.  Since the index is small,
+    /* Process entries grouped by package.  Since the set is small,
      * a simple O(n*m) approach is fine: for each unique package,
      * collect matching directories across all its patterns. */
     for (int i = 0; i < n_entries; i++) {
@@ -422,7 +453,6 @@ int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
         entries[i].pkg_name = NULL;
     }
 
-cleanup:
     for (int i = 0; i < n_entries; i++) {
         free(entries[i].pattern);
         free(entries[i].pkg_name);
@@ -430,101 +460,4 @@ cleanup:
     free(entries);
 
     return 0;
-}
-
-int aept_trigger_index_rebuild(struct aept_ctx *ctx)
-{
-    DIR *dp;
-    struct dirent *de;
-    char *index_path = NULL;
-    char *tmp_path = NULL;
-    FILE *out = NULL;
-    int r = -1;
-
-    aept_asprintf(&index_path, "%s/triggers-index", ctx->config.info_dir);
-    aept_asprintf(&tmp_path, "%s/triggers-index.tmp", ctx->config.info_dir);
-
-    out = fopen(tmp_path, "w");
-    if (!out) {
-        aept_log_error("cannot create '%s': %s", tmp_path, strerror(errno));
-        goto cleanup;
-    }
-
-    dp = opendir(ctx->config.info_dir);
-    if (!dp) {
-        aept_log_error("cannot open '%s': %s",
-                       ctx->config.info_dir, strerror(errno));
-        goto cleanup;
-    }
-
-    while ((de = readdir(dp)) != NULL) {
-        const char *suffix = ".triggers";
-        size_t nlen = strlen(de->d_name);
-        size_t slen = strlen(suffix);
-
-        if (nlen <= slen)
-            continue;
-        if (strcmp(de->d_name + nlen - slen, suffix) != 0)
-            continue;
-
-        /* Extract package name */
-        char *pkg_name = strndup(de->d_name, nlen - slen);
-        if (!pkg_name)
-            continue;
-
-        /* Parse the triggers file */
-        char *trig_path = NULL;
-        aept_asprintf(&trig_path, "%s/%s", ctx->config.info_dir, de->d_name);
-
-        FILE *tfp = fopen(trig_path, "r");
-        free(trig_path);
-
-        if (!tfp) {
-            free(pkg_name);
-            continue;
-        }
-
-        char line[1024];
-        while (fgets(line, sizeof(line), tfp)) {
-            line[strcspn(line, "\n")] = '\0';
-
-            /* Skip empty lines and comments */
-            const char *p = line;
-            while (*p == ' ' || *p == '\t')
-                p++;
-            if (*p == '\0' || *p == '#')
-                continue;
-
-            fprintf(out, "%s\t%s\n", p, pkg_name);
-        }
-
-        fclose(tfp);
-        free(pkg_name);
-    }
-
-    closedir(dp);
-
-    if (fflush(out) != 0 || ferror(out)) {
-        aept_log_error("write error on '%s'", tmp_path);
-        goto cleanup;
-    }
-
-    fclose(out);
-    out = NULL;
-
-    if (rename(tmp_path, index_path) < 0) {
-        aept_log_error("cannot rename '%s' to '%s': %s",
-                       tmp_path, index_path, strerror(errno));
-        goto cleanup;
-    }
-
-    r = 0;
-
-cleanup:
-    if (out)
-        fclose(out);
-    unlink(tmp_path);
-    free(tmp_path);
-    free(index_path);
-    return r;
 }
