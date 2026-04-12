@@ -7,6 +7,13 @@ $(LIBFETCH_STAMP): $(LIBFETCH_PATCH)
 
 BUILT_SOURCES = $(LIBFETCH_STAMP)
 
+clean-local:
+	@if [ -f $(LIBFETCH_STAMP) ]; then \
+	    cd $(top_srcdir) && patch -p1 -R --dry-run < patches/libfetch-fixes.patch >/dev/null 2>&1 \
+	        && patch -p1 -R < patches/libfetch-fixes.patch; \
+	    rm -f $(LIBFETCH_STAMP); \
+	fi
+
 lib_LTLIBRARIES = libaept.la
 bin_PROGRAMS = aept
 
