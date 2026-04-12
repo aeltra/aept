@@ -370,6 +370,64 @@ being performed:
 
 > Removal of old version during upgrade to *new-version*.
 
+# TRIGGERS
+
+Triggers allow a package to run a script when other packages install or
+remove files in directories of interest. A common use case is rebuilding
+a cache or index after any package places files into a particular
+directory.
+
+## Declaring trigger interest
+
+A package declares trigger interest by shipping a *triggers* file in its
+control archive. Each line names a directory pattern:
+
+    /usr/lib/modules
+    /usr/share/icons/*
+
+Patterns are matched with **fnmatch**(3) using **FNM_PATHNAME**. The
+wildcards **\***, **?**, and **\[...\]** are supported.
+
+A pattern may be prefixed with **+** to mark it as modify-only:
+
+    +/usr/share/mime/packages
+
+A modify-only pattern fires the trigger only when a file in the matching
+directory was actually installed or removed during the transaction.
+Without the prefix, the trigger also fires for freshly installed
+packages whose concrete (non-glob) patterns match an existing directory
+on disk, even if no file in that directory changed.
+
+## Trigger script
+
+The package must also ship a *trigger* file in its control archive. This
+is an executable script (invoked with **/bin/sh**) that receives the
+matched directory paths as positional arguments:
+
+    #!/bin/sh
+    for dir in "$@"; do
+        update-icon-caches "$dir"
+    done
+
+## Execution order
+
+Triggers are deferred: they do not run during individual package
+operations. Instead, all directories touched by installs, upgrades, and
+removals are collected throughout the transaction. After every package
+operation has completed (including maintainer scripts), **aept** matches
+the collected directories against the aggregated trigger index and runs
+each matching trigger script once.
+
+## Trigger index
+
+When a package with a *triggers* file is installed or removed, **aept**
+automatically rebuilds *triggers-index* in the info directory. This file
+aggregates all trigger interests and has the format:
+
+    <pattern>	<package>
+
+The index is an implementation detail and should not be edited by hand.
+
 # PACKAGE FORMAT
 
 Aeltra packages (.aeltra) use the same structure as Debian binary
