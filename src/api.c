@@ -824,7 +824,7 @@ int aept_owns(aept_ctx_t *ctx, const char *path,
 
                 if (count >= alloc) {
                     alloc = alloc ? alloc * 2 : 4;
-                    owners = realloc(owners, alloc * sizeof(char *));
+                    owners = aept_realloc(owners, alloc * sizeof(char *));
                 }
                 char *owner = malloc(name_len + 1);
                 if (owner) {

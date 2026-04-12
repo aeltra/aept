@@ -107,8 +107,10 @@ int aept_status_load(struct aept_ctx *ctx)
                     found_status = 1;
             }
 
-            if (!eol)
+            if (!eol) {
+                fputc('\n', mem);
                 break;
+            }
             fputc('\n', mem);
             p = eol + 1;
         }
@@ -209,7 +211,8 @@ int aept_status_mark_auto(struct aept_ctx *ctx, const char *name)
 
     fprintf(fp, "%s\n", name);
 
-    if (ferror(fp) || fclose(fp) != 0) {
+    int err = ferror(fp);
+    if (fclose(fp) != 0 || err) {
         aept_log_error("failed to write auto-installed file '%s'",
                   ctx->config.auto_file);
         return -1;
@@ -243,7 +246,8 @@ int aept_status_unmark_auto(struct aept_ctx *ctx, const char *name)
             continue;
         }
         char pkg_name[256];
-        sscanf(buf, "%255s", pkg_name);
+        if (sscanf(buf, "%255s", pkg_name) != 1)
+            continue;
         if (strcmp(pkg_name, name) == 0) {
             found = 1;
             continue;
@@ -293,7 +297,8 @@ int aept_status_is_auto(struct aept_ctx *ctx, const char *name)
             continue;
         }
         char pkg_name[256];
-        sscanf(buf, "%255s", pkg_name);
+        if (sscanf(buf, "%255s", pkg_name) != 1)
+            continue;
         if (strcmp(pkg_name, name) == 0) {
             fclose(fp);
             return 1;

@@ -38,7 +38,10 @@ int aept_verify_signature(struct aept_ctx *ctx, const char *file,
         _exit(AEPT_EXIT_EXEC_FAILED);
     }
 
-    r = waitpid(pid, &status, 0);
+    do {
+        r = waitpid(pid, &status, 0);
+    } while (r == -1 && errno == EINTR);
+
     if (r == -1) {
         aept_log_error("usign: waitpid: %s", strerror(errno));
         return -1;
