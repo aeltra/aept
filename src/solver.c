@@ -273,6 +273,24 @@ static void reorder_transaction(Transaction *trans, Pool *pool,
                 break;
             }
         }
+
+        /* Try provides if the name didn't match directly (virtual pkg) */
+        if (!user_ids[i]) {
+            Id nameid = pool_str2id(pool, names[i], 0);
+            if (nameid) {
+                Id p, pp;
+                FOR_PROVIDES(p, pp, nameid) {
+                    for (j = 0; j < total; j++) {
+                        if (trans->steps.elements[j] == p) {
+                            user_ids[i] = p;
+                            break;
+                        }
+                    }
+                    if (user_ids[i])
+                        break;
+                }
+            }
+        }
     }
     for (i = 0; i < local_count; i++)
         user_ids[name_count + i] = local_ids[i];
