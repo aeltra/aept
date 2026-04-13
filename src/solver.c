@@ -336,8 +336,6 @@ static void reorder_transaction(Transaction *trans, Pool *pool,
      * produced by transaction_order rather than silently dropping
      * cycle members.
      */
-    aept_log_warning("reorder: %d of %d steps", ordered.count, total);
-
     if (ordered.count == total) {
         queue_empty(&trans->steps);
         for (i = 0; i < ordered.count; i++)
