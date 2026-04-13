@@ -169,7 +169,7 @@ const char *aept_solver_commandline_path(aept_solver_t *s, Id p)
     return NULL;
 }
 
-static int do_solve(struct aept_ctx *ctx, Queue *job)
+static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
 {
     aept_solver_t *s = ctx->solver;
     int problems;
@@ -222,7 +222,8 @@ static int do_solve(struct aept_ctx *ctx, Queue *job)
     }
 
     s->trans = solver_create_transaction(s->solv);
-    transaction_order(s->trans, 0);
+    transaction_order(s->trans,
+        keep_orderdata ? SOLVER_TRANSACTION_KEEP_ORDERDATA : 0);
 
     return 0;
 }
@@ -237,6 +238,116 @@ static const char *find_pin_version(aept_solver_t *s, const char *name)
     }
 
     return NULL;
+}
+
+/*
+ * Reorder trans->steps so that user-listed packages are installed in
+ * the order they were specified on the command line, pulling in their
+ * dependencies just before each one.  Uses libsolv's "roll your own"
+ * ordering API (transaction_order_add_choices) which returns the set
+ * of packages whose dependencies are already satisfied at each step.
+ */
+static void reorder_transaction(Transaction *trans, Pool *pool,
+                                const char **names, int name_count,
+                                const Id *local_ids, int local_count)
+{
+    Queue choices, ordered;
+    Id chosen, *user_ids;
+    int i, j, total, best_idx;
+    int next_user = 0;
+    int user_count = name_count + local_count;
+
+    total = trans->steps.count;
+
+    /* Resolve user-listed names to solvable IDs once up front so
+     * the inner loops only do integer comparisons. */
+    user_ids = aept_malloc(user_count * sizeof(Id));
+
+    for (i = 0; i < name_count; i++) {
+        user_ids[i] = 0;
+        for (j = 0; j < total; j++) {
+            Id p = trans->steps.elements[j];
+            Solvable *s = pool_id2solvable(pool, p);
+            if (strcmp(pool_id2str(pool, s->name), names[i]) == 0) {
+                user_ids[i] = p;
+                break;
+            }
+        }
+    }
+    for (i = 0; i < local_count; i++)
+        user_ids[name_count + i] = local_ids[i];
+
+    queue_init(&choices);
+    queue_init(&ordered);
+
+    /* Seed with packages that have no unsatisfied dependencies */
+    transaction_order_add_choices(trans, 0, &choices);
+
+    while (choices.count > 0) {
+        best_idx = -1;
+
+        /* Skip user entries that could not be resolved */
+        while (next_user < user_count && !user_ids[next_user])
+            next_user++;
+
+        /* Pick the next user-listed package if it is available */
+        if (next_user < user_count) {
+            for (i = 0; i < choices.count; i++) {
+                if (choices.elements[i] == user_ids[next_user]) {
+                    best_idx = i;
+                    next_user++;
+                    break;
+                }
+            }
+        }
+
+        /* Otherwise pick the first dependency (non-user-listed) */
+        if (best_idx < 0) {
+            for (i = 0; i < choices.count; i++) {
+                int is_user = 0;
+                for (j = next_user; j < user_count; j++) {
+                    if (user_ids[j] && choices.elements[i] == user_ids[j]) {
+                        is_user = 1;
+                        break;
+                    }
+                }
+                if (!is_user) {
+                    best_idx = i;
+                    break;
+                }
+            }
+        }
+
+        /* Fallback: only later user-listed packages available */
+        if (best_idx < 0)
+            best_idx = 0;
+
+        chosen = choices.elements[best_idx];
+        queue_push(&ordered, chosen);
+        queue_delete(&choices, best_idx);
+
+        /* Unlock packages that depended on chosen */
+        transaction_order_add_choices(trans, chosen, &choices);
+    }
+
+    /*
+     * If a dependency cycle prevented transaction_order_add_choices
+     * from releasing all packages, fall back to the original ordering
+     * produced by transaction_order rather than silently dropping
+     * cycle members.
+     */
+    aept_log_warning("reorder: %d of %d steps", ordered.count, total);
+
+    if (ordered.count == total) {
+        queue_empty(&trans->steps);
+        for (i = 0; i < ordered.count; i++)
+            queue_push(&trans->steps, ordered.elements[i]);
+    }
+
+    queue_free(&choices);
+    queue_free(&ordered);
+    free(user_ids);
+    transaction_free_orderdata(trans);
 }
 
 int aept_solver_resolve_install(struct aept_ctx *ctx,
@@ -309,7 +420,11 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
                         SOLVER_INSTALL | SOLVER_SOLVABLE, local_ids[i]);
     }
 
-    r = do_solve(ctx, &job);
+    r = do_solve(ctx, &job, count > 0 || local_count > 0);
+    if (r == 0 && (count > 0 || local_count > 0))
+        reorder_transaction(s->trans, s->pool, names, count,
+                            local_ids, local_count);
+
     queue_free(&job);
 
     return r;
@@ -329,7 +444,7 @@ int aept_solver_resolve_remove(struct aept_ctx *ctx,
         queue_push2(&job, SOLVER_ERASE | SOLVER_SOLVABLE_PROVIDES, id);
     }
 
-    r = do_solve(ctx, &job);
+    r = do_solve(ctx, &job, 0);
     queue_free(&job);
 
     return r;
