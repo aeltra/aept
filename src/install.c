@@ -355,7 +355,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     if (r != 0) {
         aept_log_error("postinst failed for '%s'", name);
         state = "unpacked";
-        r = 0;
+        r = -1;
     }
 
     /* Write the .control file with the install state.  This reads the
@@ -374,8 +374,8 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     if (owners && list_path)
         aept_owner_index_add_owner_files(owners, name, list_path);
 
-    aept_log_debug("installed %s", name);
-    r = 0;
+    if (r == 0)
+        aept_log_debug("installed %s", name);
 
 cleanup:
     free(list_path);
@@ -698,7 +698,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     if (r != 0) {
         aept_log_error("postinst failed for '%s'", name);
         state = "unpacked";
-        r = 0;
+        r = -1;
     }
 
     /* 10. Write the .control file with the install state */
@@ -715,8 +715,8 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     if (owners)
         aept_owner_index_add_owner_files(owners, name, list_path);
 
-    aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
-    r = 0;
+    if (r == 0)
+        aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
     goto cleanup;
 
 cleanup_filesets:
