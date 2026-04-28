@@ -26,10 +26,11 @@ static int verbose_count;
 /* ── signal handling ──────────────────────────────────────────────── */
 
 static aept_ctx_t *g_ctx;   /* for signal handler only */
+static volatile sig_atomic_t g_signum;
 
 static void signal_handler(int sig)
 {
-    (void)sig;
+    g_signum = sig;
     if (g_ctx)
         aept_cancel(g_ctx);
 }
@@ -176,6 +177,7 @@ static void usage_install(FILE *out)
         "  --no-cache            Download, install, and delete each package\n"
         "  --force-confnew       Always install new conffiles without asking\n"
         "  --force-confold       Always keep old conffiles without asking\n"
+        "  --keep-going          Continue past per-package errors\n"
     );
 }
 
@@ -193,6 +195,7 @@ static void usage_remove(FILE *out)
         "\n"
         "  --non-interactive     Do not prompt\n"
         "  --purge               Also remove modified conffiles\n"
+        "  --keep-going          Continue past per-package errors\n"
     );
 }
 
@@ -210,6 +213,7 @@ static void usage_autoremove(FILE *out)
         "\n"
         "  --non-interactive     Do not prompt\n"
         "  --purge               Also remove modified conffiles\n"
+        "  --keep-going          Continue past per-package errors\n"
     );
 }
 
@@ -231,6 +235,7 @@ static void usage_upgrade(FILE *out)
         "  --no-cache            Download, install, and delete each package\n"
         "  --force-confnew       Always install new conffiles without asking\n"
         "  --force-confold       Always keep old conffiles without asking\n"
+        "  --keep-going          Continue past per-package errors\n"
     );
 }
 
@@ -358,6 +363,7 @@ static struct option install_options[] = {
     {"force-confnew",   no_argument, NULL, 0x103},
     {"force-confold",   no_argument, NULL, 0x104},
     {"non-interactive", no_argument, NULL, 0x105},
+    {"keep-going",      no_argument, NULL, 0x106},
     {NULL, 0, NULL, 0}
 };
 
@@ -367,6 +373,7 @@ static struct option autoremove_options[] = {
     {"help",            no_argument, NULL, 'h'},
     {"purge",           no_argument, NULL, 0x100},
     {"non-interactive", no_argument, NULL, 0x101},
+    {"keep-going",      no_argument, NULL, 0x102},
     {NULL, 0, NULL, 0}
 };
 
@@ -376,6 +383,7 @@ static struct option remove_options[] = {
     {"help",            no_argument, NULL, 'h'},
     {"purge",           no_argument, NULL, 0x100},
     {"non-interactive", no_argument, NULL, 0x101},
+    {"keep-going",      no_argument, NULL, 0x102},
     {NULL, 0, NULL, 0}
 };
 
@@ -454,7 +462,7 @@ static int cmd_update(int argc, char *argv[])
 
     r = aept_update(ctx);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_install(int argc, char *argv[])
@@ -462,6 +470,7 @@ static int cmd_install(int argc, char *argv[])
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, reinstall = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
+    int keep_going = 0;
     int opt, r;
 
     optind = 1;
@@ -476,6 +485,7 @@ static int cmd_install(int argc, char *argv[])
         case 0x103: force_confnew = 1; break;
         case 0x104: force_confold = 1; break;
         case 0x105: non_interactive = 1; break;
+        case 0x106: keep_going = 1; break;
         case 'h': usage_install(stdout); return 0;
         default:  usage_install(stderr); return 1;
         }
@@ -526,6 +536,7 @@ static int cmd_install(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_NO_CACHE, no_cache);
     aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFNEW, force_confnew);
     aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, force_confold);
+    aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
     if (non_interactive && !force_confnew)
         aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, 1);
 
@@ -534,12 +545,13 @@ static int cmd_install(int argc, char *argv[])
     free(pkg_names);
     free(local_paths);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_autoremove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
+    int keep_going = 0;
     int opt, r;
 
     optind = 1;
@@ -549,6 +561,7 @@ static int cmd_autoremove(int argc, char *argv[])
         case 'n': noaction = 1; break;
         case 0x100: purge = 1; break;
         case 0x101: non_interactive = 1; break;
+        case 0x102: keep_going = 1; break;
         case 'h': usage_autoremove(stdout); return 0;
         default:  usage_autoremove(stderr); return 1;
         }
@@ -564,15 +577,17 @@ static int cmd_autoremove(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
     aept_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
     aept_set_flag(ctx, AEPT_FLAG_PURGE, purge);
+    aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
 
     r = aept_autoremove(ctx);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_remove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
+    int keep_going = 0;
     int opt, r;
 
     optind = 1;
@@ -582,6 +597,7 @@ static int cmd_remove(int argc, char *argv[])
         case 'n': noaction = 1; break;
         case 0x100: purge = 1; break;
         case 0x101: non_interactive = 1; break;
+        case 0x102: keep_going = 1; break;
         case 'h': usage_remove(stdout); return 0;
         default:  usage_remove(stderr); return 1;
         }
@@ -602,10 +618,11 @@ static int cmd_remove(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_NOACTION, noaction);
     aept_set_flag(ctx, AEPT_FLAG_NON_INTERACTIVE, non_interactive);
     aept_set_flag(ctx, AEPT_FLAG_PURGE, purge);
+    aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
 
     r = aept_remove(ctx, (const char **)&argv[optind], argc - optind);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_upgrade(int argc, char *argv[])
@@ -613,6 +630,7 @@ static int cmd_upgrade(int argc, char *argv[])
     int force_depends = 0, download_only = 0, noaction = 0;
     int allow_downgrade = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
+    int keep_going = 0;
     int opt, r;
 
     optind = 1;
@@ -627,6 +645,7 @@ static int cmd_upgrade(int argc, char *argv[])
         case 0x103: force_confnew = 1; break;
         case 0x104: force_confold = 1; break;
         case 0x105: non_interactive = 1; break;
+        case 0x106: keep_going = 1; break;
         case 'h': usage_upgrade(stdout); return 0;
         default:  usage_upgrade(stderr); return 1;
         }
@@ -646,12 +665,13 @@ static int cmd_upgrade(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_NO_CACHE, no_cache);
     aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFNEW, force_confnew);
     aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, force_confold);
+    aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
     if (non_interactive && !force_confnew)
         aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, 1);
 
     r = aept_upgrade(ctx);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_clean(int argc, char *argv[])
@@ -672,7 +692,7 @@ static int cmd_clean(int argc, char *argv[])
 
     r = aept_clean(ctx);
     aept_cleanup(ctx);
-    return r;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_list(int argc, char *argv[])
@@ -921,7 +941,7 @@ static int cmd_mark_manual(int argc, char *argv[])
     }
 
     aept_cleanup(ctx);
-    return r < 0 ? 1 : 0;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_mark_auto(int argc, char *argv[])
@@ -948,7 +968,7 @@ static int cmd_mark_auto(int argc, char *argv[])
     r = aept_mark_auto(ctx, (const char **)&argv[optind], argc - optind);
 
     aept_cleanup(ctx);
-    return r < 0 ? 1 : 0;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_mark(int argc, char *argv[])
@@ -1006,7 +1026,7 @@ static int cmd_pin(int argc, char *argv[])
     r = aept_pin(ctx, (const char **)&argv[optind], argc - optind);
 
     aept_cleanup(ctx);
-    return r < 0 ? 1 : 0;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_unpin(int argc, char *argv[])
@@ -1034,7 +1054,7 @@ static int cmd_unpin(int argc, char *argv[])
     r = aept_unpin(ctx, (const char **)&argv[optind], argc - optind);
 
     aept_cleanup(ctx);
-    return r < 0 ? 1 : 0;
+    return r != 0 ? 1 : 0;
 }
 
 static int cmd_print_architecture(int argc, char *argv[])
@@ -1084,7 +1104,9 @@ static struct option global_options[] = {
 int main(int argc, char *argv[])
 {
     const char *command;
-    int opt;
+    int opt, rc;
+    int sub_argc;
+    char **sub_argv;
 
     setup_signals();
 
@@ -1104,37 +1126,54 @@ int main(int argc, char *argv[])
     }
 
     command = argv[optind];
+    sub_argc = argc - optind;
+    sub_argv = argv + optind;
 
     if (strcmp(command, "update") == 0)
-        return cmd_update(argc - optind, argv + optind);
-    if (strcmp(command, "install") == 0)
-        return cmd_install(argc - optind, argv + optind);
-    if (strcmp(command, "remove") == 0)
-        return cmd_remove(argc - optind, argv + optind);
-    if (strcmp(command, "autoremove") == 0)
-        return cmd_autoremove(argc - optind, argv + optind);
-    if (strcmp(command, "upgrade") == 0)
-        return cmd_upgrade(argc - optind, argv + optind);
-    if (strcmp(command, "clean") == 0)
-        return cmd_clean(argc - optind, argv + optind);
-    if (strcmp(command, "list") == 0)
-        return cmd_list(argc - optind, argv + optind);
-    if (strcmp(command, "show") == 0)
-        return cmd_show(argc - optind, argv + optind);
-    if (strcmp(command, "files") == 0)
-        return cmd_files(argc - optind, argv + optind);
-    if (strcmp(command, "owns") == 0)
-        return cmd_owns(argc - optind, argv + optind);
-    if (strcmp(command, "mark") == 0)
-        return cmd_mark(argc - optind, argv + optind);
-    if (strcmp(command, "pin") == 0)
-        return cmd_pin(argc - optind, argv + optind);
-    if (strcmp(command, "unpin") == 0)
-        return cmd_unpin(argc - optind, argv + optind);
-    if (strcmp(command, "print-architecture") == 0)
-        return cmd_print_architecture(argc - optind, argv + optind);
+        rc = cmd_update(sub_argc, sub_argv);
+    else if (strcmp(command, "install") == 0)
+        rc = cmd_install(sub_argc, sub_argv);
+    else if (strcmp(command, "remove") == 0)
+        rc = cmd_remove(sub_argc, sub_argv);
+    else if (strcmp(command, "autoremove") == 0)
+        rc = cmd_autoremove(sub_argc, sub_argv);
+    else if (strcmp(command, "upgrade") == 0)
+        rc = cmd_upgrade(sub_argc, sub_argv);
+    else if (strcmp(command, "clean") == 0)
+        rc = cmd_clean(sub_argc, sub_argv);
+    else if (strcmp(command, "list") == 0)
+        rc = cmd_list(sub_argc, sub_argv);
+    else if (strcmp(command, "show") == 0)
+        rc = cmd_show(sub_argc, sub_argv);
+    else if (strcmp(command, "files") == 0)
+        rc = cmd_files(sub_argc, sub_argv);
+    else if (strcmp(command, "owns") == 0)
+        rc = cmd_owns(sub_argc, sub_argv);
+    else if (strcmp(command, "mark") == 0)
+        rc = cmd_mark(sub_argc, sub_argv);
+    else if (strcmp(command, "pin") == 0)
+        rc = cmd_pin(sub_argc, sub_argv);
+    else if (strcmp(command, "unpin") == 0)
+        rc = cmd_unpin(sub_argc, sub_argv);
+    else if (strcmp(command, "print-architecture") == 0)
+        rc = cmd_print_architecture(sub_argc, sub_argv);
+    else {
+        aept_log_error("unknown command '%s'", command);
+        usage_main(stderr);
+        return 1;
+    }
 
-    aept_log_error("unknown command '%s'", command);
-    usage_main(stderr);
-    return 1;
+    /* If a fatal signal was caught, re-raise it under the default
+     * disposition so the parent sees the conventional 128+signum
+     * exit status instead of a generic error. */
+    if (g_signum) {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_DFL;
+        sigemptyset(&sa.sa_mask);
+        sigaction(g_signum, &sa, NULL);
+        raise(g_signum);
+    }
+
+    return rc;
 }

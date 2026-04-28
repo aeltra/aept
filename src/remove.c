@@ -290,6 +290,8 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
     aept_trigger_ctx_t tctx;
     aept_trigger_ctx_init(&tctx);
 
+    int had_error = 0;
+
     for (i = 0; i < trans->steps.count; i++) {
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
@@ -310,12 +312,15 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
 
         aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
         r = aept_do_remove(ctx, pkg_name, NULL, NULL, NULL);
-        if (r < 0 && !ctx->config.force_depends)
-            goto trigger_cleanup;
+        if (r < 0) {
+            had_error = 1;
+            if (!ctx->config.force_depends && !ctx->config.keep_going)
+                goto trigger_cleanup;
+        }
     }
 
     aept_trigger_run_all(ctx, &tctx);
-    r = 0;
+    r = had_error ? -1 : 0;
 
 trigger_cleanup:
     aept_trigger_ctx_free(&tctx);

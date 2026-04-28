@@ -48,6 +48,7 @@ typedef struct aept_config {
     int force_confold;
     int purge;
     int non_interactive;
+    int keep_going;
     int verbosity;
 } aept_config_t;
 

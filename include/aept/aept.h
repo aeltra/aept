@@ -41,6 +41,7 @@ enum {
     AEPT_FLAG_NON_INTERACTIVE,
     AEPT_FLAG_CHECK_SIGNATURE,
     AEPT_FLAG_IGNORE_UID,
+    AEPT_FLAG_KEEP_GOING,
 };
 
 void aept_set_flag(aept_ctx_t *ctx, int flag, int value);

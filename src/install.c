@@ -742,7 +742,8 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
                         Transaction *trans, Pool *pool,
                         aept_owner_index_t *owners)
 {
-    int i, r = 0;
+    int i, r;
+    int had_error = 0;
 
     for (i = 0; i < count; i++) {
         Id avail = aept_solver_find_available(ctx->solver, names[i]);
@@ -772,8 +773,12 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
             ipk_path = aept_strdup(aept_solver_commandline_path(ctx->solver, avail));
         } else {
             r = aept_download_package(ctx, avail, pool, &ipk_path);
-            if (r < 0)
+            if (r < 0) {
+                had_error = 1;
+                if (ctx->config.keep_going)
+                    continue;
                 return r;
+            }
         }
 
         r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver,
@@ -781,11 +786,14 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
         if (ctx->config.no_cache && !is_local)
             unlink(ipk_path);
         free(ipk_path);
-        if (r < 0)
-            return r;
+        if (r < 0) {
+            had_error = 1;
+            if (!ctx->config.keep_going)
+                return r;
+        }
     }
 
-    return 0;
+    return had_error ? -1 : 0;
 }
 
 int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
@@ -956,6 +964,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     aept_trigger_ctx_t tctx;
     aept_trigger_ctx_init(&tctx);
 
+    int had_error = 0;
+
     for (i = 0; i < trans->steps.count; i++) {
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
@@ -987,8 +997,11 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
             r = aept_do_remove(ctx, pkg_name, NULL, &installed_files,
                                 &owner_idx);
-            if (r < 0 && !ctx->config.force_depends)
-                goto fileset_cleanup;
+            if (r < 0) {
+                had_error = 1;
+                if (!ctx->config.force_depends && !ctx->config.keep_going)
+                    goto fileset_cleanup;
+            }
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
             if (ctx->config.no_cache) {
                 if (aept_solver_is_commandline(ctx->solver, p)) {
@@ -1039,8 +1052,11 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 }
             }
 
-            if (r < 0)
-                goto fileset_cleanup;
+            if (r < 0) {
+                had_error = 1;
+                if (!ctx->config.keep_going)
+                    goto fileset_cleanup;
+            }
 
             /* Mark as auto-installed if this is a fresh install
              * of a dependency (not explicitly requested).
@@ -1125,11 +1141,14 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
      * that were not covered by the solver transaction. */
     if (ctx->config.reinstall && names) {
         r = do_reinstall(ctx, names, name_count, trans, pool, &owner_idx);
-        if (r < 0)
-            goto owner_cleanup;
+        if (r < 0) {
+            had_error = 1;
+            if (!ctx->config.keep_going)
+                goto owner_cleanup;
+        }
     }
 
-    r = 0;
+    r = had_error ? -1 : 0;
     goto owner_cleanup;
 
 fileset_cleanup:
