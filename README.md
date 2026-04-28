@@ -94,6 +94,13 @@ conflicts with or replaces an installed package.
 > During upgrades, always keep the currently installed version of
 > conffiles without prompting, even if the package ships a new version.
 
+**--keep-going**
+
+> Continue past per-package errors (such as failing maintainer scripts)
+> instead of aborting the transaction. Useful for bringing a partially
+> broken system back into a usable state. **aept** still exits with a
+> non-zero status if any package failed.
+
 ## remove \[options\] \<packages...\>
 
 Remove one or more installed packages. Reverse dependencies are resolved
@@ -119,6 +126,12 @@ also be removed unless **--force-depends** is given.
 > Also remove conffiles that have been modified since installation.
 > Without this option, modified conffiles are preserved on disk.
 
+**--keep-going**
+
+> Continue past per-package errors (such as failing maintainer scripts)
+> instead of aborting the transaction. **aept** still exits with a
+> non-zero status if any package failed.
+
 ## autoremove \[options\]
 
 Remove auto-installed packages that are no longer needed. A package is
@@ -142,6 +155,12 @@ and no manually installed package depends on it.
 **--purge**
 
 > Also remove conffiles that have been modified since installation.
+
+**--keep-going**
+
+> Continue past per-package errors (such as failing maintainer scripts)
+> instead of aborting the transaction. **aept** still exits with a
+> non-zero status if any package failed.
 
 ## upgrade \[options\]
 
@@ -186,6 +205,12 @@ that have been pinned (see **pin**) are held back and not upgraded.
 
 > Always keep the currently installed version of conffiles without
 > prompting, even if the package ships a new version.
+
+**--keep-going**
+
+> Continue past per-package errors (such as failing maintainer scripts)
+> instead of aborting the transaction. **aept** still exits with a
+> non-zero status if any package failed.
 
 ## mark manual \[--all\] \<packages...\>
 
@@ -292,24 +317,24 @@ Options are set with the **option** directive:
 
 The following keys are recognized:
 
-|                 |                               |                                                                                                                                                    |
-|:----------------|:------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Key**         | **Default**                   | **Description**                                                                                                                                    |
-| offline_root    | (none)                        | Offline root directory (see **OFFLINE ROOT**)                                                                                                      |
-| info_dir        | /var/lib/aept/info            | Directory for installed package metadata                                                                                                           |
-| lists_dir       | /var/lib/aept/lists           | Directory for downloaded package lists                                                                                                             |
-| status_file     | /var/lib/aept/status          | Path to the installed-packages database                                                                                                            |
-| cache_dir       | /var/cache/aept               | Directory for downloaded .aeltra files                                                                                                             |
-| tmp_dir         | /tmp                          | Temporary directory                                                                                                                                |
-| lock_file       | /var/lib/aept/lock            | Path to the lock file                                                                                                                              |
-| usign_keydir    | /etc/aept/usign/trustdb       | Directory containing trusted public keys                                                                                                           |
-| auto_file       | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                  |
-| pin_file        | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                      |
-| check_signature | 1                             | Set to 0 to disable signature verification                                                                                                         |
-| ignore_uid      | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package. |
-| ssl_client_cert | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                         |
-| ssl_client_key  | (none)                        | Path to the corresponding PEM private key                                                                                                          |
-| allow_downgrade | 0                             | Set to 1 to allow package downgrades                                                                                                               |
+|  |  |  |
+|:---|:---|:---|
+| **Key** | **Default** | **Description** |
+| offline_root | (none) | Offline root directory (see **OFFLINE ROOT**) |
+| info_dir | /var/lib/aept/info | Directory for installed package metadata |
+| lists_dir | /var/lib/aept/lists | Directory for downloaded package lists |
+| status_file | /var/lib/aept/status | Path to the installed-packages database |
+| cache_dir | /var/cache/aept | Directory for downloaded .aeltra files |
+| tmp_dir | /tmp | Temporary directory |
+| lock_file | /var/lib/aept/lock | Path to the lock file |
+| usign_keydir | /etc/aept/usign/trustdb | Directory containing trusted public keys |
+| auto_file | /var/lib/aept/auto-installed | Path to the auto-installed packages tracking file |
+| pin_file | /var/lib/aept/pinned-packages | Path to the version pins file |
+| check_signature | 1 | Set to 0 to disable signature verification |
+| ignore_uid | 0 | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package. |
+| ssl_client_cert | (none) | Path to a PEM client certificate for HTTPS |
+| ssl_client_key | (none) | Path to the corresponding PEM private key |
+| allow_downgrade | 0 | Set to 1 to allow package downgrades |
 
 ## Example configuration
 
@@ -502,7 +527,10 @@ inspect packages:
 
 # EXIT STATUS
 
-**0** on success, **1** on error.
+**0** on success, **1** on error. When **aept** is terminated by a
+signal (such as **SIGINT** from Ctrl-C), it re-raises the signal under
+the default disposition so the parent process sees the conventional
+**128+N** exit status.
 
 # AUTHORS
 

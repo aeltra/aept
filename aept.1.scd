@@ -79,6 +79,12 @@ installed package.
 	During upgrades, always keep the currently installed version of conffiles
 	without prompting, even if the package ships a new version.
 
+*--keep-going*
+	Continue past per-package errors (such as failing maintainer scripts)
+	instead of aborting the transaction. Useful for bringing a partially
+	broken system back into a usable state. *aept* still exits with a
+	non-zero status if any package failed.
+
 ## remove [options] <packages...>
 
 Remove one or more installed packages. Reverse dependencies are resolved
@@ -100,6 +106,11 @@ be removed unless *--force-depends* is given.
 	Also remove conffiles that have been modified since installation. Without
 	this option, modified conffiles are preserved on disk.
 
+*--keep-going*
+	Continue past per-package errors (such as failing maintainer scripts)
+	instead of aborting the transaction. *aept* still exits with a non-zero
+	status if any package failed.
+
 ## autoremove [options]
 
 Remove auto-installed packages that are no longer needed. A package is
@@ -119,6 +130,11 @@ manually installed package depends on it.
 
 *--purge*
 	Also remove conffiles that have been modified since installation.
+
+*--keep-going*
+	Continue past per-package errors (such as failing maintainer scripts)
+	instead of aborting the transaction. *aept* still exits with a non-zero
+	status if any package failed.
 
 ## upgrade [options]
 
@@ -155,6 +171,11 @@ that have been pinned (see *pin*) are held back and not upgraded.
 *--force-confold*
 	Always keep the currently installed version of conffiles without
 	prompting, even if the package ships a new version.
+
+*--keep-going*
+	Continue past per-package errors (such as failing maintainer scripts)
+	instead of aborting the transaction. *aept* still exits with a non-zero
+	status if any package failed.
 
 ## mark manual [--all] <packages...>
 
@@ -484,7 +505,9 @@ _/var/lib/aept/lock_
 
 # EXIT STATUS
 
-*0* on success, *1* on error.
+*0* on success, *1* on error. When *aept* is terminated by a signal (such as
+*SIGINT* from Ctrl-C), it re-raises the signal under the default disposition
+so the parent process sees the conventional *128+N* exit status.
 
 # AUTHORS
 
