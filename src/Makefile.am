@@ -1,19 +1,3 @@
-LIBFETCH_PATCH = $(top_srcdir)/patches/libfetch-fixes.patch
-LIBFETCH_STAMP = $(top_srcdir)/libfetch/.patched
-
-$(LIBFETCH_STAMP): $(LIBFETCH_PATCH)
-	cd $(top_srcdir) && patch -p1 --forward < patches/libfetch-fixes.patch
-	@touch $@
-
-BUILT_SOURCES = $(LIBFETCH_STAMP)
-
-clean-local:
-	@if [ -f $(LIBFETCH_STAMP) ]; then \
-	    cd $(top_srcdir) && patch -p1 -R --dry-run < patches/libfetch-fixes.patch >/dev/null 2>&1 \
-	        && patch -p1 -R < patches/libfetch-fixes.patch; \
-	    rm -f $(LIBFETCH_STAMP); \
-	fi
-
 lib_LTLIBRARIES = libaept.la
 bin_PROGRAMS = aept
 
