@@ -68,7 +68,15 @@ int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
     if (r != 0) {
         aept_log_error("%s script for %s failed with exit code %d",
                   script, pkg_name ? pkg_name : "(none)", r);
-        return r;
+        /*
+         * Report failure as -1, not as the script's exit code.  Callers
+         * hand this value straight back to aept_op_install(), which
+         * classifies results with "r < 0" — a positive exit code would
+         * be counted as neither success nor error there, silently
+         * dropping the package from the transaction while aept still
+         * exited 0.
+         */
+        return -1;
     }
 
     return 0;

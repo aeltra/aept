@@ -20,8 +20,10 @@ struct aept_ctx;
  * If pkg_name is non-NULL, looks for {script_dir}/{pkg_name}.{script}.
  * If pkg_name is NULL, looks for {script_dir}/{script}.
  *
- * Returns 0 on success, script exit code on failure,
- * 0 if script does not exist. */
+ * Returns 0 on success or if the script does not exist, -1 on failure.
+ * The script's actual exit code is logged rather than returned: callers
+ * propagate this value up to orchestrators that test for < 0, so a
+ * positive exit code would read as success there. */
 int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
                     const char *pkg_name, const char *script,
                     const char *action, const char *version);

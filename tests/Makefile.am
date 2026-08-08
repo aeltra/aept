@@ -4,7 +4,7 @@ AM_CPPFLAGS = \
     -I$(top_srcdir)/src \
     -I$(srcdir)
 
-check_PROGRAMS = test_archive_path
+check_PROGRAMS = test_archive_path test_script
 
 noinst_HEADERS = test.h
 
@@ -17,4 +17,27 @@ test_archive_path_SOURCES = \
 test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS)
 test_archive_path_LDADD = $(ARCHIVE_LIBS)
 
-TESTS = $(check_PROGRAMS)
+test_script_SOURCES = \
+    test_script.c \
+    $(top_srcdir)/src/script.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_script_CFLAGS = -D_GNU_SOURCE
+
+# Integration tests drive the built binary against a throwaway offline
+# root; they skip themselves (exit 77) when aept or ar/tar are missing.
+dist_check_SCRIPTS = test_install_failure.sh
+
+EXTRA_DIST = aeptlib.sh
+
+TEST_EXTENSIONS = .sh
+
+# Run shell tests through $(SHELL) so they work even if the executable
+# bit is lost in a checkout or a release tarball.
+SH_LOG_COMPILER = $(SHELL)
+
+AM_TESTS_ENVIRONMENT = \
+    AEPT_BIN='$(abs_top_builddir)/src/aept'; export AEPT_BIN; \
+    srcdir='$(abs_srcdir)'; export srcdir;
+
+TESTS = $(check_PROGRAMS) $(dist_check_SCRIPTS)
