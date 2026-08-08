@@ -27,7 +27,7 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 - OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`, `aept_asprintf()`
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
-- License: GPL-2.0-or-later; file headers include SPDX and copyright
+- License: MIT; file headers include SPDX and copyright
 
 ## Architecture
 
