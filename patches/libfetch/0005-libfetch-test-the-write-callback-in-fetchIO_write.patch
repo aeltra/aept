@@ -1,11 +1,13 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Tobias Koch <tobias.koch@gmail.com>
+From: Tobias Koch <tobias.koch@aeltra.eu>
 Date: Sat, 8 Aug 2026 16:21:43 +0300
 Subject: [PATCH] libfetch: test the write callback in fetchIO_write()
 
 fetchIO_write() guarded on f->io_read before calling through
 f->io_write, so a fetchIO created with a read callback but no write
 callback would dereference a NULL function pointer.
+
+Signed-off-by: Tobias Koch <tobias.koch@aeltra.eu>
 ---
  libfetch/common.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
