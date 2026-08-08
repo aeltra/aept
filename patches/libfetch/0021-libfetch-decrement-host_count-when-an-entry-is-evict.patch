@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@aeltra.eu>
+Date: Sat, 8 Aug 2026 19:42:14 +0300
+Subject: [PATCH] libfetch: decrement host_count when an entry is evicted
+
+Both counters in the eviction loop are meant to track entries that
+survive: each is incremented as the list is walked, and the retain test
+compares the incremented value with strict "<" so that a slot is left
+for the connection about to be prepended.  global_count is decremented
+again when an entry is evicted, host_count is not.
+
+The retain test is a plain conjunction with no host check on the
+host_count half, so once host_count has reached cache_per_host_limit it
+stays there and every remaining entry fails the test regardless of which
+host it belongs to.  Returning a connection to a host that already has
+the maximum number cached therefore evicts not just one entry for that
+host but the entire tail of the cache, closing connections to unrelated
+hosts that were well within both limits.
+
+Note this changes which connections are evicted.  If the flush is
+deliberate, the counter should be documented as a high water mark rather
+than fixed.
+
+Signed-off-by: Tobias Koch <tobias.koch@aeltra.eu>
+---
+ libfetch/common.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/libfetch/common.c b/libfetch/common.c
+index edc2f52..7129f13 100644
+--- a/libfetch/common.c
++++ b/libfetch/common.c
+@@ -377,9 +377,13 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
+ 	global_count = host_count = 0;
+ 	last = NULL;
+ 	for (iter = connection_cache; iter; iter = next_cached) {
++		int host_match;
++
+ 		next_cached = iter->next_cached;
+ 		++global_count;
+-		if (strcmp(conn->cache_url->host, iter->cache_url->host) == 0)
++		host_match = strcmp(conn->cache_url->host,
++		    iter->cache_url->host) == 0;
++		if (host_match)
+ 			++host_count;
+ 		if (global_count < cache_global_limit &&
+ 		    host_count < cache_per_host_limit) {
+@@ -387,6 +391,8 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
+ 			continue;
+ 		}
+ 		--global_count;
++		if (host_match)
++			--host_count;
+ 		if (last != NULL)
+ 			last->next_cached = iter->next_cached;
+ 		else

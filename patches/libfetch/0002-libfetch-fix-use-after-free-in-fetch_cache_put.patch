@@ -3,11 +3,15 @@ From: Tobias Koch <tobias.koch@aeltra.eu>
 Date: Sat, 8 Aug 2026 16:21:43 +0300
 Subject: [PATCH] libfetch: fix use-after-free in fetch_cache_put()
 
-The eviction loop advanced "last" in its increment expression, which
-also runs for entries that were just unlinked and handed to their close
-callback.  "last" was therefore left pointing at freed memory, and the
-next eviction wrote through it via "last->next_cached = ...",
-corrupting the connection cache.
+Commit d430a989761e ("libfetch: fix use-after-free in connection cache
+management") hoisted next_cached out of the eviction loop so that the
+walk no longer reads iter after the close callback has freed it.  The
+same increment expression still advances "last", however, and it runs
+for entries that were just unlinked and handed to that callback.
+
+"last" is therefore left pointing at freed memory, and the next
+eviction writes through it via "last->next_cached = ...", corrupting
+the connection cache.
 
 Advance "last" only for entries that are retained.
 

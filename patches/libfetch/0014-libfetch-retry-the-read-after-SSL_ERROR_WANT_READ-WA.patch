@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@aeltra.eu>
+Date: Sat, 8 Aug 2026 19:38:19 +0300
+Subject: [PATCH] libfetch: retry the read after SSL_ERROR_WANT_READ/WANT_WRITE
+
+On a non-blocking socket SSL_read() can return -1 with WANT_READ or
+WANT_WRITE to ask the caller to wait for the socket and try again.
+fetch_read() records the direction to wait for in conn->buf_events, but
+then breaks out of the switch with rlen still -1, falls through to
+
+	if (errno != EINTR || !fetchRestartCalls)
+		return (-1);
+
+and returns an error.  errno at that point is whatever OpenSSL last left
+behind, so the retry the function has just set up never happens and a
+perfectly recoverable condition is reported as a failed read.
+
+Continue the loop instead, so the poll() at the top waits for the
+recorded event before retrying.
+
+For that to be safe the poll has to run whenever there is an event to
+wait for, not only when a timeout is configured -- otherwise the retry
+would spin.  Wait indefinitely when fetchTimeout is unset, which is what
+a blocking socket does anyway.  The visible change for callers that set
+no timeout is one extra poll() before each read; the semantics are
+unchanged.
+
+Signed-off-by: Tobias Koch <tobias.koch@aeltra.eu>
+---
+ libfetch/common.c | 20 ++++++++++++--------
+ 1 file changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/libfetch/common.c b/libfetch/common.c
+index b2db699..66a7393 100644
+--- a/libfetch/common.c
++++ b/libfetch/common.c
+@@ -600,13 +600,17 @@ fetch_read(conn_t *conn, char *buf, size_t len)
+ 	pfd.fd = conn->sd;
+ 	for (;;) {
+ 		pfd.events = conn->buf_events;
+-		if (fetchTimeout && pfd.events) {
++		if (pfd.events) {
+ 			do {
+-				timeout_cur = compute_timeout(&timeout_end);
+-				if (timeout_cur < 0) {
+-					errno = ETIMEDOUT;
+-					fetch_syserr();
+-					return (-1);
++				if (fetchTimeout) {
++					timeout_cur = compute_timeout(&timeout_end);
++					if (timeout_cur < 0) {
++						errno = ETIMEDOUT;
++						fetch_syserr();
++						return (-1);
++					}
++				} else {
++					timeout_cur = -1;
+ 				}
+ 				errno = 0;
+ 				r = poll(&pfd, 1, timeout_cur);
+@@ -625,10 +629,10 @@ fetch_read(conn_t *conn, char *buf, size_t len)
+ 				switch (SSL_get_error(conn->ssl, rlen)) {
+ 				case SSL_ERROR_WANT_READ:
+ 					conn->buf_events = POLLIN;
+-					break;
++					continue;
+ 				case SSL_ERROR_WANT_WRITE:
+ 					conn->buf_events = POLLOUT;
+-					break;
++					continue;
+ 				default:
+ 					errno = EIO;
+ 					fetch_syserr();

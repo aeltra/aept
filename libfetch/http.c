@@ -67,7 +67,6 @@
 #include <sys/socket.h>
 #include <ctype.h>
 #include <errno.h>
-#include <locale.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,10 +141,10 @@ http_new_chunk(struct httpio *io)
 		return -1;
 
 	io->chunksize = fetch_parseuint(io->conn->buf, &p, 16, SIZE_MAX);
-	if (*p && *p != ';' && !isspace(*p))
+	if (*p && *p != ';' && !isspace((unsigned char)*p))
 		return -1;
 
-	return io->chunksize;
+	return 0;
 }
 
 /*
@@ -194,11 +193,11 @@ http_fillbuf(struct httpio *io, size_t len)
 	}
 
 	if (io->chunksize == 0) {
-		switch (http_new_chunk(io)) {
-		case -1:
+		if (http_new_chunk(io) == -1) {
 			io->error = 1;
 			return (-1);
-		case 0:
+		}
+		if (io->chunksize == 0) {
 			io->eof = 1;
 			if (fetch_getln(io->conn) == -1)
 				return (-1);
@@ -474,26 +473,71 @@ http_next_header(conn_t *conn, const char **p)
  * Parse a last-modified header
  */
 static int
+http_month(const char *name)
+{
+	static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+	int i;
+
+	for (i = 0; i < 12; i++)
+		if (strncasecmp(name, months + i * 3, 3) == 0)
+			return (i);
+	return (-1);
+}
+
+static int
 http_parse_mtime(const char *p, time_t *mtime)
 {
-	char *locale, *r;
 	struct tm tm;
+	char mon[4];
+	int mday, year, hour, min, sec, end;
 
-	locale = strdup(setlocale(LC_TIME, NULL));
-	setlocale(LC_TIME, "C");
 	/* RFC2616 §3.3.1 requires compliant client to accept the Internet
 	 * standard, and the two obsolete, date formats:
 	 *  Sun, 06 Nov 1994 08:49:37 GMT  ; RFC 822, updated by RFC 1123
 	 *  Sunday, 06-Nov-94 08:49:37 GMT ; RFC 850, obsoleted by RFC 1036
 	 *  Sun Nov  6 08:49:37 1994       ; ANSI C's asctime() format
+	 *
+	 * The day of the week is redundant -- timegm() derives it -- and it
+	 * is the only field that differs between the three, so it is matched
+	 * with %*s and discarded, which covers "Sun,", "Sunday," and "Sun"
+	 * alike.  The month names are fixed by the protocol rather than
+	 * taken from the locale, so match them directly; that keeps this
+	 * independent of LC_TIME, which is process-wide state a header
+	 * parser has no business modifying.  %n is only assigned once the
+	 * trailing literal has matched, so it doubles as that check.
 	 */
-	r = strptime(p, "%a, %d %b %Y %H:%M:%S GMT", &tm);
-	if (!r) r = strptime(p, "%A, %d-%b-%y %H:%M:%S GMT", &tm);
-	if (!r) r = strptime(p, "%a %b %d %H:%M:%S %Y", &tm);
-	setlocale(LC_TIME, locale);
-	free(locale);
-	if (r == NULL)
+	end = -1;
+	if (sscanf(p, "%*s %2d %3s %4d %2d:%2d:%2d GMT%n",
+	    &mday, mon, &year, &hour, &min, &sec, &end) == 6 && end > 0)
+		goto parsed;
+
+	end = -1;
+	if (sscanf(p, "%*s %2d-%3s-%2d %2d:%2d:%2d GMT%n",
+	    &mday, mon, &year, &hour, &min, &sec, &end) == 6 && end > 0) {
+		year += year < 69 ? 2000 : 1900;
+		goto parsed;
+	}
+
+	end = -1;
+	if (sscanf(p, "%*s %3s %2d %2d:%2d:%2d %4d%n",
+	    mon, &mday, &hour, &min, &sec, &year, &end) == 6 && end > 0)
+		goto parsed;
+
+	return (-1);
+
+parsed:
+	memset(&tm, 0, sizeof(tm));
+	if ((tm.tm_mon = http_month(mon)) < 0)
 		return (-1);
+	if (mday < 1 || mday > 31 || year < 1900 ||
+	    hour > 23 || min > 59 || sec > 60)
+		return (-1);
+	tm.tm_mday = mday;
+	tm.tm_year = year - 1900;
+	tm.tm_hour = hour;
+	tm.tm_min = min;
+	tm.tm_sec = sec;
+
 	*mtime = timegm(&tm);
 	return (0);
 }
@@ -952,6 +996,7 @@ http_request(struct url *URL, const char *op, struct url_stat *us,
 		case HTTP_MOVED_PERM:
 		case HTTP_MOVED_TEMP:
 		case HTTP_SEE_OTHER:
+		case HTTP_TEMP_REDIRECT:
 			/*
 			 * Not so fine, but we still have to read the
 			 * headers to get the new location.
@@ -1447,8 +1492,16 @@ fetchListHTTP(struct url_list *ue, struct url *url, const char *pattern, const c
 		}
 
 		cache = malloc(sizeof(*cache));
+		if (cache == NULL) {
+			fetch_syserr();
+			return -1;
+		}
 		fetchInitURLList(&cache->ue);
 		cache->location = fetchCopyURL(url);
+		if (cache->location == NULL) {
+			free(cache);
+			return -1;
+		}
 	}
 
 	f = fetchGetHTTP(url, flags);
@@ -1493,13 +1546,21 @@ fetchListHTTP(struct url_list *ue, struct url *url, const char *pattern, const c
 	ret = read_len < 0 ? -1 : 0;
 
 	if (do_cache) {
-		if (ret == 0) {
+		int retained = (ret == 0);
+
+		if (retained) {
 			cache->next = index_cache;
 			index_cache = cache;
 		}
 
 		if (fetchAppendURLList(ue, &cache->ue))
 			ret = -1;
+
+		if (!retained) {
+			fetchFreeURLList(&cache->ue);
+			fetchFreeURL(cache->location);
+			free(cache);
+		}
 	}
 
 	return ret;

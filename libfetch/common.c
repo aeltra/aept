@@ -377,9 +377,13 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
 	global_count = host_count = 0;
 	last = NULL;
 	for (iter = connection_cache; iter; iter = next_cached) {
+		int host_match;
+
 		next_cached = iter->next_cached;
 		++global_count;
-		if (strcmp(conn->cache_url->host, iter->cache_url->host) == 0)
+		host_match = strcmp(conn->cache_url->host,
+		    iter->cache_url->host) == 0;
+		if (host_match)
 			++host_count;
 		if (global_count < cache_global_limit &&
 		    host_count < cache_per_host_limit) {
@@ -387,6 +391,8 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
 			continue;
 		}
 		--global_count;
+		if (host_match)
+			--host_count;
 		if (last != NULL)
 			last->next_cached = iter->next_cached;
 		else
@@ -509,6 +515,7 @@ fetch_ssl(conn_t *conn, const struct url *URL, int verbose)
 	conn->ssl_meth = TLS_client_method();
 #endif
 	conn->ssl_ctx = SSL_CTX_new(conn->ssl_meth);
+	if (conn->ssl_ctx == NULL) goto err;
 	SSL_CTX_set_mode(conn->ssl_ctx, SSL_MODE_AUTO_RETRY);
 
 	if (!fetch_ssl_setup_peer_verification(conn->ssl_ctx, verbose)) goto err;
@@ -600,13 +607,17 @@ fetch_read(conn_t *conn, char *buf, size_t len)
 	pfd.fd = conn->sd;
 	for (;;) {
 		pfd.events = conn->buf_events;
-		if (fetchTimeout && pfd.events) {
+		if (pfd.events) {
 			do {
-				timeout_cur = compute_timeout(&timeout_end);
-				if (timeout_cur < 0) {
-					errno = ETIMEDOUT;
-					fetch_syserr();
-					return (-1);
+				if (fetchTimeout) {
+					timeout_cur = compute_timeout(&timeout_end);
+					if (timeout_cur < 0) {
+						errno = ETIMEDOUT;
+						fetch_syserr();
+						return (-1);
+					}
+				} else {
+					timeout_cur = -1;
 				}
 				errno = 0;
 				r = poll(&pfd, 1, timeout_cur);
@@ -625,10 +636,10 @@ fetch_read(conn_t *conn, char *buf, size_t len)
 				switch (SSL_get_error(conn->ssl, rlen)) {
 				case SSL_ERROR_WANT_READ:
 					conn->buf_events = POLLIN;
-					break;
+					continue;
 				case SSL_ERROR_WANT_WRITE:
 					conn->buf_events = POLLOUT;
-					break;
+					continue;
 				default:
 					errno = EIO;
 					fetch_syserr();
@@ -1012,7 +1023,7 @@ fetch_netrc_auth(struct url *url)
 			if ((word = fetch_read_word(f)) == NULL)
 				goto ferr;
 			if (snprintf(url->user, sizeof(url->user),
-				"%s", word) > (int)sizeof(url->user)) {
+				"%s", word) >= (int)sizeof(url->user)) {
 				url->user[0] = '\0';
 				fetch_info("login name in .netrc is too long (exceeds %d bytes)",
 				    (int)sizeof(url->user) - 1);
@@ -1022,7 +1033,7 @@ fetch_netrc_auth(struct url *url)
 			if ((word = fetch_read_word(f)) == NULL)
 				goto ferr;
 			if (snprintf(url->pwd, sizeof(url->pwd),
-				"%s", word) > (int)sizeof(url->pwd)) {
+				"%s", word) >= (int)sizeof(url->pwd)) {
 				url->pwd[0] = '\0';
 				fetch_info("password in .netrc is too long (exceeds %d bytes)",
 				    (int)sizeof(url->pwd) - 1);
