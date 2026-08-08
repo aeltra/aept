@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@gmail.com>
+Date: Sat, 8 Aug 2026 16:21:43 +0300
+Subject: [PATCH] libfetch: free the addrinfo list in fetch_bind()
+
+fetch_bind() calls getaddrinfo() but never releases the returned list,
+leaking it on both the success and the failure path.
+---
+ libfetch/common.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libfetch/common.c b/libfetch/common.c
+index ea82d50..1f2d0cd 100644
+--- a/libfetch/common.c
++++ b/libfetch/common.c
+@@ -170,9 +170,12 @@ fetch_bind(int sd, int af, const char *addr)
+ 	if (getaddrinfo(addr, NULL, &hints, &res0))
+ 		return (-1);
+ 	for (res = res0; res; res = res->ai_next) {
+-		if (bind(sd, res->ai_addr, res->ai_addrlen) == 0)
++		if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
++			freeaddrinfo(res0);
+ 			return (0);
++		}
+ 	}
++	freeaddrinfo(res0);
+ 	return (-1);
+ }
+ 

@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@gmail.com>
+Date: Sat, 8 Aug 2026 16:21:43 +0300
+Subject: [PATCH] libfetch: avoid sign extension in http_base64()
+
+src is a char pointer, so on platforms where char is signed -- x86-64
+among them -- every input byte >= 0x80 sign-extends when shifted into t
+and floods the high bits, corrupting the whole four-character group.
+Encoding "caf\xc3\xa9" then yields "Y2Fm/6k=" instead of "Y2Fmw6k=", so
+Basic credentials containing any non-ASCII byte are sent wrong.
+Platforms where char is unsigned (arm, aarch64, ppc) are unaffected,
+which is why this goes unnoticed on a good part of the build farm.
+
+Convert through unsigned char before shifting.
+---
+ libfetch/http.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/libfetch/http.c b/libfetch/http.c
+index 63d8d33..a08871f 100644
+--- a/libfetch/http.c
++++ b/libfetch/http.c
+@@ -557,7 +557,8 @@ http_base64(const char *src)
+ 	dst = str;
+ 
+ 	while (l >= 3) {
+-		t = (src[0] << 16) | (src[1] << 8) | src[2];
++		t = ((unsigned char)src[0] << 16) |
++		    ((unsigned char)src[1] << 8) | (unsigned char)src[2];
+ 		dst[0] = base64[(t >> 18) & 0x3f];
+ 		dst[1] = base64[(t >> 12) & 0x3f];
+ 		dst[2] = base64[(t >> 6) & 0x3f];
+@@ -568,7 +569,7 @@ http_base64(const char *src)
+ 
+ 	switch (l) {
+ 	case 2:
+-		t = (src[0] << 16) | (src[1] << 8);
++		t = ((unsigned char)src[0] << 16) | ((unsigned char)src[1] << 8);
+ 		dst[0] = base64[(t >> 18) & 0x3f];
+ 		dst[1] = base64[(t >> 12) & 0x3f];
+ 		dst[2] = base64[(t >> 6) & 0x3f];
+@@ -576,7 +577,7 @@ http_base64(const char *src)
+ 		dst += 4;
+ 		break;
+ 	case 1:
+-		t = src[0] << 16;
++		t = (unsigned char)src[0] << 16;
+ 		dst[0] = base64[(t >> 18) & 0x3f];
+ 		dst[1] = base64[(t >> 12) & 0x3f];
+ 		dst[2] = dst[3] = '=';

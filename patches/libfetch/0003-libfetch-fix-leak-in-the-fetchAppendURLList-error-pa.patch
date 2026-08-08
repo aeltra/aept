@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@gmail.com>
+Date: Sat, 8 Aug 2026 16:21:43 +0300
+Subject: [PATCH] libfetch: fix leak in the fetchAppendURLList() error path
+
+When strdup() failed, the cleanup loop counted down over i but freed
+dst->urls[j].doc on every iteration -- always the entry whose strdup()
+had just failed, and therefore always NULL.  The strings duplicated by
+the preceding iterations were leaked.
+
+Walk j back down to dst->length instead, which frees exactly the
+entries that were successfully duplicated and stops before the one that
+failed.
+---
+ libfetch/common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libfetch/common.c b/libfetch/common.c
+index b1ca550..ab09961 100644
+--- a/libfetch/common.c
++++ b/libfetch/common.c
+@@ -929,7 +929,7 @@ fetchAppendURLList(struct url_list *dst, const struct url_list *src)
+ 		dst->urls[j] = src->urls[i];
+ 		dst->urls[j].doc = strdup(src->urls[i].doc);
+ 		if (dst->urls[j].doc == NULL) {
+-			while (i-- > 0)
++			while (j-- > dst->length)
+ 				free(dst->urls[j].doc);
+ 			fetch_syserr();
+ 			return -1;

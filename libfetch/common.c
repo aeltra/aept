@@ -352,6 +352,7 @@ fetch_cache_get(const struct url *url, int af)
 				connection_cache = conn->next_cached;
 			return conn;
 		}
+		last_conn = conn;
 	}
 
 	return NULL;
@@ -1043,7 +1044,7 @@ fetch_netrc_auth(struct url *url)
 }
 
 #define MAX_ADDRESS_BYTES	sizeof(struct in6_addr)
-#define MAX_ADDRESS_STRING	(4*8+1)
+#define MAX_ADDRESS_STRING	INET6_ADDRSTRLEN
 #define MAX_CIDR_STRING		(MAX_ADDRESS_STRING+4)
 
 static size_t host_to_address(uint8_t *buf, size_t buf_len, const char *host, size_t len)
@@ -1191,15 +1192,19 @@ fetchIO_unopen(void *io_cookie, ssize_t (*io_read)(void *, void *, size_t),
 ssize_t
 fetchIO_read(fetchIO *f, void *buf, size_t len)
 {
-	if (f->io_read == NULL)
-		return EBADF;
+	if (f->io_read == NULL) {
+		errno = EBADF;
+		return -1;
+	}
 	return (*f->io_read)(f->io_cookie, buf, len);
 }
 
 ssize_t
 fetchIO_write(fetchIO *f, const void *buf, size_t len)
 {
-	if (f->io_write == NULL)
-		return EBADF;
+	if (f->io_write == NULL) {
+		errno = EBADF;
+		return -1;
+	}
 	return (*f->io_write)(f->io_cookie, buf, len);
 }

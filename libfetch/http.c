@@ -557,7 +557,8 @@ http_base64(const char *src)
 	dst = str;
 
 	while (l >= 3) {
-		t = (src[0] << 16) | (src[1] << 8) | src[2];
+		t = ((unsigned char)src[0] << 16) |
+		    ((unsigned char)src[1] << 8) | (unsigned char)src[2];
 		dst[0] = base64[(t >> 18) & 0x3f];
 		dst[1] = base64[(t >> 12) & 0x3f];
 		dst[2] = base64[(t >> 6) & 0x3f];
@@ -568,7 +569,7 @@ http_base64(const char *src)
 
 	switch (l) {
 	case 2:
-		t = (src[0] << 16) | (src[1] << 8);
+		t = ((unsigned char)src[0] << 16) | ((unsigned char)src[1] << 8);
 		dst[0] = base64[(t >> 18) & 0x3f];
 		dst[1] = base64[(t >> 12) & 0x3f];
 		dst[2] = base64[(t >> 6) & 0x3f];
@@ -576,7 +577,7 @@ http_base64(const char *src)
 		dst += 4;
 		break;
 	case 1:
-		t = src[0] << 16;
+		t = (unsigned char)src[0] << 16;
 		dst[0] = base64[(t >> 18) & 0x3f];
 		dst[1] = base64[(t >> 12) & 0x3f];
 		dst[2] = dst[3] = '=';
@@ -1027,7 +1028,7 @@ http_request(struct url *URL, const char *op, struct url_stat *us,
 				if (!HTTP_REDIRECT(conn->err))
 					break;
 				if (new)
-					free(new);
+					fetchFreeURL(new);
 				if (verbose)
 					fetch_info("%d redirect to %s", conn->err, p);
 				if (*p == '/')
@@ -1185,6 +1186,9 @@ http_request(struct url *URL, const char *op, struct url_stat *us,
 protocol_error:
 	http_seterr(HTTP_PROTOCOL_ERROR);
 ouch:
+	/* new aliases url once the retry loop has consumed a redirect */
+	if (new != NULL && new != url)
+		fetchFreeURL(new);
 	if (url != URL)
 		fetchFreeURL(url);
 	if (purl)

@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tobias Koch <tobias.koch@gmail.com>
+Date: Sat, 8 Aug 2026 16:21:43 +0300
+Subject: [PATCH] libfetch: fix inverted $HOME test in fetch_netrc_auth()
+
+The condition ran the getpwuid() fallback when $HOME was set, throwing
+away the value it had just read, and skipped it when $HOME was unset --
+leaving p NULL for the following snprintf("%s/.netrc", p).
+
+Fall back to getpwuid() when $HOME is not set, as the surrounding code
+intends.
+---
+ libfetch/common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libfetch/common.c b/libfetch/common.c
+index ab09961..3ad0385 100644
+--- a/libfetch/common.c
++++ b/libfetch/common.c
+@@ -982,7 +982,7 @@ fetch_netrc_auth(struct url *url)
+ 			return (-1);
+ 		}
+ 	} else {
+-		if ((p = getenv("HOME")) != NULL) {
++		if ((p = getenv("HOME")) == NULL) {
+ 			struct passwd *pwd;
+ 
+ 			if ((pwd = getpwuid(getuid())) == NULL ||
