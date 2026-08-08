@@ -22,7 +22,13 @@ Makefile
 *.lo
 *.la
 /src/aept
+/src/.dirstamp
 /libfetch/.dirstamp
+
+# Test suite
+/tests/test_archive_path
+/tests/*.log
+/tests/*.trs
 
 # Distribution tarballs
 *.tar.gz

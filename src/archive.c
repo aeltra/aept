@@ -138,8 +138,20 @@ static char *safe_join(const char *prefix, const char *entry_path)
     char *norm_pfx = normalize_path(prefix);
     size_t nplen = strlen(norm_pfx);
 
+    /*
+     * A prefix that normalizes to "/" is the filesystem root, which is
+     * what aept_config_root_path() yields when no offline root is set.
+     * Every absolute path is inside it, and there is no prefix segment
+     * for the separator check to skip past: resolved[1] is the first
+     * character of the path, so the check below would reject every
+     * entry.  normalize_path() has already clamped any ".." at the
+     * root, so an absolute resolved path cannot escape "/".
+     */
+    if (nplen == 1 && norm_pfx[0] == '/')
+        nplen = 0;
+
     if (strncmp(resolved, norm_pfx, nplen) != 0 ||
-            (resolved[nplen] != '/' && resolved[nplen] != '\0')) {
+            (nplen > 0 && resolved[nplen] != '/' && resolved[nplen] != '\0')) {
         aept_log_error("path '%s' escapes extraction directory", entry_path);
         free(resolved);
         free(norm_pfx);

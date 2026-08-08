@@ -54,5 +54,5 @@ else
 fi
 AC_SUBST([SOLV_LIBS])
 
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile])
 AC_OUTPUT

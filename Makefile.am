@@ -1,5 +1,5 @@
 ACLOCAL_AMFLAGS = -I m4
-SUBDIRS = src
+SUBDIRS = src tests
 
 aeptincludedir = $(includedir)/aept
 aeptinclude_HEADERS = include/aept/aept.h
