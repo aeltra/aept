@@ -317,24 +317,24 @@ Options are set with the **option** directive:
 
 The following keys are recognized:
 
-|  |  |  |
-|:---|:---|:---|
-| **Key** | **Default** | **Description** |
-| offline_root | (none) | Offline root directory (see **OFFLINE ROOT**) |
-| info_dir | /var/lib/aept/info | Directory for installed package metadata |
-| lists_dir | /var/lib/aept/lists | Directory for downloaded package lists |
-| status_file | /var/lib/aept/status | Path to the installed-packages database |
-| cache_dir | /var/cache/aept | Directory for downloaded .aeltra files |
-| tmp_dir | /tmp | Temporary directory |
-| lock_file | /var/lib/aept/lock | Path to the lock file |
-| usign_keydir | /etc/aept/usign/trustdb | Directory containing trusted public keys |
-| auto_file | /var/lib/aept/auto-installed | Path to the auto-installed packages tracking file |
-| pin_file | /var/lib/aept/pinned-packages | Path to the version pins file |
-| check_signature | 1 | Set to 0 to disable signature verification |
-| ignore_uid | 0 | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package. |
-| ssl_client_cert | (none) | Path to a PEM client certificate for HTTPS |
-| ssl_client_key | (none) | Path to the corresponding PEM private key |
-| allow_downgrade | 0 | Set to 1 to allow package downgrades |
+|                 |                               |                                                                                                                                                    |
+|:----------------|:------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Key**         | **Default**                   | **Description**                                                                                                                                    |
+| offline_root    | (none)                        | Offline root directory (see **OFFLINE ROOT**)                                                                                                      |
+| info_dir        | /var/lib/aept/info            | Directory for installed package metadata                                                                                                           |
+| lists_dir       | /var/lib/aept/lists           | Directory for downloaded package lists                                                                                                             |
+| status_file     | /var/lib/aept/status          | Path to the installed-packages database                                                                                                            |
+| cache_dir       | /var/cache/aept               | Directory for downloaded .aeltra files                                                                                                             |
+| tmp_dir         | /tmp                          | Temporary directory                                                                                                                                |
+| lock_file       | /var/lib/aept/lock            | Path to the lock file                                                                                                                              |
+| usign_keydir    | /etc/aept/usign/trustdb       | Directory containing trusted public keys                                                                                                           |
+| auto_file       | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                  |
+| pin_file        | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                      |
+| check_signature | 1                             | Set to 0 to disable signature verification                                                                                                         |
+| ignore_uid      | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package. |
+| ssl_client_cert | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                         |
+| ssl_client_key  | (none)                        | Path to the corresponding PEM private key                                                                                                          |
+| allow_downgrade | 0                             | Set to 1 to allow package downgrades                                                                                                               |
 
 ## Example configuration
 
