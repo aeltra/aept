@@ -292,8 +292,18 @@ static void load_trigger_entries(struct aept_ctx *ctx,
             continue;
         }
 
-        char line[1024];
+        char line[4096];
         while (fgets(line, sizeof(line), tfp)) {
+            /* Without this, an over-long line is handed back in pieces
+             * and every piece becomes a pattern of its own — a trigger
+             * the package never declared. */
+            if (aept_fgets_is_truncated(line, sizeof(line))) {
+                aept_log_warning("ignoring over-long trigger pattern in "
+                            "'%s.triggers'", pkg_name);
+                aept_fgets_drain_line(tfp);
+                continue;
+            }
+
             line[strcspn(line, "\n")] = '\0';
 
             const char *p = line;

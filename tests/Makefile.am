@@ -5,7 +5,7 @@ AM_CPPFLAGS = \
     -I$(srcdir)
 
 check_PROGRAMS = test_archive_path test_script test_config_root \
-    test_archive_open test_clearsign
+    test_archive_open test_clearsign test_trigger_entries
 
 noinst_HEADERS = test.h
 
@@ -46,6 +46,14 @@ test_clearsign_SOURCES = \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
 test_clearsign_CFLAGS = -D_GNU_SOURCE
+
+# trigger.c is #included by the test, so only its dependencies are
+# listed here.
+test_trigger_entries_SOURCES = \
+    test_trigger_entries.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_trigger_entries_CFLAGS = -D_GNU_SOURCE
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
