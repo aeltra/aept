@@ -8,6 +8,7 @@
 #define UTIL_H_7BF97F
 
 #include <stddef.h>
+#include <stdio.h>
 #include <sys/types.h>
 
 struct aept_ctx;

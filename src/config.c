@@ -142,6 +142,17 @@ void aept_config_apply_offline_root(struct aept_config *cfg)
     free(cfg->cache_dir);
     cfg->cache_dir = tmp;
 
+    /*
+     * tmp_dir must be prefixed too.  Maintainer scripts are unpacked
+     * into it and then executed after chroot()ing into the offline
+     * root, so a temp directory outside the root is unreachable by the
+     * child: the script path cannot be rewritten to anything that
+     * resolves inside the chroot, and every preinst fails to exec.
+     */
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->tmp_dir);
+    free(cfg->tmp_dir);
+    cfg->tmp_dir = tmp;
+
     aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->info_dir);
     free(cfg->info_dir);
     cfg->info_dir = tmp;

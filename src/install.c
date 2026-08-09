@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <solv/pool.h>
@@ -194,6 +195,40 @@ static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
     return 0;
 }
 
+/*
+ * Create a private scratch directory under tmp_dir for unpacking a
+ * control archive.  tmp_dir sits inside the offline root when one is
+ * configured, so it may not exist yet on a root that is still being
+ * bootstrapped; create it as a conventional world-writable /tmp in that
+ * case.  Returns a malloc'd path, or NULL on failure.
+ */
+static char *make_control_tmpdir(struct aept_ctx *ctx)
+{
+    char *tmpdir = NULL;
+
+    if (!aept_file_is_dir(ctx->config.tmp_dir)) {
+        if (aept_file_mkdir_hier(ctx->config.tmp_dir, 0755) < 0) {
+            aept_log_error("failed to create temp directory '%s': %s",
+                      ctx->config.tmp_dir, strerror(errno));
+            return NULL;
+        }
+        if (chmod(ctx->config.tmp_dir, 01777) < 0)
+            aept_log_debug("cannot set permissions on '%s': %s",
+                      ctx->config.tmp_dir, strerror(errno));
+    }
+
+    aept_asprintf(&tmpdir, "%s/aept-XXXXXX", ctx->config.tmp_dir);
+
+    if (!mkdtemp(tmpdir)) {
+        aept_log_error("failed to create temp directory in '%s': %s",
+                  ctx->config.tmp_dir, strerror(errno));
+        free(tmpdir);
+        return NULL;
+    }
+
+    return tmpdir;
+}
+
 static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
                               Pool *pool, Id p, const char *old_version,
                               aept_owner_index_t *owners)
@@ -213,14 +248,9 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
 
     aept_log_info("installing %s", name);
 
-    aept_asprintf(&tmpdir, "%s/aept-XXXXXX", ctx->config.tmp_dir);
-
-    if (!mkdtemp(tmpdir)) {
-        aept_log_error("failed to create temp directory: %s",
-                  strerror(errno));
-        free(tmpdir);
+    tmpdir = make_control_tmpdir(ctx);
+    if (!tmpdir)
         return -1;
-    }
 
     /* Extract control archive */
     ctrl_ar = aept_ar_open_pkg_control_archive(ipk_path);
@@ -435,15 +465,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     aept_ar_file_list_t extracted;
     aept_ar_file_list_init(&extracted);
 
-    aept_asprintf(&tmpdir, "%s/aept-XXXXXX", ctx->config.tmp_dir);
-
-    if (!mkdtemp(tmpdir)) {
-        aept_log_error("failed to create temp directory: %s",
-                  strerror(errno));
-        free(tmpdir);
-        tmpdir = NULL;
+    tmpdir = make_control_tmpdir(ctx);
+    if (!tmpdir)
         goto cleanup;
-    }
 
     /* 1. Extract new control archive */
     ctrl_ar = aept_ar_open_pkg_control_archive(ipk_path);

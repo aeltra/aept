@@ -355,10 +355,17 @@ The following keys are recognized:
 When an offline root is set (via **--offline-root** or the
 **offline_root** config option), the configuration file is read from
 *\<dir\>/etc/aept/aept.conf* (unless **--conf** is given explicitly) and
-all state directories (lists, cache, info, status, lock, auto-installed,
-pinned-packages) are automatically prefixed with the offline root path.
-The signature trust directory (*usign_keydir*) is **not** prefixed —
-signature verification always uses the host's trusted keys.
+all state directories (lists, cache, info, status, tmp, lock,
+auto-installed, pinned-packages) are automatically prefixed with the
+offline root path.
+
+Prefixing *tmp_dir* is required, not merely tidy: control archives are
+unpacked into it and their maintainer scripts are then run after
+chroot()ing into the offline root, so a temporary directory outside the
+root would be unreachable by the script interpreter. The directory is
+created if it does not exist yet. The signature trust directory
+(*usign_keydir*) is **not** prefixed — signature verification always
+uses the host's trusted keys.
 
 Maintainer scripts are executed inside the offline root using
 **unshare**(2) with **CLONE_NEWUSER** to set up a user namespace. UID
