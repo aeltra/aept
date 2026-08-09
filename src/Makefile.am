@@ -25,7 +25,10 @@ libaept_la_SOURCES = \
     ../libfetch/common.c \
     ../libfetch/fetch.c \
     ../libfetch/http.c \
-    ../libfetch/openssl-compat.c
+    ../libfetch/openssl-compat.c \
+    ../libfetch/common.h \
+    ../libfetch/fetch.h \
+    ../libfetch/openssl-compat.h
 
 libaept_la_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/libfetch
