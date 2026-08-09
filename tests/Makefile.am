@@ -4,7 +4,8 @@ AM_CPPFLAGS = \
     -I$(top_srcdir)/src \
     -I$(srcdir)
 
-check_PROGRAMS = test_archive_path test_script test_config_root
+check_PROGRAMS = test_archive_path test_script test_config_root \
+    test_archive_open
 
 noinst_HEADERS = test.h
 
@@ -30,6 +31,14 @@ test_config_root_SOURCES = \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
 test_config_root_CFLAGS = -D_GNU_SOURCE
+
+test_archive_open_SOURCES = \
+    test_archive_open.c \
+    $(top_srcdir)/src/archive.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS)
+test_archive_open_LDADD = $(ARCHIVE_LIBS)
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.

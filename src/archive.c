@@ -325,7 +325,10 @@ static int seek_member(struct archive *ar, const char *prefix)
 
 /*
  * Open the inner compressed tar that is embedded in an AR member.
- * Takes ownership of `outer` (freed on close of the returned reader).
+ *
+ * Takes ownership of `outer` unconditionally: on success it is freed
+ * when the returned reader is closed, and on every failure path it is
+ * freed before returning.  The caller must never free it itself.
  */
 static struct archive *open_inner(struct archive *outer)
 {
@@ -335,6 +338,7 @@ static struct archive *open_inner(struct archive *outer)
     struct archive *inner = archive_read_new();
     if (!inner) {
         aept_log_error("failed to create inner archive reader");
+        archive_read_free(outer);
         free(ctx);
         return NULL;
     }
@@ -343,12 +347,20 @@ static struct archive *open_inner(struct archive *outer)
     archive_read_support_format_tar(inner);
     archive_read_support_format_empty(inner);
 
+    /*
+     * Past this point libarchive owns `ctx`, and through it `outer`.
+     * archive_read_open() invokes the close callback itself when it
+     * fails, and archive_read_free() invokes it otherwise, so
+     * pipe_close_cb() runs exactly once either way — it is what frees
+     * both `ctx` and `outer`.  Releasing either of them here as well
+     * would be a double free, reachable from any package whose
+     * control.tar or data.tar member is not a recognised archive.
+     */
     if (archive_read_open(inner, ctx, NULL, pipe_read_cb,
                           pipe_close_cb) != ARCHIVE_OK) {
         aept_log_error("failed to open inner archive: %s",
                   archive_error_string(inner));
         archive_read_free(inner);
-        free(ctx);
         return NULL;
     }
 
@@ -370,13 +382,8 @@ static struct archive *open_ipk_tar(const char *ipk_path, const char *prefix)
         return NULL;
     }
 
-    struct archive *inner = open_inner(outer);
-    if (!inner) {
-        archive_read_free(outer);
-        return NULL;
-    }
-
-    return inner;
+    /* open_inner() owns `outer` from here on, including on failure. */
+    return open_inner(outer);
 }
 
 /*

@@ -29,6 +29,7 @@ Makefile
 /tests/test_archive_path
 /tests/test_script
 /tests/test_config_root
+/tests/test_archive_open
 /tests/*.log
 /tests/*.trs
 
