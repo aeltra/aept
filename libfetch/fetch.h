@@ -114,6 +114,17 @@ extern "C" {
 
 void		fetch_check_certificate(int check_cert);
 
+/*
+ * Select the client certificate, taking precedence over the
+ * SSL_CLIENT_{CERT,KEY}_FILE environment variables.  Either argument
+ * may be NULL: a NULL cert_file falls back to the environment, and a
+ * NULL key_file means the certificate file also contains the key.
+ * The strings are not copied and must outlive the fetch calls made
+ * with them.
+ */
+void		fetch_set_client_certificate(const char *cert_file,
+			const char *key_file);
+
 void		fetchIO_close(fetchIO *);
 ssize_t		fetchIO_read(fetchIO *, void *, size_t);
 ssize_t		fetchIO_write(fetchIO *, const void *, size_t);

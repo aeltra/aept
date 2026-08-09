@@ -57,6 +57,8 @@
 /*** Local data **************************************************************/
 
 static int ssl_verify_mode = SSL_VERIFY_PEER;
+static const char *ssl_client_cert_file = NULL;
+static const char *ssl_client_key_file = NULL;
 
 /*** Error-reporting functions ***********************************************/
 
@@ -64,6 +66,13 @@ void
 fetch_check_certificate(int check_cert)
 {
 	ssl_verify_mode = check_cert ? SSL_VERIFY_PEER : SSL_VERIFY_NONE;
+}
+
+void
+fetch_set_client_certificate(const char *cert_file, const char *key_file)
+{
+	ssl_client_cert_file = cert_file;
+	ssl_client_key_file = key_file;
 }
 
 /*
@@ -440,10 +449,11 @@ static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
 }
 
 /*
- * Configure client certificate based on environment:
- *  1. Use SSL_CLIENT_{CERT,KEY}_FILE environment variables if set
- *  2. Use compile time set CLIENT_{CERT,KEY}_FILE #define's if set
- *  3. No client certificate used
+ * Configure client certificate:
+ *  1. Use the files set with fetch_set_client_certificate() if any
+ *  2. Use SSL_CLIENT_{CERT,KEY}_FILE environment variables if set
+ *  3. Use compile time set CLIENT_{CERT,KEY}_FILE #define's if set
+ *  4. No client certificate used
  *
  * If the key file is not specified, it is assumed that the certificate
  * file is a .pem file containing both the cert and the key.
@@ -452,8 +462,13 @@ static int fetch_ssl_setup_client_certificate(SSL_CTX *ctx, int verbose)
 {
 	const char *cert_file = NULL, *key_file = NULL;
 
-	cert_file = getenv("SSL_CLIENT_CERT_FILE");
-	if (cert_file) key_file = getenv("SSL_CLIENT_KEY_FILE");
+	cert_file = ssl_client_cert_file;
+	if (cert_file) key_file = ssl_client_key_file;
+
+	if (!cert_file) {
+		cert_file = getenv("SSL_CLIENT_CERT_FILE");
+		if (cert_file) key_file = getenv("SSL_CLIENT_KEY_FILE");
+	}
 
 #ifdef CLIENT_CERT_FILE
 	if (!cert_file && access(CLIENT_CERT_FILE, R_OK) == 0) {

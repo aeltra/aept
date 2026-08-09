@@ -95,6 +95,39 @@ make_aep_conffile() {
     rm -rf "$_d"
 }
 
+# make_aep_script <out.aep> <name> <version> <script-name> <body>
+#
+# Like make_aep, but the named maintainer script carries the given shell
+# body instead of a bare exit.
+make_aep_script() {
+    _out=$1 _name=$2 _ver=$3 _script=$4 _body=$5
+
+    case $_out in
+        /*) ;;
+         *) _out=$PWD/$_out ;;
+    esac
+    rm -f "$_out"
+
+    _d=$(mktemp -d) || fail "mktemp failed"
+    mkdir -p "$_d/c" "$_d/d/usr/bin"
+
+    printf 'Package: %s\nVersion: %s\nArchitecture: all\nMaintainer: t <t@example.invalid>\nDescription: aept test fixture\n' \
+        "$_name" "$_ver" > "$_d/c/control"
+    printf '%s %s\n' "$_name" "$_ver" > "$_d/d/usr/bin/$_name"
+
+    printf '#!/bin/sh\n%s\n' "$_body" > "$_d/c/$_script"
+    chmod 755 "$_d/c/$_script"
+
+    tar czf "$_d/control.tar.gz" -C "$_d/c" control "$_script" || fail "tar control"
+    tar czf "$_d/data.tar.gz"    -C "$_d/d" usr                || fail "tar data"
+    printf '2.0\n' > "$_d/debian-binary"
+
+    ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
+        || fail "ar failed for $_out"
+
+    rm -rf "$_d"
+}
+
 # packages_stanza <name> <version> <aep-file> — emit one Packages entry.
 packages_stanza() {
     printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \

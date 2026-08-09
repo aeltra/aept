@@ -5,7 +5,7 @@ AM_CPPFLAGS = \
     -I$(srcdir)
 
 check_PROGRAMS = test_archive_path test_script test_config_root \
-    test_archive_open test_clearsign test_trigger_entries
+    test_archive_open test_clearsign test_trigger_entries test_ssl_env
 
 noinst_HEADERS = test.h
 
@@ -55,6 +55,12 @@ test_trigger_entries_SOURCES = \
     $(top_srcdir)/src/msg.c
 test_trigger_entries_CFLAGS = -D_GNU_SOURCE
 
+# Links the library rather than individual modules: aept_download()
+# pulls in libfetch and its OpenSSL dependency.
+test_ssl_env_SOURCES = test_ssl_env.c
+test_ssl_env_CFLAGS = -D_GNU_SOURCE
+test_ssl_env_LDADD = $(top_builddir)/src/libaept.la
+
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
 dist_check_SCRIPTS = \
@@ -64,7 +70,8 @@ dist_check_SCRIPTS = \
     test_update_inpackages.sh \
     test_upgrade_conffiles.sh \
     test_update_size_limit.sh \
-    test_exec_path.sh
+    test_exec_path.sh \
+    test_ssl_client_cert.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py
 

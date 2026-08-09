@@ -35,11 +35,16 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
 
     aept_log_info("downloading %s", name);
 
-    /* Pass client cert config to libfetch via env vars */
-    if (ctx->config.ssl_client_cert)
-        setenv("SSL_CLIENT_CERT_FILE", ctx->config.ssl_client_cert, 1);
-    if (ctx->config.ssl_client_key)
-        setenv("SSL_CLIENT_KEY_FILE", ctx->config.ssl_client_key, 1);
+    /*
+     * Hand the client certificate to libfetch directly.  This used to
+     * go through setenv("SSL_CLIENT_KEY_FILE", ...), which put the
+     * path to the private key in the environment of every process aept
+     * later forked, maintainer scripts included, and mutated
+     * process-global state from what is documented as per-context work.
+     * Set unconditionally: passing NULL clears any earlier selection.
+     */
+    fetch_set_client_certificate(ctx->config.ssl_client_cert,
+                                 ctx->config.ssl_client_key);
 
     fio = fetchGetURL(url, "");
     if (!fio) {

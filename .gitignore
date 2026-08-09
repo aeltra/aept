@@ -9,7 +9,7 @@
 /m4/*.m4
 Makefile.in
 libtool
-/src/.libs
+.libs/
 
 # Build output (after ./configure && make)
 /config.h
@@ -22,15 +22,18 @@ Makefile
 *.lo
 *.la
 /src/aept
-/src/.dirstamp
-/libfetch/.dirstamp
+.dirstamp
 
 # Test suite
-/tests/test_archive_path
-/tests/test_script
-/tests/test_config_root
-/tests/test_archive_open
-/tests/test_clearsign
+#
+# Compiled test binaries are the test_* entries with no extension, so
+# ignore the lot and add the source forms back.  Enumerating the
+# binaries instead means every new test needs a line here, and one
+# forgotten line commits a binary.
+/tests/test_*
+!/tests/test_*.c
+!/tests/test_*.h
+!/tests/test_*.sh
 /tests/*.log
 /tests/*.trs
 
