@@ -5,12 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-./configure          # generate Makefiles (run once, or after configure.ac changes)
-make                 # build src/aept binary
+autoreconf -i        # after any configure.ac / Makefile.am change
+./configure          # generate Makefiles (run once, or after the above)
+make                 # build src/aept and libaept
+make check           # run the test suite
+make check VERBOSE=1 # ... dumping failing output to the console
+make distcheck       # VPATH build from the release tarball + suite
 make clean           # remove build artifacts
 ```
 
-Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB). No test suite exists.
+Build dependencies: libarchive and OpenSSL (pkg-config), libsolv + libsolvext
+(AC_CHECK_LIB). libfetch is vendored under `libfetch/`; it is patched at import
+time from `patches/libfetch/` by `scripts/update-libfetch.sh`, not at build
+time, so upstream fixes belong in a patch there.
+
+Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
+three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)
+and two `-Wsign-compare` in vendored libfetch. Anything else is new.
 
 ## Project Overview
 
@@ -29,6 +40,28 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
 - License: MIT; file headers include SPDX and copyright
 
+## Testing
+
+`tests/` holds TAP-style unit tests in C and integration tests in shell, both
+run by Automake's harness.
+
+- **Every fix ships with a test that has been shown to fail without the fix.**
+  Revert the fix, run `make check`, confirm red, restore. A test that has never
+  failed proves nothing.
+- Unit tests that need file-scope helpers `#include` the `.c` directly — see
+  `test_archive_path.c` (`archive.c`) and `test_trigger_entries.c`
+  (`trigger.c`); otherwise link the module normally.
+- Tests that log expected errors install a quiet context — see
+  `silence_logging()` in `test_clearsign.c` — so a passing run stays clean.
+- Shell tests source `tests/aeptlib.sh` (`make_aep`, `make_aep_conffile`,
+  `new_root`, `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`) and
+  `skip` (exit 77) when a tool is missing rather than failing.
+- libfetch is built without `file.c`, so HTTP/HTTPS are the only transports.
+  Tests needing a real fetch serve over loopback via `http_serve`.
+- Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
+  `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
+  `Makefile.am`, or `make distcheck` breaks.
+
 ## Architecture
 
 **Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots); `aept_cancel()` is safe to call from any thread.
@@ -46,5 +79,13 @@ Build dependencies: libarchive (pkg-config), libsolv + libsolvext (AC_CHECK_LIB)
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.
-- **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs.
-- **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) with `PKG_ROOT` env var set.
+- **update.c** — Fetches package lists. With `check_signature` on (the default) it fetches **`InPackages.gz`** — index and signature in one object — and there is deliberately **no** fallback to `Packages` + `Packages.sig`, so blocking one request cannot push a client onto the two-object path. Decompression is capped at `MAX_INDEX_SIZE`, since the stream is chosen by the remote side.
+- **clearsign.c** — Splits a signify clearsigned envelope into message and signature. Splits at the **last** signature marker, because the envelope has no escaping and a package `Description` can contain a line that looks like one. The signature covers the index bytes exactly, trailing newline included.
+- **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
+- **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
+- **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
+- **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction.
+- **download.c** — libfetch wrapper for HTTP/HTTPS retrieval of indexes and packages.
+- **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup.
+- **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.
+- **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) via `/bin/sh` through `aept_system_offline_root()`. No environment is set for them: with an offline root the script runs chrooted, so it already sees that root as `/` and needs no prefix variable (unlike opkg, which does not chroot and passes `$PKG_ROOT` instead).
