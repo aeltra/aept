@@ -15,7 +15,7 @@ make clean           # remove build artifacts
 ```
 
 Build dependencies: libarchive and OpenSSL (pkg-config), libsolv + libsolvext
-(AC_CHECK_LIB). `libfetch/` is a **fork**, no longer tracked upstream — edit it
+(AC_CHECK_LIB). `src/libfetch/` is a **fork**, no longer tracked upstream — edit it
 directly; there is no patch series and no re-import script. It has been pruned
 to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
 and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`
@@ -24,7 +24,7 @@ run it after any change there.
 
 Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
 three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)
-and two `-Wsign-compare` in vendored libfetch. Anything else is new.
+and two `-Wsign-compare` in `src/libfetch/`. Anything else is new.
 
 ## Project Overview
 
@@ -67,7 +67,7 @@ run by Automake's harness.
 
 ## Architecture
 
-**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots), **except across operations that download** — `aept_update()`, `aept_install()`. libfetch keeps all of its state in process globals: the connection cache (`common.c:304`) is a list every fetch mutates, the error state (`fetch.c:44`) is one struct, and the client certificate selected by `fetch_set_client_certificate()` belongs to whichever thread set it last. Callers must serialise download-bearing calls until that changes. `aept_cancel()` is safe to call from any thread.
+**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots), **except across operations that download** — `aept_update()`, `aept_install()`. libfetch keeps all of its state in process globals: the connection cache (`src/libfetch/common.c:298`) is a list every fetch mutates, the error state (`src/libfetch/fetch.c:42`) is one struct, and the client certificate selected by `fetch_set_client_certificate()` belongs to whichever thread set it last. Callers must serialise download-bearing calls until that changes. `aept_cancel()` is safe to call from any thread.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 
@@ -88,7 +88,7 @@ run by Automake's harness.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
 - **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction.
-- **download.c** — libfetch wrapper for HTTP/HTTPS retrieval of indexes and packages.
+- **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup.
 - **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.
 - **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) via `/bin/sh` through `aept_system_offline_root()`. No environment is set for them: with an offline root the script runs chrooted, so it already sees that root as `/` and needs no prefix variable (unlike opkg, which does not chroot and passes `$PKG_ROOT` instead).

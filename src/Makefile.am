@@ -23,16 +23,16 @@ libaept_la_SOURCES = \
     util.c \
     msg.c \
     pin.c \
-    ../libfetch/common.c \
-    ../libfetch/fetch.c \
-    ../libfetch/http.c \
-    ../libfetch/openssl-compat.c \
-    ../libfetch/common.h \
-    ../libfetch/fetch.h \
-    ../libfetch/openssl-compat.h
+    libfetch/common.c \
+    libfetch/fetch.c \
+    libfetch/http.c \
+    libfetch/openssl-compat.c \
+    libfetch/common.h \
+    libfetch/fetch.h \
+    libfetch/openssl-compat.h
 
 libaept_la_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
-    -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/libfetch
+    -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/src/libfetch
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 libaept_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex '^aept_'
 
