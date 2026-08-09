@@ -16,7 +16,6 @@
 # a chunked body, a reply that lies about its length, a reply with no
 # length at all — so the responses are written as raw bytes.
 
-import socket
 import socketserver
 import sys
 import threading
@@ -79,21 +78,49 @@ class Handler(socketserver.BaseRequestHandler):
             parts = request_line.decode("latin-1").split()
             if len(parts) < 2:
                 return
-            path = parts[1].split("?", 1)[0]
+            target = parts[1]
 
-            while True:                       # consume the headers
+            headers = {}
+            while True:
                 header = stream.readline()
                 if header in (b"\r\n", b"\n", b""):
                     break
+                text = header.decode("latin-1").rstrip("\r\n")
+                if ":" in text:
+                    name, value = text.split(":", 1)
+                    headers[name.strip().lower()] = value.strip()
 
-            if not self.reply(path):
+            # A client going through a proxy sends the whole URL as the
+            # request target rather than just the path.  That is the
+            # only way to tell, from the server side, that the proxy
+            # path was taken.
+            if target.lower().startswith("http://"):
+                self.request.sendall(
+                    response("200 OK", b"reached via proxy\n"))
+                continue
+
+            path = target.split("?", 1)[0]
+
+            if not self.reply(path, headers):
                 return
 
-    def reply(self, path):
+    def reply(self, path, headers):
         """Write the response for path.  Returns False to close."""
         send = self.request.sendall
 
-        if path == "/ok":
+        if path == "/auth":
+            # user:pass, base64-encoded, is dXNlcjpwYXNz
+            got = headers.get("authorization", "")
+            if not got:
+                send(response("401 Unauthorized", b"who are you\n",
+                              ['WWW-Authenticate: Basic realm="test"']))
+            elif got == "Basic dXNlcjpwYXNz":
+                send(response("200 OK", b"authorised\n"))
+            else:
+                send(response("403 Forbidden", b"wrong credentials\n"))
+            return True
+
+        elif path == "/ok":
             send(response("200 OK", b"hello from ok\n"))
         elif path == "/close":
             # Same body, but the server declines to keep the connection.
@@ -137,8 +164,6 @@ class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-
-record_connection.__doc__ = None
 
 server = Server(("127.0.0.1", 0), Handler)
 # The count file must exist even before the first request.

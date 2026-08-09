@@ -141,6 +141,41 @@ body_is /noclen 'body without a content length
 '
 note "a close-delimited body is read to the end"
 
+# ── HTTP basic auth ──────────────────────────────────────────────────
+#
+# Credentials ride in the source URL: aept hands the URL straight to
+# libfetch, which answers the 401 with an Authorization header.  Kept
+# through the fork, so pinned here.
+
+rm -f "$out"
+timeout 60 "$HTTPGET" "http://user:pass@127.0.0.1:$STUB_PORT/auth" "$out" \
+    >/dev/null 2>&1 \
+    || fail "basic auth: a URL carrying credentials was rejected"
+body_is "/auth" 'authorised
+'
+note "credentials in the source URL satisfy a 401 challenge"
+
+rm -f "$out"
+if timeout 60 "$HTTPGET" "$base/auth" "$out" >/dev/null 2>&1; then
+    fail "basic auth: a 401 without credentials was treated as success"
+fi
+[ -e "$out" ] && fail "basic auth: a file was left behind for a 401"
+note "a 401 with no credentials to offer fails"
+
+# ── proxy support ────────────────────────────────────────────────────
+#
+# A proxied request is recognisable server-side because the whole URL
+# becomes the request target.  The host below never resolves, so this
+# only succeeds if the proxy was really used.
+
+rm -f "$out"
+HTTP_PROXY="$base" timeout 60 "$HTTPGET" "http://repo.invalid/ok" "$out" \
+    >/dev/null 2>&1 \
+    || fail "proxy: HTTP_PROXY was not honoured"
+body_is "proxy" 'reached via proxy
+'
+note "HTTP_PROXY is honoured, and the request goes out proxy-style"
+
 # ── connection reuse ─────────────────────────────────────────────────
 #
 # The cache only engages when the server says "Connection: keep-alive"
