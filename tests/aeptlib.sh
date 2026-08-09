@@ -60,6 +60,41 @@ make_aep() {
     rm -rf "$_d"
 }
 
+# make_aep_conffile <out.aep> <name> <version> <conffile-path> <content>
+#
+# Like make_aep, but the payload also carries one configuration file at
+# <conffile-path> (an absolute path) listed in the control archive's
+# "conffiles".
+make_aep_conffile() {
+    _out=$1 _name=$2 _ver=$3 _cf=$4 _content=$5
+
+    case $_out in
+        /*) ;;
+         *) _out=$PWD/$_out ;;
+    esac
+    rm -f "$_out"
+
+    _d=$(mktemp -d) || fail "mktemp failed"
+    mkdir -p "$_d/c" "$_d/d/usr/bin"
+
+    printf 'Package: %s\nVersion: %s\nArchitecture: all\nMaintainer: t <t@example.invalid>\nDescription: aept test fixture\n' \
+        "$_name" "$_ver" > "$_d/c/control"
+    printf '%s\n' "$_cf" > "$_d/c/conffiles"
+    printf '%s %s\n' "$_name" "$_ver" > "$_d/d/usr/bin/$_name"
+
+    mkdir -p "$_d/d/$(dirname "$_cf")"
+    printf '%s\n' "$_content" > "$_d/d/$_cf"
+
+    tar czf "$_d/control.tar.gz" -C "$_d/c" control conffiles || fail "tar control"
+    tar czf "$_d/data.tar.gz"    -C "$_d/d" .                 || fail "tar data"
+    printf '2.0\n' > "$_d/debian-binary"
+
+    ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
+        || fail "ar failed for $_out"
+
+    rm -rf "$_d"
+}
+
 # packages_stanza <name> <version> <aep-file> — emit one Packages entry.
 packages_stanza() {
     printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \

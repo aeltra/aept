@@ -44,6 +44,11 @@ int aept_conffile_load(struct aept_ctx *ctx, const char *name,
 int aept_conffile_save(struct aept_ctx *ctx, const char *name,
                        const aept_conffile_set_t *cs);
 
+/* Drop {info_dir}/{name}.conffiles.  Used when the new version of a
+ * package ships no conffiles at all, so the old hashes would otherwise
+ * survive the upgrade.  Missing file is not an error. */
+void aept_conffile_remove(struct aept_ctx *ctx, const char *name);
+
 /* Handle conffile conflicts during upgrade. For each new conffile,
  * compares the on-disk version against the ".aept-new" version placed
  * next to it during extraction and the saved old metadata.

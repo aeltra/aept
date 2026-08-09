@@ -420,6 +420,15 @@ cleanup:
     return r;
 }
 
+/*
+ * Drop the info files an upgrade is about to replace.
+ *
+ * Deliberately not the same list as remove.c's namesake: "conffiles" is
+ * missing because this runs *after* the conffile resolve step in
+ * do_upgrade_package(), which has already written the new version's
+ * hashes.  Adding it here would delete them again.  Stale hashes are
+ * dropped at the resolve step instead.
+ */
 static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
     const char *exts[] = {
@@ -584,9 +593,16 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
             goto cleanup_filesets;
         }
 
-        /* Resolve conffile conflicts */
+        /* Resolve conffile conflicts.  resolve_upgrade() rewrites
+         * {name}.conffiles from the new set, so conffiles the new
+         * version dropped disappear on their own — but only when it
+         * ships at least one.  With none, nothing rewrites the file and
+         * the old hashes would survive to influence a later upgrade,
+         * so drop it here. */
         if (new_cf.count > 0)
             aept_conffile_resolve_upgrade(ctx, name, &old_cf, &new_cf);
+        else
+            aept_conffile_remove(ctx, name);
 
         aept_conffile_set_free(&new_cf);
     }

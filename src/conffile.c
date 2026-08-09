@@ -200,6 +200,18 @@ int aept_conffile_save(struct aept_ctx *ctx, const char *name,
     return 0;
 }
 
+void aept_conffile_remove(struct aept_ctx *ctx, const char *name)
+{
+    char *path = NULL;
+
+    aept_asprintf(&path, "%s/%s.conffiles", ctx->config.info_dir, name);
+
+    if (unlink(path) < 0 && errno != ENOENT)
+        aept_log_warning("cannot remove '%s': %s", path, strerror(errno));
+
+    free(path);
+}
+
 /* Prompt the user to decide what to do with a modified conffile.
  * Returns 1 to install the new version, 0 to keep the old one. */
 static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,

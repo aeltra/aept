@@ -53,7 +53,8 @@ dist_check_SCRIPTS = \
     test_install_failure.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
-    test_update_inpackages.sh
+    test_update_inpackages.sh \
+    test_upgrade_conffiles.sh
 
 EXTRA_DIST = aeptlib.sh
 
