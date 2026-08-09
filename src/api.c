@@ -441,6 +441,7 @@ static char *deparray_to_str(Pool *pool, Solvable *s, Id keyname, Id marker)
 
 struct api_list_entry {
     Id name_id;
+    const char *name;       /* pool string, stable while the pool lives */
     Solvable *avail;
     Solvable *installed;
 };
@@ -456,14 +457,18 @@ static struct api_list_entry *find_list_entry(struct api_list_entry *entries,
     return NULL;
 }
 
-static Pool *api_sort_pool;
-
+/*
+ * Compares resolved name strings rather than looking them up through a
+ * pool.  The pool used to be passed via a file-scope variable, which
+ * two threads listing different contexts would overwrite for each
+ * other; resolving the name when the entry is built removes the need
+ * for one, and saves a lookup per comparison besides.
+ */
 static int cmp_api_list_entry(const void *a, const void *b)
 {
     const struct api_list_entry *ea = a;
     const struct api_list_entry *eb = b;
-    return strcmp(pool_id2str(api_sort_pool, ea->name_id),
-                 pool_id2str(api_sort_pool, eb->name_id));
+    return strcmp(ea->name, eb->name);
 }
 
 int aept_list(aept_ctx_t *ctx, const char *pattern,
@@ -500,6 +505,7 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
             }
             e = &entries[nentries++];
             e->name_id = s->name;
+            e->name = pool_id2str(pool, s->name);
             e->avail = NULL;
             e->installed = NULL;
         }
@@ -514,7 +520,6 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
         }
     }
 
-    api_sort_pool = pool;
     qsort(entries, nentries, sizeof(*entries), cmp_api_list_entry);
 
     out->entries = calloc(nentries, sizeof(aept_pkg_entry_t));
@@ -523,7 +528,7 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
 
     for (i = 0; i < nentries; i++) {
         struct api_list_entry *e = &entries[i];
-        const char *name = pool_id2str(pool, e->name_id);
+        const char *name = e->name;
         const char *summary;
         Solvable *show;
         int upgradable;
@@ -546,7 +551,7 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
                (e->avail ? e->avail : e->installed);
 
         aept_pkg_entry_t *pe = &out->entries[out->count++];
-        pe->name = strdup(pool_id2str(pool, e->name_id));
+        pe->name = strdup(e->name);
         pe->version = strdup(pool_id2str(pool, show->evr));
         summary = solvable_lookup_str(show, SOLVABLE_SUMMARY);
         pe->summary = summary ? strdup(summary) : NULL;
