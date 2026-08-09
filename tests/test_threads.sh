@@ -5,10 +5,12 @@
 # SPDX-License-Identifier: MIT
 #
 # aept documents that independent contexts may be used concurrently.
-# Nothing tested that until now.  Two listing threads work on separate
-# offline roots, so two libsolv pools are sorted at the same time, and a
-# third thread downloads — exercising the per-context connection cache
-# alongside them.
+# Nothing tested that until now.  Five threads run at once: two listing
+# separate offline roots, so two libsolv pools are sorted at the same
+# time; one downloading, exercising the per-context connection cache;
+# and two cycling a package through install and remove, which is what
+# reaches the solver, archive extraction, the status database, the
+# owner index and triggers.
 #
 # A plain run catches crashes and wrong results.  It does not catch a
 # data race that happens to come out right, which is what
@@ -44,12 +46,19 @@ build_root() {
 
 build_root "$work/root-a" alpha
 build_root "$work/root-b" bravo
+
+# One package per root for the install/remove threads to cycle, so the
+# solver, archive extraction, the status database, the owner index and
+# triggers all run concurrently too.
+make_aep "$work/cycle-a.aep" cycle-a 1.0
+make_aep "$work/cycle-b.aep" cycle-b 1.0
 note "two roots prepared, five packages each, listed out of order"
 
 http_stub "$work/count" "$work/stub.log" || skip "could not start the stub"
 
 out=$(timeout 300 "$THREADRACE" 10 "$work/root-a" "$work/root-b" \
-        "http://127.0.0.1:$STUB_PORT/ok" 2>&1)
+        "http://127.0.0.1:$STUB_PORT/ok" \
+        "$work/cycle-a.aep" "$work/cycle-b.aep" 2>&1)
 rc=$?
 
 [ "$rc" -eq 124 ] && fail "the threaded run timed out — a deadlock?
@@ -58,6 +67,6 @@ $out"
 $out"
 
 printf '%s\n' "$out" | sed 's/^/# /'
-note "10 iterations x (2 listing contexts + 1 downloading context) clean"
+note "10 iterations x (2 listing + 1 downloading + 2 installing contexts) clean"
 
 exit 0

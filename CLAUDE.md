@@ -93,7 +93,11 @@ own build of everything.
 
 Downloading used to be the exception, because libfetch kept its state in process globals. That is no longer so: the connection cache and the client certificate live in the per-context `struct fetch_ctx` (`ctx->http`, created by `aept_init()`), and the error state is `_Thread_local`. Nothing at file scope in `src/libfetch/` is written any more — `ssl_verify_mode` has no setter, and `fetchTimeout`, `fetchDebug` and `fetchRestartCalls` are compile-time initialised and never assigned.
 
-`tests/test_threads.sh` drives two listing contexts and a downloading context concurrently, and the same harness runs clean under ThreadSanitizer (below). Two caveats: nothing verifies OpenSSL's self-initialisation or libsolv/libarchive safety for independent objects, and `aept_system_offline_root()` forks — the child is restricted to syscalls (see `child_err()` in `util.c`), but a caller forking from one thread while another holds a lock is inherently delicate.
+`tests/test_threads.sh` drives five contexts at once — two listing, one downloading, two cycling a package through install and remove — so the solver, archive extraction, the status database, the owner index and triggers all run concurrently. The same harness is clean under ThreadSanitizer (below).
+
+All three `fork()` sites are async-signal-safe in the child: `aept_system()` and `aept_verify_signature()` do nothing but `exec` + `_exit`, and `aept_system_offline_root()` was reworked to match — pre-formatted uid/gid maps, literal `/proc/self/` paths, and `child_err()` instead of logging. No `setenv()` remains anywhere in aept, so libfetch's `getenv()` reads are races only if the *embedding application* mutates the environment concurrently. `readdir()` is used on per-context `DIR *` streams, and `dirname()`/`basename()` on private copies.
+
+Not verified: OpenSSL's self-initialisation, and libsolv/libarchive safety for independent objects. Both are relied upon; neither is tested here.
 
 A consequence worth knowing: the cache limits (4 connections, 2 per host) are now *per context*, not per process, so N contexts can hold up to 4N idle sockets.
 
