@@ -74,7 +74,24 @@ struct aept_ctx {
     int config_loaded;
 };
 
+/*
+ * Absolute paths to the helpers aept execs.
+ *
+ * aept normally runs as root, so no exec may resolve through PATH: an
+ * attacker who can influence the environment would otherwise choose
+ * which binary runs with those privileges.  Note that execvp() only
+ * searches PATH for names containing no slash, so passing these as
+ * argv[0] is sufficient — /bin/sh in script.c and trigger.c is already
+ * safe for the same reason.
+ *
+ * Deliberately compile-time constants rather than configure-time
+ * AC_PATH_PROG results: aept is cross-built for its target, so probing
+ * the build machine would bake in paths that need not hold there.
+ */
 #define AEPT_USIGN_BIN "/usr/bin/usign"
+#define AEPT_RM_BIN    "/bin/rm"
+#define AEPT_DIFF_BIN  "/usr/bin/diff"
+#define AEPT_SH_BIN    "/bin/sh"
 
 /* Child process exit codes */
 #define AEPT_EXIT_EXEC_FAILED  255

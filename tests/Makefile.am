@@ -63,9 +63,10 @@ dist_check_SCRIPTS = \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
     test_upgrade_conffiles.sh \
-    test_update_size_limit.sh
+    test_update_size_limit.sh \
+    test_exec_path.sh
 
-EXTRA_DIST = aeptlib.sh
+EXTRA_DIST = aeptlib.sh ptydrive.py
 
 TEST_EXTENSIONS = .sh
 

@@ -25,7 +25,7 @@ and two `-Wsign-compare` in vendored libfetch. Anything else is new.
 
 ## Project Overview
 
-**aept** (Aeltra Package Tool) is a minimal package manager for .aep packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification).
+**aept** (Aeltra Package Tool) is a minimal package manager for .aep packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification), plus `rm`, `diff` and `/bin/sh`. Every one of them is exec'd by absolute path from the `AEPT_*_BIN` defines in `internal.h` — aept normally runs as root, so no exec may resolve through `PATH` or `$SHELL`.
 
 ## Coding Conventions
 

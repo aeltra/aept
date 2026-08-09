@@ -269,18 +269,21 @@ static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
 
         if (ch == 'd' || ch == 'D') {
             putchar('\n');
-            const char *argv[] = {"diff", "-u", disk_path, new_path, NULL};
+            const char *argv[] = {AEPT_DIFF_BIN, "-u", disk_path,
+                                  new_path, NULL};
             aept_system(argv);
             continue;
         }
 
         if (ch == 'z' || ch == 'Z') {
             putchar('\n');
-            const char *shell = getenv("SHELL");
-            if (!shell)
-                shell = "/bin/sh";
+            /*
+             * Deliberately not $SHELL.  This prompt runs as root during
+             * an upgrade, so honouring the environment would let it
+             * choose which binary gets those privileges.
+             */
             printf("Type 'exit' to return to the conffile prompt.\n");
-            const char *argv[] = {shell, NULL};
+            const char *argv[] = {AEPT_SH_BIN, NULL};
             aept_system(argv);
             continue;
         }

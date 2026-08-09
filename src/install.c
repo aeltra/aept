@@ -412,7 +412,7 @@ cleanup:
 
     /* Clean up tmpdir */
     {
-        const char *rm_argv[] = {"rm", "-rf", tmpdir, NULL};
+        const char *rm_argv[] = {AEPT_RM_BIN, "-rf", tmpdir, NULL};
         aept_system(rm_argv);
     }
 
@@ -770,7 +770,7 @@ cleanup:
     free(list_path);
 
     if (tmpdir) {
-        const char *rm_argv[] = {"rm", "-rf", tmpdir, NULL};
+        const char *rm_argv[] = {AEPT_RM_BIN, "-rf", tmpdir, NULL};
         aept_system(rm_argv);
         free(tmpdir);
     }
