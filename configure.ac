@@ -27,6 +27,15 @@ AC_CHECK_LIB([solv], [pool_create], [:],
 AC_CHECK_LIB([solvext], [repo_add_debpackages], [:],
   [AC_MSG_ERROR([libsolvext library not found])])
 
+# Threads, for the concurrency test only.  On glibc >= 2.34 and musl
+# the pthread symbols live in libc, so this usually resolves to nothing.
+save_LIBS=$LIBS
+LIBS=
+AC_SEARCH_LIBS([pthread_create], [pthread], [], [])
+PTHREAD_LIBS=$LIBS
+LIBS=$save_LIBS
+AC_SUBST([PTHREAD_LIBS])
+
 # Optional static linking for libarchive and/or libsolv
 AC_ARG_ENABLE([static-libarchive],
   [AS_HELP_STRING([--enable-static-libarchive],

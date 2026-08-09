@@ -44,7 +44,14 @@
  * configuration. */
 _Thread_local struct fetch_error fetchLastErrCode;
 int	 fetchTimeout;
-volatile int	 fetchRestartCalls = 1;
+/*
+ * Do not restart syscalls interrupted by a signal: aept relies on a
+ * signal breaking out of a transfer so that cancellation works.  This
+ * is the default rather than something the caller assigns, because
+ * every context assigning it was a data race on a shared global for no
+ * benefit -- the value was always the same.
+ */
+volatile int	 fetchRestartCalls = 0;
 int	 fetchDebug;
 
 

@@ -9,13 +9,18 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env
 
-check_PROGRAMS = $(unit_tests) httpget
+check_PROGRAMS = $(unit_tests) httpget threadrace
 
 noinst_HEADERS = test.h
 
 httpget_SOURCES = httpget.c
 httpget_CFLAGS = -D_GNU_SOURCE
 httpget_LDADD = $(top_builddir)/src/libaept.la
+
+# Also a harness, driven by test_threads.sh.
+threadrace_SOURCES = threadrace.c
+threadrace_CFLAGS = -D_GNU_SOURCE
+threadrace_LDADD = $(top_builddir)/src/libaept.la $(PTHREAD_LIBS)
 
 # archive.c is #included by the test, so only its dependencies are listed
 # here; util.c and msg.c supply the allocators and logging it calls into.
@@ -80,7 +85,8 @@ dist_check_SCRIPTS = \
     test_update_size_limit.sh \
     test_exec_path.sh \
     test_ssl_client_cert.sh \
-    test_http.sh
+    test_http.sh \
+    test_threads.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py
 
@@ -93,6 +99,7 @@ SH_LOG_COMPILER = $(SHELL)
 AM_TESTS_ENVIRONMENT = \
     AEPT_BIN='$(abs_top_builddir)/src/aept'; export AEPT_BIN; \
     srcdir='$(abs_srcdir)'; export srcdir; \
-    HTTPGET='$(abs_builddir)/httpget'; export HTTPGET;
+    HTTPGET='$(abs_builddir)/httpget'; export HTTPGET; \
+    THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE;
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)

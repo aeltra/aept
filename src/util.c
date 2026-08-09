@@ -255,91 +255,80 @@ int aept_system(const char *argv[])
     return -1;
 }
 
-static int unshare_and_map_user(void)
+/*
+ * The uid/gid maps a forked child writes for its user namespace.
+ * Formatted by the parent before the fork: see child_err() for why the
+ * child cannot format them itself.
+ */
+struct uid_maps {
+    char uid_map[64];
+    char gid_map[64];
+};
+
+/*
+ * Report from inside a forked child, before exec.
+ *
+ * fork() duplicates every lock in the address space but only the
+ * calling thread, so a lock another thread happened to hold is held
+ * forever in the child by a thread that does not exist there.  Calling
+ * anything that takes one -- stdio for logging, malloc for formatting
+ * -- would block the child forever, and with it the parent's waitpid().
+ * So the child is restricted to syscalls: write(2) of a constant
+ * string, and no strerror(), which is not async-signal-safe either.
+ */
+static void child_err(const char *msg)
 {
-    int fd, ret = -1;
-    char *mapfile = NULL;
-    char *content = NULL;
+    ssize_t n = write(STDERR_FILENO, msg, strlen(msg));
+    (void)n;
+}
 
-    pid_t pid = getpid();
-    uid_t uid = geteuid();
-    gid_t gid = getegid();
+/* Write one of the namespace map files.  Child context: syscalls only. */
+static int write_map_file(const char *path, const char *content, size_t len)
+{
+    int fd = open(path, O_RDWR);
+    ssize_t n;
 
+    if (fd == -1)
+        return -1;
+
+    n = write(fd, content, len);
+    close(fd);
+
+    return (n == (ssize_t)len) ? 0 : -1;
+}
+
+/*
+ * Enter a user namespace mapping the invoking uid/gid to 0.  Runs in
+ * the child after fork, so it allocates nothing and formats nothing:
+ * the map contents arrive pre-formatted, and the paths are literals
+ * because /proc/self is the child.
+ */
+static int unshare_and_map_user(const struct uid_maps *maps)
+{
     if (unshare(CLONE_NEWUSER) != 0) {
-        aept_log_error("failed to unshare user namespace: %s",
-                  strerror(errno));
+        child_err("aept: failed to unshare user namespace\n");
         return -1;
     }
 
-    /* Write uid_map: map real uid to 0 inside the namespace */
-    aept_asprintf(&mapfile, "/proc/%ld/uid_map", (long)pid);
-    ret = fd = open(mapfile, O_RDWR);
-    if (ret == -1) {
-        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
-        goto error;
+    if (write_map_file("/proc/self/uid_map", maps->uid_map,
+                       strlen(maps->uid_map)) != 0) {
+        child_err("aept: failed to write uid_map\n");
+        return -1;
     }
 
-    aept_asprintf(&content, "0 %lu 1", (unsigned long)uid);
-    ret = write(fd, content, strlen(content));
-    close(fd);
-    free(content);
-    content = NULL;
-
-    if (ret < 0) {
-        aept_log_error("failed to write uid_map: %s", strerror(errno));
-        goto error;
+    /* setgroups must be denied before gid_map may be written. */
+    if (write_map_file("/proc/self/setgroups", "deny", 4) != 0) {
+        child_err("aept: failed to disable setgroups\n");
+        return -1;
     }
 
-    free(mapfile);
-    mapfile = NULL;
-
-    /* Write "deny" to setgroups (required before writing gid_map) */
-    aept_asprintf(&mapfile, "/proc/%ld/setgroups", (long)pid);
-    ret = fd = open(mapfile, O_RDWR);
-    if (ret == -1) {
-        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
-        goto error;
+    if (write_map_file("/proc/self/gid_map", maps->gid_map,
+                       strlen(maps->gid_map)) != 0) {
+        child_err("aept: failed to write gid_map\n");
+        return -1;
     }
 
-    ret = write(fd, "deny", 4);
-    close(fd);
-
-    if (ret != 4) {
-        aept_log_error("failed to disable setgroups");
-        goto error;
-    }
-
-    free(mapfile);
-    mapfile = NULL;
-
-    /* Write gid_map: map real gid to 0 inside the namespace */
-    aept_asprintf(&mapfile, "/proc/%ld/gid_map", (long)pid);
-    ret = fd = open(mapfile, O_RDWR);
-    if (ret == -1) {
-        aept_log_error("failed to open '%s': %s", mapfile, strerror(errno));
-        goto error;
-    }
-
-    aept_asprintf(&content, "0 %lu 1\n", (unsigned long)gid);
-    ret = write(fd, content, strlen(content));
-    close(fd);
-    free(content);
-    content = NULL;
-
-    if (ret < 0) {
-        aept_log_error("failed to write gid_map: %s", strerror(errno));
-        goto error;
-    }
-
-    free(mapfile);
-    mapfile = NULL;
-
-    ret = 0;
-
-error:
-    free(mapfile);
-    free(content);
-    return ret;
+    return 0;
 }
 
 static const char *normalize_path(const char *path)
@@ -409,9 +398,20 @@ void aept_fileset_free(aept_fileset_t *fs)
 
 int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
 {
+    struct uid_maps maps;
     int status;
     pid_t pid;
     int r;
+
+    /*
+     * Format the maps here, in the parent: the child may not call
+     * snprintf() once fork() has run.  The ids are the same on both
+     * sides of the fork, so there is nothing to wait for.
+     */
+    snprintf(maps.uid_map, sizeof(maps.uid_map), "0 %lu 1",
+             (unsigned long)geteuid());
+    snprintf(maps.gid_map, sizeof(maps.gid_map), "0 %lu 1\n",
+             (unsigned long)getegid());
 
     pid = fork();
 
@@ -422,17 +422,16 @@ int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
     case 0:
         if (ctx->config.offline_root) {
             if (geteuid() != 0) {
-                if (unshare_and_map_user() != 0)
+                if (unshare_and_map_user(&maps) != 0)
                     _exit(AEPT_EXIT_SETUP_FAILED);
             }
 
             if (chroot(ctx->config.offline_root) != 0) {
-                aept_log_error("failed to chroot to '%s': %s",
-                          ctx->config.offline_root, strerror(errno));
+                child_err("aept: failed to chroot into the offline root\n");
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
             if (chdir("/") != 0) {
-                aept_log_error("failed to chdir to '/': %s", strerror(errno));
+                child_err("aept: failed to chdir to '/'\n");
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
         }

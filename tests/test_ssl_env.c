@@ -65,12 +65,18 @@ int main(void)
     unsetenv("SSL_CLIENT_KEY_FILE");
 
     /*
-     * Port 1 on loopback refuses immediately, so this needs no network
-     * and no server.  The certificate was published to the environment
-     * before the connection was attempted, so a refused connection is
-     * enough to expose the leak.
+     * A URL that cannot even be parsed, so this needs no network, no
+     * server and no waiting.  It still exposes the leak: the old code
+     * published the certificate to the environment *before* handing
+     * the URL to libfetch, so the variables were set however early the
+     * download then failed.
+     *
+     * Do not reach for an unused port instead — a refused connection
+     * is not universal.  Loopback ports are silently dropped on some
+     * hosts, and this test once spent 135 seconds per call waiting out
+     * the TCP timeout because of it.
      */
-    r = aept_download(ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
+    r = aept_download(ctx, "http:///Packages", dest, "Packages");
     test_ok(r != 0, "the download failed, as intended");
 
     /*
@@ -89,7 +95,7 @@ int main(void)
      */
     setenv("SSL_CLIENT_CERT_FILE", "/set/by/the/caller", 1);
 
-    r = aept_download(ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
+    r = aept_download(ctx, "http:///Packages", dest, "Packages");
     test_ok(r != 0, "the second download failed, as intended");
 
     test_str_eq(getenv("SSL_CLIENT_CERT_FILE"), "/set/by/the/caller",

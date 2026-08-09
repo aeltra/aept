@@ -64,12 +64,36 @@ run by Automake's harness.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
+- `httpget`, `httpstub.py` and `threadrace` are harnesses driven by shell
+  tests, not tests themselves: they are in `check_PROGRAMS` but deliberately
+  absent from `unit_tests`, so `TESTS` never runs them directly.
+
+**Data races.** `make check` catches crashes and wrong answers, but a race that
+happens to come out right passes silently — this was demonstrated: with the
+`api_sort_pool` bug restored, `test_threads.sh` still reported zero failures
+while ThreadSanitizer flagged it every run. So check races with TSan, not the
+suite:
+
+```bash
+gcc -fsanitize=thread -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch \
+    -o /tmp/threadrace_tsan tests/threadrace.c \
+    $(ls src/*.c | grep -v main.c) src/libfetch/*.c \
+    $(pkg-config --cflags --libs libarchive openssl) -lsolvext -lsolv -lpthread
+setarch $(uname -m) -R /tmp/threadrace_tsan 20 <root-a> <root-b> <url>
+```
+
+`setarch -R` is required: TSan aborts with "unexpected memory mapping" under
+the ASLR settings on current kernels. Build the roots the way
+`test_threads.sh` does. Do not add a TSan build to `make check` — it needs its
+own build of everything.
 
 ## Architecture
 
 **Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots); `aept_cancel()` is safe to call from any thread.
 
-Downloading used to be the exception, because libfetch kept its state in process globals. That is no longer so: the connection cache and the client certificate live in the per-context `struct fetch_ctx` (`ctx->http`, created by `aept_init()`), and the error state is `_Thread_local`. What remains at file scope in `src/libfetch/` is written once or never — `ssl_verify_mode` has no setter, `fetchTimeout` and `fetchDebug` are never assigned, and `fetchRestartCalls` is set to the same value by every `aept_init()`. **Concurrent downloads are believed safe but are not covered by a test**; treat that as unproven rather than guaranteed.
+Downloading used to be the exception, because libfetch kept its state in process globals. That is no longer so: the connection cache and the client certificate live in the per-context `struct fetch_ctx` (`ctx->http`, created by `aept_init()`), and the error state is `_Thread_local`. Nothing at file scope in `src/libfetch/` is written any more — `ssl_verify_mode` has no setter, and `fetchTimeout`, `fetchDebug` and `fetchRestartCalls` are compile-time initialised and never assigned.
+
+`tests/test_threads.sh` drives two listing contexts and a downloading context concurrently, and the same harness runs clean under ThreadSanitizer (below). Two caveats: nothing verifies OpenSSL's self-initialisation or libsolv/libarchive safety for independent objects, and `aept_system_offline_root()` forks — the child is restricted to syscalls (see `child_err()` in `util.c`), but a caller forking from one thread while another holds a lock is inherently delicate.
 
 A consequence worth knowing: the cache limits (4 connections, 2 per host) are now *per context*, not per process, so N contexts can hold up to 4N idle sockets.
 

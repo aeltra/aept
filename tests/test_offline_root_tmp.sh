@@ -48,4 +48,34 @@ leftover=$(find "$root/tmp" -maxdepth 1 -name 'aept-*' 2>/dev/null | wc -l)
 [ "$leftover" -eq 0 ] || fail "$leftover scratch directories left in $root/tmp"
 note "scratch directory cleaned up"
 
+# ── the user namespace is set up before the script runs ──────────────
+#
+# Running non-root against an offline root, aept unshares a user
+# namespace, writes uid_map/setgroups/gid_map and chroots before it
+# execs the script interpreter.  All of that happens in the forked
+# child, which may only make syscalls, so it is easy to break subtly.
+#
+# The two failures are distinguishable by exit code, and that is the
+# only signal available here: these roots have no /bin/sh, so the exec
+# always fails.
+#
+#   254 (AEPT_EXIT_SETUP_FAILED) — unshare, a map write, or chroot failed
+#   255 (AEPT_EXIT_EXEC_FAILED)  — setup succeeded, the interpreter is absent
+#
+# So 255 is the pass: the child got all the way to exec.
+
+make_aep_script "$work/scripted_1.0.aep" scripted 1.0 postinst 'exit 0'
+
+out=$(aept_run "$root" install --non-interactive \
+        "$work/scripted_1.0.aep" 2>&1)
+
+printf '%s\n' "$out" | grep -q 'exit code 254' \
+    && fail "namespace setup failed before the interpreter was reached:
+$out"
+
+printf '%s\n' "$out" | grep -q 'exit code 255' \
+    || fail "expected the child to reach exec and fail there:
+$out"
+note "user namespace set up and chroot entered; child reached exec"
+
 exit 0

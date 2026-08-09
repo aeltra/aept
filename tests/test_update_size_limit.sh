@@ -18,14 +18,15 @@ trap 'http_stop; rm -rf "$work"' EXIT
 repo=$work/repo
 mkdir -p "$repo" "$work/trustdb"
 
-# A gzip bomb, in the mild sense that matters here: ~200 MiB of zeros in
-# roughly 200 KiB on the wire.  Well past the 64 MiB ceiling in update.c,
-# and cheap to build and serve.
-dd if=/dev/zero bs=1M count=200 2>/dev/null | gzip -9 -c > "$work/bomb.gz" \
+# A gzip bomb, in the mild sense that matters here: 70 MiB of zeros in
+# roughly 70 KiB on the wire.  Comfortably past the 64 MiB ceiling in
+# update.c while staying cheap to build — at 200 MiB, generating it cost
+# more than everything else in the suite put together.
+dd if=/dev/zero bs=1M count=70 2>/dev/null | gzip -9 -c > "$work/bomb.gz" \
     || fail "could not build the oversized index"
 
 bomb_size=$(wc -c < "$work/bomb.gz")
-note "oversized index is $bomb_size bytes compressed, 209715200 expanded"
+note "oversized index is $bomb_size bytes compressed, 73400320 expanded"
 
 http_serve "$repo" "$work/http.log" || skip "could not start a local HTTP server"
 

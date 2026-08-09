@@ -49,7 +49,6 @@ aept_ctx_t *aept_init(void)
         free(ctx);
         return NULL;
     }
-    fetchRestartCalls = 0;
     return ctx;
 }
 
