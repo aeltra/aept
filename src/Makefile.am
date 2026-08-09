@@ -34,7 +34,7 @@ libaept_la_SOURCES = \
 libaept_la_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/libfetch
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
-libaept_la_LDFLAGS = -version-info 0:0:0
+libaept_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex '^aept_'
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
