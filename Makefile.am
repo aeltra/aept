@@ -33,7 +33,4 @@ noinst_HEADERS = \
 readme:
 	$(srcdir)/scripts/update-readme.sh
 
-update-libfetch:
-	$(srcdir)/scripts/update-libfetch.sh
-
-.PHONY: readme update-libfetch
+.PHONY: readme

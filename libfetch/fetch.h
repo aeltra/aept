@@ -112,8 +112,6 @@ struct fetch_error {
 extern "C" {
 #endif
 
-void		fetch_check_certificate(int check_cert);
-
 /*
  * Select the client certificate, taking precedence over the
  * SSL_CLIENT_{CERT,KEY}_FILE environment variables.  Either argument
@@ -132,56 +130,25 @@ void		fetch_set_client_certificate(const char *cert_file,
 
 void		fetchIO_close(fetchIO *);
 ssize_t		fetchIO_read(fetchIO *, void *, size_t);
-ssize_t		fetchIO_write(fetchIO *, const void *, size_t);
 
-/* HTTP-specific functions */
-fetchIO		*fetchXGetHTTP(struct url *, struct url_stat *, const char *);
+/* HTTP */
 fetchIO		*fetchGetHTTP(struct url *, const char *);
-fetchIO		*fetchPutHTTP(struct url *, const char *);
-int		 fetchStatHTTP(struct url *, struct url_stat *, const char *);
-int		 fetchListHTTP(struct url_list *, struct url *, const char *,
-		    const char *);
 
-/* Generic functions */
-fetchIO		*fetchXGetURL(const char *, struct url_stat *, const char *);
+/* Generic */
 fetchIO		*fetchGetURL(const char *, const char *);
-fetchIO		*fetchPutURL(const char *, const char *);
-int		 fetchStatURL(const char *, struct url_stat *, const char *);
-int		 fetchListURL(struct url_list *, const char *, const char *,
-		    const char *);
-fetchIO		*fetchXGet(struct url *, struct url_stat *, const char *);
-fetchIO		*fetchGet(struct url *, const char *);
-fetchIO		*fetchPut(struct url *, const char *);
-int		 fetchStat(struct url *, struct url_stat *, const char *);
-int		 fetchList(struct url_list *, struct url *, const char *,
-		    const char *);
 
-/* URL parsing */
+/* URL parsing.  Internal to the library: nothing outside it needs to
+ * build or inspect a struct url, but redirects and the connection
+ * cache do. */
 struct url	*fetchMakeURL(const char *, const char *, int,
 		     const char *, const char *, const char *);
 struct url	*fetchParseURL(const char *);
 struct url	*fetchCopyURL(const struct url *);
-char		*fetchStringifyURL(const struct url *);
 void		 fetchFreeURL(struct url *);
-
-/* URL listening */
-void		 fetchInitURLList(struct url_list *);
-int		 fetchAppendURLList(struct url_list *, const struct url_list *);
-void		 fetchFreeURLList(struct url_list *);
-char		*fetchUnquotePath(struct url *);
-char		*fetchUnquoteFilename(struct url *);
 
 /* Connection caching */
 void		 fetchConnectionCacheInit(int, int);
 void		 fetchConnectionCacheClose(void);
-
-/* Redirects */
-typedef void (*fetch_redirect_t)(int, const struct url *, const struct url *);
-extern fetch_redirect_t	 fetchRedirectMethod;
-
-/* Authentication */
-typedef int (*auth_t)(struct url *);
-extern auth_t		 fetchAuthMethod;
 
 /* Last error code */
 extern struct fetch_error fetchLastErrCode;

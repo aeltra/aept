@@ -39,8 +39,6 @@
 #include "fetch.h"
 #include "common.h"
 
-fetch_redirect_t fetchRedirectMethod;
-auth_t	 fetchAuthMethod;
 struct fetch_error fetchLastErrCode;
 int	 fetchTimeout;
 volatile int	 fetchRestartCalls = 1;
@@ -50,169 +48,28 @@ int	 fetchDebug;
 /*** Public API **************************************************************/
 
 /*
- * Select the appropriate protocol for the URL scheme, and return a
- * read-only stream connected to the document referenced by the URL.
- * Also fill out the struct url_stat.
- */
-fetchIO *
-fetchXGet(struct url *URL, struct url_stat *us, const char *flags)
-{
-
-	if (us != NULL) {
-		us->size = -1;
-		us->atime = us->mtime = 0;
-	}
-	if (strcasecmp(URL->scheme, SCHEME_HTTP) == 0)
-		return (fetchXGetHTTP(URL, us, flags));
-	else if (strcasecmp(URL->scheme, SCHEME_HTTPS) == 0)
-		return (fetchXGetHTTP(URL, us, flags));
-	url_seterr(URL_BAD_SCHEME);
-	return (NULL);
-}
-
-/*
- * Select the appropriate protocol for the URL scheme, and return a
- * read-only stream connected to the document referenced by the URL.
- */
-fetchIO *
-fetchGet(struct url *URL, const char *flags)
-{
-	return (fetchXGet(URL, NULL, flags));
-}
-
-/*
- * Select the appropriate protocol for the URL scheme, and return a
- * write-only stream connected to the document referenced by the URL.
- */
-fetchIO *
-fetchPut(struct url *URL, const char *flags)
-{
-
-	if (strcasecmp(URL->scheme, SCHEME_HTTP) == 0)
-		return (fetchPutHTTP(URL, flags));
-	else if (strcasecmp(URL->scheme, SCHEME_HTTPS) == 0)
-		return (fetchPutHTTP(URL, flags));
-	url_seterr(URL_BAD_SCHEME);
-	return (NULL);
-}
-
-/*
- * Select the appropriate protocol for the URL scheme, and return the
- * size of the document referenced by the URL if it exists.
- */
-int
-fetchStat(struct url *URL, struct url_stat *us, const char *flags)
-{
-
-	if (us != NULL) {
-		us->size = -1;
-		us->atime = us->mtime = 0;
-	}
-	if (strcasecmp(URL->scheme, SCHEME_HTTP) == 0)
-		return (fetchStatHTTP(URL, us, flags));
-	else if (strcasecmp(URL->scheme, SCHEME_HTTPS) == 0)
-		return (fetchStatHTTP(URL, us, flags));
-	url_seterr(URL_BAD_SCHEME);
-	return (-1);
-}
-
-/*
- * Select the appropriate protocol for the URL scheme, and return a
- * list of files in the directory pointed to by the URL.
- */
-int
-fetchList(struct url_list *ue, struct url *URL, const char *pattern,
-    const char *flags)
-{
-
-	if (strcasecmp(URL->scheme, SCHEME_HTTP) == 0)
-		return (fetchListHTTP(ue, URL, pattern, flags));
-	else if (strcasecmp(URL->scheme, SCHEME_HTTPS) == 0)
-		return (fetchListHTTP(ue, URL, pattern, flags));
-	url_seterr(URL_BAD_SCHEME);
-	return -1;
-}
-
-/*
- * Attempt to parse the given URL; if successful, call fetchXGet().
- */
-fetchIO *
-fetchXGetURL(const char *URL, struct url_stat *us, const char *flags)
-{
-	struct url *u;
-	fetchIO *f;
-
-	if ((u = fetchParseURL(URL)) == NULL)
-		return (NULL);
-
-	f = fetchXGet(u, us, flags);
-
-	fetchFreeURL(u);
-	return (f);
-}
-
-/*
- * Attempt to parse the given URL; if successful, call fetchGet().
+ * Parse the given URL and return a read-only stream connected to the
+ * document it references.  HTTP and HTTPS are the only schemes.
  */
 fetchIO *
 fetchGetURL(const char *URL, const char *flags)
 {
-	return (fetchXGetURL(URL, NULL, flags));
-}
-
-/*
- * Attempt to parse the given URL; if successful, call fetchPut().
- */
-fetchIO *
-fetchPutURL(const char *URL, const char *flags)
-{
 	struct url *u;
 	fetchIO *f;
 
 	if ((u = fetchParseURL(URL)) == NULL)
 		return (NULL);
 
-	f = fetchPut(u, flags);
+	if (strcasecmp(u->scheme, SCHEME_HTTP) == 0 ||
+	    strcasecmp(u->scheme, SCHEME_HTTPS) == 0) {
+		f = fetchGetHTTP(u, flags);
+	} else {
+		url_seterr(URL_BAD_SCHEME);
+		f = NULL;
+	}
 
 	fetchFreeURL(u);
 	return (f);
-}
-
-/*
- * Attempt to parse the given URL; if successful, call fetchStat().
- */
-int
-fetchStatURL(const char *URL, struct url_stat *us, const char *flags)
-{
-	struct url *u;
-	int s;
-
-	if ((u = fetchParseURL(URL)) == NULL)
-		return (-1);
-
-	s = fetchStat(u, us, flags);
-
-	fetchFreeURL(u);
-	return (s);
-}
-
-/*
- * Attempt to parse the given URL; if successful, call fetchList().
- */
-int
-fetchListURL(struct url_list *ue, const char *URL, const char *pattern,
-    const char *flags)
-{
-	struct url *u;
-	int rv;
-
-	if ((u = fetchParseURL(URL)) == NULL)
-		return -1;
-
-	rv = fetchList(ue, u, pattern, flags);
-
-	fetchFreeURL(u);
-	return rv;
 }
 
 /*
@@ -517,103 +374,4 @@ fetchFreeURL(struct url *u)
 {
 	free(u->doc);
 	free(u);
-}
-
-static char
-xdigit2digit(char digit)
-{
-	digit = tolower((unsigned char)digit);
-	if (digit >= 'a' && digit <= 'f')
-		digit = digit - 'a' + 10;
-	else
-		digit = digit - '0';
-
-	return digit;
-}
-
-/*
- * Unquote whole URL.
- * Skips optional parts like query or fragment identifier.
- */ 
-char *
-fetchUnquotePath(struct url *url)
-{
-	char *unquoted;
-	const char *iter;
-	size_t i;
-
-	if ((unquoted = malloc(strlen(url->doc) + 1)) == NULL)
-		return NULL;
-
-	for (i = 0, iter = url->doc; *iter != '\0'; ++iter) {
-		if (*iter == '#' || *iter == '?')
-			break;
-		if (iter[0] != '%' ||
-		    !isxdigit((unsigned char)iter[1]) ||
-		    !isxdigit((unsigned char)iter[2])) {
-			unquoted[i++] = *iter;
-			continue;
-		}
-		unquoted[i++] = xdigit2digit(iter[1]) * 16 +
-		    xdigit2digit(iter[2]);
-		iter += 2;
-	}
-	unquoted[i] = '\0';
-	return unquoted;
-}
-
-
-/*
- * Extract the file name component of a URL.
- */
-char *
-fetchUnquoteFilename(struct url *url)
-{
-	char *unquoted, *filename;
-	const char *last_slash;
-
-	if ((unquoted = fetchUnquotePath(url)) == NULL)
-		return NULL;
-
-	if ((last_slash = strrchr(unquoted, '/')) == NULL)
-		return unquoted;
-	filename = strdup(last_slash + 1);
-	free(unquoted);
-	return filename;
-}
-
-char *
-fetchStringifyURL(const struct url *url)
-{
-	size_t total;
-	char *doc;
-
-	/* scheme :// user : pwd @ host :port doc */
-	total = strlen(url->scheme) + 3 + strlen(url->user) + 1 +
-	    strlen(url->pwd) + 1 + strlen(url->host) + 6 + strlen(url->doc) + 1;
-	if ((doc = malloc(total)) == NULL)
-		return NULL;
-	if (url->port != 0)
-		snprintf(doc, total, "%s%s%s%s%s%s%s:%d%s",
-		    url->scheme,
-		    url->scheme[0] != '\0' ? "://" : "",
-		    url->user,
-		    url->pwd[0] != '\0' ? ":" : "",
-		    url->pwd,
-		    url->user[0] != '\0' || url->pwd[0] != '\0' ? "@" : "",
-		    url->host,
-		    (int)url->port,
-		    url->doc);
-	else {
-		snprintf(doc, total, "%s%s%s%s%s%s%s%s",
-		    url->scheme,
-		    url->scheme[0] != '\0' ? "://" : "",
-		    url->user,
-		    url->pwd[0] != '\0' ? ":" : "",
-		    url->pwd,
-		    url->user[0] != '\0' || url->pwd[0] != '\0' ? "@" : "",
-		    url->host,
-		    url->doc);
-	}
-	return doc;
 }

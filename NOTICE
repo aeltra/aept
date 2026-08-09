@@ -53,10 +53,17 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-libfetch
---------
+libfetch (modified fork)
+------------------------
+
+aept carries a fork of libfetch, originally from FreeBSD and taken via
+Alpine's apk-tools.  It is no longer tracked upstream: unused protocols
+and entry points have been removed and local fixes are applied directly.
+The BSD terms below continue to govern it.
 
 Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
+Copyright (c) 2008, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
+Copyright (c) 2020 Noel Kuntze <noel.kuntze@thermi.consulting>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

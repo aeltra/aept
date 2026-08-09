@@ -15,9 +15,12 @@ make clean           # remove build artifacts
 ```
 
 Build dependencies: libarchive and OpenSSL (pkg-config), libsolv + libsolvext
-(AC_CHECK_LIB). libfetch is vendored under `libfetch/`; it is patched at import
-time from `patches/libfetch/` by `scripts/update-libfetch.sh`, not at build
-time, so upstream fixes belong in a patch there.
+(AC_CHECK_LIB). `libfetch/` is a **fork**, no longer tracked upstream — edit it
+directly; there is no patch series and no re-import script. It has been pruned
+to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
+and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`
+and `HTTP_AUTH` are gone. `tests/test_http.sh` characterises its behaviour —
+run it after any change there.
 
 Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
 three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)
