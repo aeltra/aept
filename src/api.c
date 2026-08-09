@@ -43,7 +43,12 @@ aept_ctx_t *aept_init(void)
     ctx->lock_fd = -1;
     ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
     aept_log_set_ctx(ctx);
-    fetchConnectionCacheInit(4, 2);
+    ctx->http = fetch_ctx_new(4, 2);
+    if (!ctx->http) {
+        aept_log_set_ctx(NULL);
+        free(ctx);
+        return NULL;
+    }
     fetchRestartCalls = 0;
     return ctx;
 }
@@ -53,7 +58,8 @@ void aept_cleanup(aept_ctx_t *ctx)
     if (!ctx)
         return;
 
-    fetchConnectionCacheClose();
+    fetch_ctx_free(ctx->http);
+    ctx->http = NULL;
 
     if (ctx->config_loaded) {
         aept_config_free(&ctx->config);

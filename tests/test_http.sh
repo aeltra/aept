@@ -210,4 +210,29 @@ conns=$(cat "$work/count3")
     || fail "close: 3 downloads opened $conns connections, expected 3"
 note "a server that declines keep-alive gets one connection per download"
 
+# ── contexts do not share connections ────────────────────────────────
+#
+# The cache belongs to the context.  Two contexts fetching the same
+# host must each open their own connection: while the cache was global,
+# the second context would silently reuse a connection the first had
+# opened — and with it the TLS session, so a request meant to present
+# one client certificate went out authenticated as another.
+#
+# Same three URLs as the keep-alive case above, which needed exactly
+# one connection; the only difference here is a context per download.
+
+http_stub_stop
+http_stub "$work/count4" "$work/stub4.log" || skip "could not restart the stub"
+base="http://127.0.0.1:$STUB_PORT"
+
+timeout 60 "$HTTPGET" -s "$base/ok" "$work/a" "$base/ok" "$work/b" \
+    "$base/ok" "$work/c" >/dev/null 2>&1 \
+    || fail "separate contexts: the three downloads did not all succeed"
+
+conns=$(cat "$work/count4")
+[ "$conns" -eq 3 ] \
+    || fail "separate contexts: 3 downloads over 3 contexts opened $conns
+connections, expected 3 — a connection crossed between contexts"
+note "three contexts keep their connections to themselves"
+
 exit 0

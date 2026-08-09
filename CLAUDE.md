@@ -67,7 +67,11 @@ run by Automake's harness.
 
 ## Architecture
 
-**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots), **except across operations that download** — `aept_update()`, `aept_install()`. libfetch keeps all of its state in process globals: the connection cache (`src/libfetch/common.c:298`) is a list every fetch mutates, the error state (`src/libfetch/fetch.c:42`) is one struct, and the client certificate selected by `fetch_set_client_certificate()` belongs to whichever thread set it last. Callers must serialise download-bearing calls until that changes. `aept_cancel()` is safe to call from any thread.
+**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots); `aept_cancel()` is safe to call from any thread.
+
+Downloading used to be the exception, because libfetch kept its state in process globals. That is no longer so: the connection cache and the client certificate live in the per-context `struct fetch_ctx` (`ctx->http`, created by `aept_init()`), and the error state is `_Thread_local`. What remains at file scope in `src/libfetch/` is written once or never — `ssl_verify_mode` has no setter, `fetchTimeout` and `fetchDebug` are never assigned, and `fetchRestartCalls` is set to the same value by every `aept_init()`. **Concurrent downloads are believed safe but are not covered by a test**; treat that as unproven rather than guaranteed.
+
+A consequence worth knowing: the cache limits (4 connections, 2 per host) are now *per context*, not per process, so N contexts can hold up to 4N idle sockets.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 

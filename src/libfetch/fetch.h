@@ -112,6 +112,13 @@ struct fetch_error {
 extern "C" {
 #endif
 
+/* Context: connection cache and per-caller TLS configuration.  A
+ * stream returned by fetchGetURL() holds a reference to the context it
+ * was created from, so the context must outlive the stream. */
+struct fetch_ctx;
+struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit);
+void		 fetch_ctx_free(struct fetch_ctx *);
+
 /*
  * Select the client certificate, taking precedence over the
  * SSL_CLIENT_{CERT,KEY}_FILE environment variables.  Either argument
@@ -120,22 +127,21 @@ extern "C" {
  * The strings are not copied and must outlive the fetch calls made
  * with them.
  *
- * The selection is global, like the rest of libfetch's configuration,
- * and so belongs to whichever thread set it last.  Callers issuing
- * fetches from several threads must serialise them, as they already
- * must for the connection cache and the error state.
+ * The selection belongs to the context, and so does the connection
+ * cache: a connection opened while presenting one certificate is never
+ * reused by a context configured with another.
  */
-void		fetch_set_client_certificate(const char *cert_file,
-			const char *key_file);
+void		fetch_set_client_certificate(struct fetch_ctx *ctx,
+			const char *cert_file, const char *key_file);
 
 void		fetchIO_close(fetchIO *);
 ssize_t		fetchIO_read(fetchIO *, void *, size_t);
 
 /* HTTP */
-fetchIO		*fetchGetHTTP(struct url *, const char *);
+fetchIO		*fetchGetHTTP(struct fetch_ctx *, struct url *, const char *);
 
 /* Generic */
-fetchIO		*fetchGetURL(const char *, const char *);
+fetchIO		*fetchGetURL(struct fetch_ctx *, const char *, const char *);
 
 /* URL parsing.  Internal to the library: nothing outside it needs to
  * build or inspect a struct url, but redirects and the connection
@@ -146,12 +152,8 @@ struct url	*fetchParseURL(const char *);
 struct url	*fetchCopyURL(const struct url *);
 void		 fetchFreeURL(struct url *);
 
-/* Connection caching */
-void		 fetchConnectionCacheInit(int, int);
-void		 fetchConnectionCacheClose(void);
-
-/* Last error code */
-extern struct fetch_error fetchLastErrCode;
+/* Last error code, per-thread */
+extern _Thread_local struct fetch_error fetchLastErrCode;
 
 /* I/O timeout */
 extern int		 fetchTimeout;

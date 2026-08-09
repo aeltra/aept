@@ -40,6 +40,21 @@
 #include <limits.h>
 #include "openssl-compat.h"
 
+/*
+ * Everything a fetch reads from its caller's configuration, plus the
+ * connections it keeps alive between calls.  Held by the caller and
+ * passed down, so two of them never interfere: in particular a cached
+ * connection is never handed to a request that would have presented a
+ * different client certificate.
+ */
+struct fetch_ctx {
+	struct fetchconn *connection_cache;
+	int cache_global_limit;
+	int cache_per_host_limit;
+	const char *ssl_client_cert_file;
+	const char *ssl_client_key_file;
+};
+
 #if defined(__GNUC__) && __GNUC__ >= 3
 #define LIBFETCH_PRINTFLIKE(fmtarg, firstvararg)	\
 	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
@@ -89,11 +104,11 @@ uintmax_t	 fetch_parseuint(const char *p, const char **endptr, int radix, uintma
 int		 fetch_default_port(const char *);
 int		 fetch_default_proxy_port(const char *);
 int		 fetch_bind(int, int, const char *);
-conn_t		*fetch_cache_get(const struct url *, int);
-void		 fetch_cache_put(conn_t *, int (*)(conn_t *));
+conn_t		*fetch_cache_get(struct fetch_ctx *, const struct url *, int);
+void		 fetch_cache_put(struct fetch_ctx *, conn_t *, int (*)(conn_t *));
 conn_t		*fetch_connect(struct url *, struct url *, int, int);
 conn_t		*fetch_reopen(int);
-int		 fetch_ssl(conn_t *, const struct url *, int);
+int		 fetch_ssl(struct fetch_ctx *, conn_t *, const struct url *, int);
 ssize_t		 fetch_read(conn_t *, char *, size_t);
 int		 fetch_getln(conn_t *);
 ssize_t		 fetch_write(conn_t *, const void *, size_t);

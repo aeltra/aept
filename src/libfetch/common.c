@@ -57,16 +57,15 @@
 /*** Local data **************************************************************/
 
 static int ssl_verify_mode = SSL_VERIFY_PEER;
-static const char *ssl_client_cert_file = NULL;
-static const char *ssl_client_key_file = NULL;
 
 /*** Error-reporting functions ***********************************************/
 
 void
-fetch_set_client_certificate(const char *cert_file, const char *key_file)
+fetch_set_client_certificate(struct fetch_ctx *ctx, const char *cert_file,
+    const char *key_file)
 {
-	ssl_client_cert_file = cert_file;
-	ssl_client_key_file = key_file;
+	ctx->ssl_client_cert_file = cert_file;
+	ctx->ssl_client_key_file = key_file;
 }
 
 /*
@@ -295,41 +294,51 @@ fetch_connect(struct url *cache_url, struct url *url, int af, int verbose)
 	return (conn);
 }
 
-static conn_t *connection_cache;
-static int cache_global_limit = 0;
-static int cache_per_host_limit = 0;
-
 /*
- * Initialise cache with the given limits.
+ * Create a fetch context holding a connection cache with the given
+ * limits.  Everything a fetch reads from its caller's configuration
+ * lives here, so two contexts never see each other's connections or
+ * each other's client certificate.
  */
-void
-fetchConnectionCacheInit(int global_limit, int per_host_limit)
+struct fetch_ctx *
+fetch_ctx_new(int global_limit, int per_host_limit)
 {
+	struct fetch_ctx *ctx = calloc(1, sizeof(*ctx));
+
+	if (ctx == NULL)
+		return (NULL);
 
 	if (global_limit < 0)
-		cache_global_limit = INT_MAX;
+		ctx->cache_global_limit = INT_MAX;
 	else if (per_host_limit > global_limit)
-		cache_global_limit = per_host_limit;
+		ctx->cache_global_limit = per_host_limit;
 	else
-		cache_global_limit = global_limit;
+		ctx->cache_global_limit = global_limit;
 	if (per_host_limit < 0)
-		cache_per_host_limit = INT_MAX;
+		ctx->cache_per_host_limit = INT_MAX;
 	else
-		cache_per_host_limit = per_host_limit;
+		ctx->cache_per_host_limit = per_host_limit;
+
+	return (ctx);
 }
 
 /*
- * Flush cache and free all associated resources.
+ * Flush the cache, free all associated resources and the context.
  */
 void
-fetchConnectionCacheClose(void)
+fetch_ctx_free(struct fetch_ctx *ctx)
 {
 	conn_t *conn;
 
-	while ((conn = connection_cache) != NULL) {
-		connection_cache = conn->next_cached;
+	if (ctx == NULL)
+		return;
+
+	while ((conn = ctx->connection_cache) != NULL) {
+		ctx->connection_cache = conn->next_cached;
 		(*conn->cache_close)(conn);
 	}
+
+	free(ctx);
 }
 
 /*
@@ -337,11 +346,11 @@ fetchConnectionCacheClose(void)
  * protocol/host/port/user/password/family.
  */
 conn_t *
-fetch_cache_get(const struct url *url, int af)
+fetch_cache_get(struct fetch_ctx *ctx, const struct url *url, int af)
 {
 	conn_t *conn, *last_conn = NULL;
 
-	for (conn = connection_cache; conn; conn = conn->next_cached) {
+	for (conn = ctx->connection_cache; conn; conn = conn->next_cached) {
 		if (conn->cache_url->port == url->port &&
 		    strcmp(conn->cache_url->scheme, url->scheme) == 0 &&
 		    strcmp(conn->cache_url->host, url->host) == 0 &&
@@ -352,7 +361,7 @@ fetch_cache_get(const struct url *url, int af)
 			if (last_conn != NULL)
 				last_conn->next_cached = conn->next_cached;
 			else
-				connection_cache = conn->next_cached;
+				ctx->connection_cache = conn->next_cached;
 			return conn;
 		}
 		last_conn = conn;
@@ -367,19 +376,19 @@ fetch_cache_get(const struct url *url, int af)
  * is explicitly closed, the given callback is called.
  */
 void
-fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
+fetch_cache_put(struct fetch_ctx *ctx, conn_t *conn, int (*closecb)(conn_t *))
 {
 	conn_t *iter, *last, *next_cached;
 	int global_count, host_count;
 
-	if (conn->cache_url == NULL || cache_global_limit == 0) {
+	if (conn->cache_url == NULL || ctx->cache_global_limit == 0) {
 		(*closecb)(conn);
 		return;
 	}
 
 	global_count = host_count = 0;
 	last = NULL;
-	for (iter = connection_cache; iter; iter = next_cached) {
+	for (iter = ctx->connection_cache; iter; iter = next_cached) {
 		int host_match;
 
 		next_cached = iter->next_cached;
@@ -388,8 +397,8 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
 		    iter->cache_url->host) == 0;
 		if (host_match)
 			++host_count;
-		if (global_count < cache_global_limit &&
-		    host_count < cache_per_host_limit) {
+		if (global_count < ctx->cache_global_limit &&
+		    host_count < ctx->cache_per_host_limit) {
 			last = iter;
 			continue;
 		}
@@ -399,13 +408,13 @@ fetch_cache_put(conn_t *conn, int (*closecb)(conn_t *))
 		if (last != NULL)
 			last->next_cached = iter->next_cached;
 		else
-			connection_cache = iter->next_cached;
+			ctx->connection_cache = iter->next_cached;
 		(*iter->cache_close)(iter);
 	}
 
 	conn->cache_close = closecb;
-	conn->next_cached = connection_cache;
-	connection_cache = conn;
+	conn->next_cached = ctx->connection_cache;
+	ctx->connection_cache = conn;
 }
 
 /*
@@ -452,12 +461,13 @@ static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
  * If the key file is not specified, it is assumed that the certificate
  * file is a .pem file containing both the cert and the key.
  */
-static int fetch_ssl_setup_client_certificate(SSL_CTX *ctx, int verbose)
+static int fetch_ssl_setup_client_certificate(struct fetch_ctx *fctx,
+    SSL_CTX *ctx, int verbose)
 {
 	const char *cert_file = NULL, *key_file = NULL;
 
-	cert_file = ssl_client_cert_file;
-	if (cert_file) key_file = ssl_client_key_file;
+	cert_file = fctx->ssl_client_cert_file;
+	if (cert_file) key_file = fctx->ssl_client_key_file;
 
 	if (!cert_file) {
 		cert_file = getenv("SSL_CLIENT_CERT_FILE");
@@ -516,7 +526,8 @@ static int map_tls_error(void)
  * Enable SSL on a connection.
  */
 int
-fetch_ssl(conn_t *conn, const struct url *URL, int verbose)
+fetch_ssl(struct fetch_ctx *fctx, conn_t *conn, const struct url *URL,
+    int verbose)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 	conn->ssl_meth = SSLv23_client_method();
@@ -528,7 +539,8 @@ fetch_ssl(conn_t *conn, const struct url *URL, int verbose)
 	SSL_CTX_set_mode(conn->ssl_ctx, SSL_MODE_AUTO_RETRY);
 
 	if (!fetch_ssl_setup_peer_verification(conn->ssl_ctx, verbose)) goto err;
-	if (!fetch_ssl_setup_client_certificate(conn->ssl_ctx, verbose)) goto err;
+	if (!fetch_ssl_setup_client_certificate(fctx, conn->ssl_ctx, verbose))
+		goto err;
 
 	conn->ssl = SSL_new(conn->ssl_ctx);
 	if (conn->ssl == NULL) goto err;

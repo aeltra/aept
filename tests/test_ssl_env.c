@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "aept/aept.h"
 #include "aept/internal.h"
 #include "aept/download.h"
 #include "aept/msg.h"
@@ -21,14 +22,11 @@
 #define CERT_PATH "/nonexistent/aept-test/client.pem"
 #define KEY_PATH  "/nonexistent/aept-test/client.key"
 
-/* The download below is meant to fail and logs an error for it. */
-static struct aept_ctx ctx;
-
-static void silence_logging(void)
-{
-    ctx.config.verbosity = AEPT_LOG_ERROR - 1;
-    aept_log_set_ctx(&ctx);
-}
+/*
+ * A real context from aept_init(): aept_download() needs the fetch
+ * context it creates, so a hand-zeroed struct will not do.
+ */
+static aept_ctx_t *ctx;
 
 static void check_unset(const char *name)
 {
@@ -50,9 +48,17 @@ int main(void)
     }
     close(fd);
 
-    ctx.config.ssl_client_cert = CERT_PATH;
-    ctx.config.ssl_client_key = KEY_PATH;
-    silence_logging();
+    ctx = aept_init();
+    if (!ctx) {
+        printf("Bail out! aept_init failed\n");
+        return 1;
+    }
+
+    ctx->config.ssl_client_cert = CERT_PATH;
+    ctx->config.ssl_client_key = KEY_PATH;
+
+    /* The downloads below are meant to fail and log an error each. */
+    aept_set_verbosity(ctx, AEPT_LOG_ERROR - 1);
 
     /* Start from a clean slate, so a leak is unambiguous. */
     unsetenv("SSL_CLIENT_CERT_FILE");
@@ -64,7 +70,7 @@ int main(void)
      * before the connection was attempted, so a refused connection is
      * enough to expose the leak.
      */
-    r = aept_download(&ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
+    r = aept_download(ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
     test_ok(r != 0, "the download failed, as intended");
 
     /*
@@ -83,7 +89,7 @@ int main(void)
      */
     setenv("SSL_CLIENT_CERT_FILE", "/set/by/the/caller", 1);
 
-    r = aept_download(&ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
+    r = aept_download(ctx, "http://127.0.0.1:1/Packages", dest, "Packages");
     test_ok(r != 0, "the second download failed, as intended");
 
     test_str_eq(getenv("SSL_CLIENT_CERT_FILE"), "/set/by/the/caller",
@@ -91,6 +97,7 @@ int main(void)
 
     unsetenv("SSL_CLIENT_CERT_FILE");
     unlink(dest);
+    aept_cleanup(ctx);
 
     return test_summary();
 }

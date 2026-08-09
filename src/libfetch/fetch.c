@@ -39,7 +39,10 @@
 #include "fetch.h"
 #include "common.h"
 
-struct fetch_error fetchLastErrCode;
+/* Per-thread: an error is set and read inside a single call, so it
+ * belongs to the thread that made the call rather than to any shared
+ * configuration. */
+_Thread_local struct fetch_error fetchLastErrCode;
 int	 fetchTimeout;
 volatile int	 fetchRestartCalls = 1;
 int	 fetchDebug;
@@ -52,7 +55,7 @@ int	 fetchDebug;
  * document it references.  HTTP and HTTPS are the only schemes.
  */
 fetchIO *
-fetchGetURL(const char *URL, const char *flags)
+fetchGetURL(struct fetch_ctx *fctx, const char *URL, const char *flags)
 {
 	struct url *u;
 	fetchIO *f;
@@ -62,7 +65,7 @@ fetchGetURL(const char *URL, const char *flags)
 
 	if (strcasecmp(u->scheme, SCHEME_HTTP) == 0 ||
 	    strcasecmp(u->scheme, SCHEME_HTTPS) == 0) {
-		f = fetchGetHTTP(u, flags);
+		f = fetchGetHTTP(fctx, u, flags);
 	} else {
 		url_seterr(URL_BAD_SCHEME);
 		f = NULL;

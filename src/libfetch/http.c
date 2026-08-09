@@ -113,6 +113,7 @@ static int http_cmd(conn_t *, const char *, ...) LIBFETCH_PRINTFLIKE(2, 3);
 
 struct httpio
 {
+	struct fetch_ctx *ctx;		/* owns the connection cache */
 	conn_t		*conn;		/* connection */
 	int		 chunked;	/* chunked mode */
 	int		 keep_alive;	/* keep-alive mode */
@@ -285,7 +286,7 @@ http_closefn(void *v)
 	conn_t *conn = io->conn;
 
 	if (io->keep_alive) {
-		fetch_cache_put(conn, fetch_close);
+		fetch_cache_put(io->ctx, conn, fetch_close);
 	} else {
 		fetch_close(conn);
 	}
@@ -298,7 +299,8 @@ http_closefn(void *v)
  * Wrap a file descriptor up
  */
 static fetchIO *
-http_funopen(conn_t *conn, int chunked, int keep_alive, off_t clength)
+http_funopen(struct fetch_ctx *fctx, conn_t *conn, int chunked,
+    int keep_alive, off_t clength)
 {
 	struct httpio *io;
 	fetchIO *f;
@@ -307,6 +309,7 @@ http_funopen(conn_t *conn, int chunked, int keep_alive, off_t clength)
 		fetch_syserr();
 		return (NULL);
 	}
+	io->ctx = fctx;
 	io->conn = conn;
 	io->chunked = chunked;
 	io->contentlength = clength;
@@ -724,7 +727,8 @@ http_cork(conn_t *conn, int val)
  * Connect to the correct HTTP server or proxy.
  */
 static conn_t *
-http_connect(struct url *URL, struct url *purl, const char *flags, int *cached)
+http_connect(struct fetch_ctx *fctx, struct url *URL, struct url *purl,
+    const char *flags, int *cached)
 {
 	struct url *cache_url;
 	conn_t *conn;
@@ -743,7 +747,7 @@ http_connect(struct url *URL, struct url *purl, const char *flags, int *cached)
 	is_https = strcasecmp(URL->scheme, SCHEME_HTTPS) == 0;
 	cache_url = (is_https || !purl) ? URL : purl;
 
-	if ((conn = fetch_cache_get(cache_url, af)) != NULL) {
+	if ((conn = fetch_cache_get(fctx, cache_url, af)) != NULL) {
 		*cached = 1;
 		return (conn);
 	}
@@ -776,7 +780,7 @@ http_connect(struct url *URL, struct url *purl, const char *flags, int *cached)
 			}
 		} while (h > hdr_end);
 	}
-	if (is_https && fetch_ssl(conn, URL, verbose) == -1) {
+	if (is_https && fetch_ssl(fctx, conn, URL, verbose) == -1) {
 		goto ouch;
 	}
 	return (conn);
@@ -853,8 +857,8 @@ set_if_modified_since(conn_t *conn, time_t last_modified)
  * XXX off into a separate function.
  */
 static fetchIO *
-http_request(struct url *URL, const char *op, struct url_stat *us,
-    struct url *purl, const char *flags)
+http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
+    struct url_stat *us, struct url *purl, const char *flags)
 {
 	conn_t *conn;
 	struct url *url, *new;
@@ -903,7 +907,7 @@ http_request(struct url *URL, const char *op, struct url_stat *us,
 			url->port = fetch_default_port(url->scheme);
 
 		/* connect to server or proxy */
-		if ((conn = http_connect(url, purl, flags, &cached)) == NULL)
+		if ((conn = http_connect(fctx, url, purl, flags, &cached)) == NULL)
 			goto ouch;
 
 		host = url->host;
@@ -1189,14 +1193,14 @@ http_request(struct url *URL, const char *op, struct url_stat *us,
 	if (conn->err == HTTP_NOT_MODIFIED) {
 		http_seterr(HTTP_NOT_MODIFIED);
 		if (keep_alive) {
-			fetch_cache_put(conn, fetch_close);
+			fetch_cache_put(fctx, conn, fetch_close);
 			conn = NULL;
 		}
 		goto ouch;
 	}
 
 	/* wrap it up in a fetchIO */
-	if ((f = http_funopen(conn, chunked, keep_alive, clength)) == NULL) {
+	if ((f = http_funopen(fctx, conn, chunked, keep_alive, clength)) == NULL) {
 		fetch_syserr();
 		goto ouch;
 	}
@@ -1244,8 +1248,8 @@ ouch:
  * Retrieve a file by HTTP
  */
 fetchIO *
-fetchGetHTTP(struct url *URL, const char *flags)
+fetchGetHTTP(struct fetch_ctx *fctx, struct url *URL, const char *flags)
 {
-	return (http_request(URL, "GET", NULL, http_get_proxy(URL, flags),
-	    flags));
+	return (http_request(fctx, URL, "GET", NULL,
+	    http_get_proxy(URL, flags), flags));
 }
