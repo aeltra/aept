@@ -30,6 +30,7 @@ Makefile
 /tests/test_script
 /tests/test_config_root
 /tests/test_archive_open
+/tests/test_clearsign
 /tests/*.log
 /tests/*.trs
 

@@ -12,6 +12,7 @@ noinst_HEADERS = \
     include/aept/autoremove.h \
     include/aept/clash.h \
     include/aept/clean.h \
+    include/aept/clearsign.h \
     include/aept/conffile.h \
     include/aept/config.h \
     include/aept/download.h \

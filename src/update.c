@@ -13,6 +13,7 @@
 
 #include "aept/internal.h"
 #include "aept/archive.h"
+#include "aept/clearsign.h"
 #include "aept/download.h"
 #include "aept/msg.h"
 #include "aept/update.h"
@@ -41,6 +42,131 @@ static int decompress_gz(const char *gz_path, const char *out_path)
         r = -1;
 
     aept_ar_close(ar);
+
+    return r;
+}
+
+/* Decompress a gzip file into a newly allocated buffer. */
+static char *slurp_gz(const char *path, size_t *out_len)
+{
+    struct aept_ar *ar;
+    char *buf = NULL;
+    size_t buf_len = 0;
+    FILE *mem;
+    int r;
+
+    ar = aept_ar_open_compressed_file(path);
+    if (!ar)
+        return NULL;
+
+    mem = open_memstream(&buf, &buf_len);
+    if (!mem) {
+        aept_ar_close(ar);
+        return NULL;
+    }
+
+    r = aept_ar_copy_to_stream(ar, mem);
+    aept_ar_close(ar);
+
+    if (fclose(mem) != 0 || r < 0) {
+        free(buf);
+        return NULL;
+    }
+
+    *out_len = buf_len;
+    return buf;
+}
+
+/*
+ * Fetch InPackages.gz — the index and its signature in a single object —
+ * and split it into the message and signature files that usign expects.
+ *
+ * Fetching one object instead of two removes the window in which a
+ * republished repository can hand out an index and a signature that do
+ * not belong together.  A repository that requires signature checking
+ * must publish it: there is deliberately no fallback to a detached
+ * Packages.sig, so that blocking this one request cannot push a client
+ * back onto the two-object path.
+ *
+ * Returns 0 on success, -1 on error.
+ */
+static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src,
+                              const char *list_path, const char *sig_path)
+{
+    char *url = NULL;
+    char *tmp_path = NULL;
+    char *buf = NULL;
+    size_t buf_len = 0;
+    aept_clearsign_t cs;
+    int r;
+
+    aept_asprintf(&url, "%s/InPackages.gz", src->url);
+    aept_asprintf(&tmp_path, "%s.in.gz", list_path);
+
+    r = aept_download(ctx, url, tmp_path, url);
+    free(url);
+
+    if (r < 0) {
+        aept_log_error("failed to download InPackages.gz for '%s'; a signed "
+                  "repository must publish one", src->name);
+        unlink(tmp_path);
+        free(tmp_path);
+        return -1;
+    }
+
+    buf = slurp_gz(tmp_path, &buf_len);
+    unlink(tmp_path);
+    free(tmp_path);
+
+    if (!buf) {
+        aept_log_error("failed to decompress InPackages.gz for '%s'",
+                  src->name);
+        return -1;
+    }
+
+    if (aept_clearsign_parse(buf, buf_len, &cs) < 0) {
+        aept_log_error("malformed signed index for '%s'", src->name);
+        free(buf);
+        return -1;
+    }
+
+    r = aept_clearsign_write(&cs, list_path, sig_path);
+    free(buf);
+
+    return r < 0 ? -1 : 0;
+}
+
+/* Fetch the plain index, decompressing it when the source is gzipped. */
+static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src,
+                             const char *list_path)
+{
+    char *url = NULL;
+    int r;
+
+    if (src->gzip) {
+        char *gz_path = NULL;
+
+        aept_asprintf(&url, "%s/Packages.gz", src->url);
+        aept_asprintf(&gz_path, "%s.gz", list_path);
+
+        r = aept_download(ctx, url, gz_path, url);
+        free(url);
+
+        if (r == 0) {
+            r = decompress_gz(gz_path, list_path);
+            if (r < 0)
+                aept_log_error("failed to decompress Packages.gz for '%s'",
+                          src->name);
+        }
+
+        unlink(gz_path);
+        free(gz_path);
+        return r;
+    }
+
+    aept_asprintf(&url, "%s/Packages", src->url);
+    r = aept_download(ctx, url, list_path, "Packages");
+    free(url);
 
     return r;
 }
@@ -110,10 +236,8 @@ int aept_op_update(struct aept_ctx *ctx)
 
     for (i = 0; i < ctx->config.nsources; i++) {
         aept_source_t *src = &ctx->config.sources[i];
-        char *url = NULL;
-        char *dest = NULL;
         char *list_path = NULL;
-        int r;
+        char *sig_path = NULL;
 
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
@@ -122,77 +246,30 @@ int aept_op_update(struct aept_ctx *ctx)
         }
 
         aept_asprintf(&list_path, "%s/%s", ctx->config.lists_dir, src->name);
-
-        if (src->gzip) {
-            char *gz_path = NULL;
-
-            aept_asprintf(&url, "%s/Packages.gz", src->url);
-            aept_asprintf(&gz_path, "%s.gz", list_path);
-
-            r = aept_download(ctx,url, gz_path, url);
-            if (r < 0) {
-                errors++;
-                goto next;
-            }
-
-            r = decompress_gz(gz_path, list_path);
-            unlink(gz_path);
-            free(gz_path);
-
-            if (r < 0) {
-                aept_log_error("failed to decompress Packages.gz for '%s'",
-                          src->name);
-                errors++;
-                goto next;
-            }
-        } else {
-            aept_asprintf(&url, "%s/Packages", src->url);
-
-            r = aept_download(ctx,url, list_path, "Packages");
-            if (r < 0) {
-                errors++;
-                goto next;
-            }
-        }
+        aept_asprintf(&sig_path, "%s.sig", list_path);
 
         if (ctx->config.check_signature) {
-            char *sig_url = NULL;
-            char *sig_path = NULL;
-
-            aept_asprintf(&sig_url, "%s/Packages.sig", src->url);
-            aept_asprintf(&sig_path, "%s.sig", list_path);
-
-            r = aept_download(ctx,sig_url, sig_path, sig_url);
-            if (r < 0) {
-                aept_log_error("failed to download signature for '%s'",
-                          src->name);
-                unlink(list_path);
+            if (fetch_signed_index(ctx, src, list_path, sig_path) < 0) {
                 errors++;
-                free(sig_url);
-                free(sig_path);
                 goto next;
             }
 
-            r = aept_verify_signature(ctx,list_path, sig_path);
-            if (r < 0) {
+            if (aept_verify_signature(ctx, list_path, sig_path) < 0) {
                 unlink(list_path);
                 unlink(sig_path);
                 errors++;
-                free(sig_url);
-                free(sig_path);
                 goto next;
             }
-
-            free(sig_url);
-            free(sig_path);
+        } else if (fetch_plain_index(ctx, src, list_path) < 0) {
+            errors++;
+            goto next;
         }
 
         aept_log_info("updated source '%s'", src->name);
 
     next:
-        free(url);
-        free(dest);
         free(list_path);
+        free(sig_path);
     }
 
     prune_stale_lists(ctx);

@@ -82,6 +82,74 @@ new_root() {
         > "$1/etc/aept/aept.conf"
 }
 
+# ── signed repository fixtures ───────────────────────────────────────
+
+# make_keypair <dir> — generate a usign keypair and a trust store holding
+# the public key under the name usign looks it up by (its fingerprint).
+# Sets KEY_SECRET and KEY_TRUSTDB.
+make_keypair() {
+    mkdir -p "$1/trustdb"
+    usign -G -p "$1/pub.key" -s "$1/sec.key" >/dev/null 2>&1 \
+        || skip "usign could not generate a keypair"
+    cp "$1/pub.key" "$1/trustdb/$(usign -F -p "$1/pub.key")"
+    KEY_SECRET=$1/sec.key
+    KEY_TRUSTDB=$1/trustdb
+}
+
+# make_inpackages <index-file> <secret-key> <out.gz>
+#
+# Wrap an index in the clearsigned envelope the repository indexer
+# produces, then gzip it.  The signature covers the index bytes exactly,
+# so the index is concatenated verbatim.
+make_inpackages() {
+    _idx=$1 _key=$2 _out=$3
+    _tmp=$(mktemp -d) || fail "mktemp failed"
+
+    usign -S -m "$_idx" -s "$_key" -x "$_tmp/sig" \
+        || fail "usign failed to sign $_idx"
+
+    {
+        printf '%s\n' '-----BEGIN SIGNIFY SIGNED MESSAGE-----'
+        cat "$_idx"
+        printf '%s\n' '-----BEGIN SIGNIFY SIGNATURE-----'
+        cat "$_tmp/sig"
+        printf '%s\n' '-----END SIGNIFY SIGNATURE-----'
+    } > "$_tmp/InPackages"
+
+    gzip -c "$_tmp/InPackages" > "$_out"
+    rm -rf "$_tmp"
+}
+
+# ── a throwaway HTTP server ──────────────────────────────────────────
+#
+# libfetch is built without file.c, so HTTP is the only transport aept
+# can use; serving over loopback keeps the test offline.
+
+# http_serve <dir> <logfile> — sets HTTP_PORT and HTTP_PID.
+http_serve() {
+    python3 -u -m http.server 0 --bind 127.0.0.1 --directory "$1" \
+        > "$2" 2>&1 &
+    HTTP_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        HTTP_PORT=$(sed -n 's/.*port \([0-9][0-9]*\).*/\1/p' "$2" | head -1)
+        if [ -n "$HTTP_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$HTTP_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+http_stop() {
+    [ -n "${HTTP_PID:-}" ] && kill "$HTTP_PID" 2>/dev/null
+    HTTP_PID=
+}
+
 # aept_run <root> <args...> — invoke aept against an offline root.
 aept_run() {
     _root=$1

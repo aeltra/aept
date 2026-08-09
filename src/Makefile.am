@@ -5,6 +5,7 @@ libaept_la_SOURCES = \
     api.c \
     autoremove.c \
     clash.c \
+    clearsign.c \
     clean.c \
     conffile.c \
     config.c \

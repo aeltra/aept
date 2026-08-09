@@ -34,9 +34,19 @@ performed by usign.
 
 ## update [options]
 
-Fetch package lists from all configured repositories. If signature checking
-is enabled, also downloads and verifies the _Packages.sig_ file for each
-source. Package lists are stored in the lists directory (see *FILES*).
+Fetch package lists from all configured repositories. Package lists are stored
+in the lists directory (see *FILES*).
+
+When signature checking is enabled, the list is fetched as _InPackages.gz_: a
+single object carrying both the index and its signature. Fetching one object
+rather than an index and a detached signature separately removes the window in
+which a repository republished mid-update can serve two files that do not
+belong together. A repository that is signed must publish _InPackages.gz_;
+there is deliberately no fallback to _Packages.sig_, so that blocking a single
+request cannot push a client back onto the two-object path.
+
+When signature checking is disabled, _Packages_ or _Packages.gz_ is fetched
+directly and nothing is verified.
 
 ## install [options] <packages...>
 

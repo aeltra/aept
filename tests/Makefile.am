@@ -5,7 +5,7 @@ AM_CPPFLAGS = \
     -I$(srcdir)
 
 check_PROGRAMS = test_archive_path test_script test_config_root \
-    test_archive_open
+    test_archive_open test_clearsign
 
 noinst_HEADERS = test.h
 
@@ -40,12 +40,20 @@ test_archive_open_SOURCES = \
 test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS)
 test_archive_open_LDADD = $(ARCHIVE_LIBS)
 
+test_clearsign_SOURCES = \
+    test_clearsign.c \
+    $(top_srcdir)/src/clearsign.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_clearsign_CFLAGS = -D_GNU_SOURCE
+
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
 dist_check_SCRIPTS = \
     test_install_failure.sh \
     test_offline_root_tmp.sh \
-    test_install_local_noop.sh
+    test_install_local_noop.sh \
+    test_update_inpackages.sh
 
 EXTRA_DIST = aeptlib.sh
 
