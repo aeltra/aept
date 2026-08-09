@@ -22,8 +22,8 @@ Callers that set nothing keep the previous behaviour.
 Signed-off-by: Tobias Koch <tobias.koch@aeltra.eu>
 ---
  libfetch/common.c | 27 +++++++++++++++++++++------
- libfetch/fetch.h  | 11 +++++++++++
- 2 files changed, 32 insertions(+), 6 deletions(-)
+ libfetch/fetch.h  | 16 ++++++++++++++++
+ 2 files changed, 37 insertions(+), 6 deletions(-)
 
 diff --git a/libfetch/common.c b/libfetch/common.c
 index 7129f13..fbfdc97 100644
@@ -85,10 +85,10 @@ index 7129f13..fbfdc97 100644
  #ifdef CLIENT_CERT_FILE
  	if (!cert_file && access(CLIENT_CERT_FILE, R_OK) == 0) {
 diff --git a/libfetch/fetch.h b/libfetch/fetch.h
-index 50d4f7b..891d83e 100644
+index 50d4f7b..6bc3d1d 100644
 --- a/libfetch/fetch.h
 +++ b/libfetch/fetch.h
-@@ -114,6 +114,17 @@ extern "C" {
+@@ -114,6 +114,22 @@ extern "C" {
  
  void		fetch_check_certificate(int check_cert);
  
@@ -99,6 +99,11 @@ index 50d4f7b..891d83e 100644
 + * NULL key_file means the certificate file also contains the key.
 + * The strings are not copied and must outlive the fetch calls made
 + * with them.
++ *
++ * The selection is global, like the rest of libfetch's configuration,
++ * and so belongs to whichever thread set it last.  Callers issuing
++ * fetches from several threads must serialise them, as they already
++ * must for the connection cache and the error state.
 + */
 +void		fetch_set_client_certificate(const char *cert_file,
 +			const char *key_file);

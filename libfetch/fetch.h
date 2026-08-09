@@ -121,6 +121,11 @@ void		fetch_check_certificate(int check_cert);
  * NULL key_file means the certificate file also contains the key.
  * The strings are not copied and must outlive the fetch calls made
  * with them.
+ *
+ * The selection is global, like the rest of libfetch's configuration,
+ * and so belongs to whichever thread set it last.  Callers issuing
+ * fetches from several threads must serialise them, as they already
+ * must for the connection cache and the error state.
  */
 void		fetch_set_client_certificate(const char *cert_file,
 			const char *key_file);

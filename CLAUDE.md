@@ -64,7 +64,7 @@ run by Automake's harness.
 
 ## Architecture
 
-**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots); `aept_cancel()` is safe to call from any thread.
+**Opaque context handle** — `aept_ctx_t` (opaque in `aept.h`, defined in `internal.h`) owns all state: config, solver, lock fd, callbacks, cancellation flag. Created by `aept_init()`, destroyed by `aept_cleanup(ctx)`. All public API functions take `ctx` as the first argument. Different threads may operate on independent contexts concurrently (e.g. different offline roots), **except across operations that download** — `aept_update()`, `aept_install()`. libfetch keeps all of its state in process globals: the connection cache (`common.c:304`) is a list every fetch mutates, the error state (`fetch.c:44`) is one struct, and the client certificate selected by `fetch_set_client_certificate()` belongs to whichever thread set it last. Callers must serialise download-bearing calls until that changes. `aept_cancel()` is safe to call from any thread.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 
