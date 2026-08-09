@@ -61,3 +61,4 @@ __pycache__/
 /debian/python3-aept/
 
 /TASK.md
+.*.swp
