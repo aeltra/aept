@@ -249,9 +249,18 @@ static struct archive_entry *next_header(struct archive *ar, int *eof)
 /*
  * Copy all remaining data from the current archive entry to a stdio stream.
  */
-static int stream_entry(struct archive *ar, FILE *fp)
+/*
+ * Copy one entry's data to fp, refusing to expand past max_bytes.
+ *
+ * The cap matters because the compressed stream is supplied by the
+ * remote side: without one, a small gzip that expands to an arbitrary
+ * size is a disk- or memory-exhaustion primitive.  max_bytes == 0 means
+ * no limit, for the callers whose input is already trusted.
+ */
+static int stream_entry(struct archive *ar, FILE *fp, uint64_t max_bytes)
 {
     char buf[BLOCK_SIZE];
+    uint64_t total = 0;
 
     if (archive_format(ar) == ARCHIVE_FORMAT_EMPTY)
         return 0;
@@ -265,6 +274,12 @@ static int stream_entry(struct archive *ar, FILE *fp)
                       archive_error_string(ar));
             return -1;
         }
+        if (max_bytes && (uint64_t)n > max_bytes - total) {
+            aept_log_error("decompressed data exceeds the %llu byte limit",
+                      (unsigned long long)max_bytes);
+            return -1;
+        }
+        total += (uint64_t)n;
         if (fwrite(buf, 1, (size_t)n, fp) != (size_t)n) {
             aept_log_error("failed to write to stream: %s",
                       strerror(errno));
@@ -615,9 +630,10 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename)
     return ar;
 }
 
-int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream)
+int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream,
+                           uint64_t max_bytes)
 {
-    return stream_entry(ar->ar, stream);
+    return stream_entry(ar->ar, stream, max_bytes);
 }
 
 int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,
@@ -631,7 +647,7 @@ int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,
         rewrite_pathname(entry, NULL);
 
         if (strcmp(archive_entry_pathname(entry), filename) == 0)
-            return stream_entry(ar->ar, stream);
+            return stream_entry(ar->ar, stream, 0);
     }
 }
 

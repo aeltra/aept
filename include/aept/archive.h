@@ -7,6 +7,7 @@
 #ifndef ARCHIVE_H_7BF97F
 #define ARCHIVE_H_7BF97F
 
+#include <stdint.h>
 #include <stdio.h>
 
 #include "aept/util.h"
@@ -27,8 +28,10 @@ struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename,
 /* Open a gzip-compressed file for streaming decompression. */
 struct aept_ar *aept_ar_open_compressed_file(const char *filename);
 
-/* Copy decompressed content to a stream. */
-int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream);
+/* Copy decompressed content to a stream, failing once more than
+ * max_bytes have been written.  max_bytes == 0 disables the limit. */
+int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream,
+                           uint64_t max_bytes);
 
 /* Extract a named file from the archive to a stream. */
 int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,

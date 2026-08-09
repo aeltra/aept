@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,18 @@
 #include "aept/update.h"
 #include "aept/util.h"
 #include "aept/verify.h"
+
+/*
+ * Ceiling on the decompressed size of a repository index.
+ *
+ * Both the plain and the signed index arrive as a gzip stream chosen by
+ * the remote side, so expanding one without a bound hands a hostile or
+ * compromised mirror a disk- and memory-exhaustion primitive: a few
+ * hundred kilobytes on the wire expand to as much as the client will
+ * take.  64 MiB is far above any plausible real index and still small
+ * enough to hold in memory on the devices aept targets.
+ */
+#define MAX_INDEX_SIZE ((uint64_t)64 * 1024 * 1024)
 
 static int decompress_gz(const char *gz_path, const char *out_path)
 {
@@ -36,12 +49,17 @@ static int decompress_gz(const char *gz_path, const char *out_path)
         return -1;
     }
 
-    r = aept_ar_copy_to_stream(ar, fp);
+    r = aept_ar_copy_to_stream(ar, fp, MAX_INDEX_SIZE);
 
     if (fclose(fp) != 0 && r == 0)
         r = -1;
 
     aept_ar_close(ar);
+
+    /* Hitting the ceiling leaves a truncated index behind; so does any
+     * other read error partway through.  Do not keep it. */
+    if (r < 0)
+        unlink(out_path);
 
     return r;
 }
@@ -65,7 +83,7 @@ static char *slurp_gz(const char *path, size_t *out_len)
         return NULL;
     }
 
-    r = aept_ar_copy_to_stream(ar, mem);
+    r = aept_ar_copy_to_stream(ar, mem, MAX_INDEX_SIZE);
     aept_ar_close(ar);
 
     if (fclose(mem) != 0 || r < 0) {
