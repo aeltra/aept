@@ -874,6 +874,22 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
         }
     }
 
+    /*
+     * Every local package the caller named turned out to be installed
+     * already, leaving an empty job list.  Stop here rather than call
+     * the solver: it reads "no names and no local ids" as a request to
+     * upgrade everything, which is how aept_upgrade() asks for a full
+     * upgrade.  Falling through would silently turn "install this one
+     * file" into a system-wide upgrade, and display_transaction() would
+     * not even prompt for it, because the count of user-requested
+     * packages is zero.
+     */
+    if (name_count == 0 && local_count > 0 && n_local_ids == 0) {
+        aept_log_info("nothing to do");
+        r = 0;
+        goto out;
+    }
+
     r = aept_solver_resolve_install(ctx, names, name_count, local_ids, n_local_ids);
     if (r < 0)
         goto out;

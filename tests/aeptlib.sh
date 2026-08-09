@@ -60,6 +60,21 @@ make_aep() {
     rm -rf "$_d"
 }
 
+# packages_stanza <name> <version> <aep-file> — emit one Packages entry.
+packages_stanza() {
+    printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \
+        "$1" "$2" "$(basename "$3")" "$(wc -c < "$3")" \
+        "$(sha256sum "$3" | cut -d' ' -f1)"
+}
+
+# add_repo <root> <name> <url-dir> — register a source and create an
+# empty package list for it, ready to be filled with packages_stanza.
+add_repo() {
+    mkdir -p "$1/var/lib/aept/lists"
+    : > "$1/var/lib/aept/lists/$2"
+    echo "src $2 file://$3" >> "$1/etc/aept/aept.conf"
+}
+
 # new_root <dir> — create an offline root with a usable aept.conf.
 new_root() {
     mkdir -p "$1/etc/aept"

@@ -42,7 +42,10 @@ test_archive_open_LDADD = $(ARCHIVE_LIBS)
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
-dist_check_SCRIPTS = test_install_failure.sh test_offline_root_tmp.sh
+dist_check_SCRIPTS = \
+    test_install_failure.sh \
+    test_offline_root_tmp.sh \
+    test_install_local_noop.sh
 
 EXTRA_DIST = aeptlib.sh
 

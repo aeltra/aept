@@ -377,6 +377,12 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
 
     queue_init(&job);
 
+    /*
+     * An empty job list means "upgrade everything" — that is how
+     * aept_upgrade() requests a full upgrade.  Callers that filtered a
+     * user-supplied list down to nothing must therefore not reach this
+     * function; aept_op_install() stops short of it in that case.
+     */
     if ((names == NULL || count == 0) &&
             (local_ids == NULL || local_count == 0)) {
         /* upgrade all */
