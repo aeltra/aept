@@ -59,3 +59,5 @@ __pycache__/
 /python/build/
 /python/*.egg-info/
 /debian/python3-aept/
+
+/TASK.md
