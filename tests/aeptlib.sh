@@ -218,6 +218,32 @@ http_stop() {
     HTTP_PID=
 }
 
+# http_stub <count-file> <logfile> — start httpstub.py, the server that
+# produces the canned replies the HTTP characterisation tests need.
+# Sets STUB_PORT and STUB_PID.
+http_stub() {
+    python3 -u "${srcdir:-.}/httpstub.py" "$1" > "$2" 2>&1 &
+    STUB_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        STUB_PORT=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' "$2" | head -1)
+        if [ -n "$STUB_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$STUB_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+http_stub_stop() {
+    [ -n "${STUB_PID:-}" ] && kill "$STUB_PID" 2>/dev/null
+    STUB_PID=
+}
+
 # aept_run <root> <args...> — invoke aept against an offline root.
 aept_run() {
     _root=$1

@@ -26,16 +26,16 @@ Makefile
 
 # Test suite
 #
-# Compiled test binaries are the test_* entries with no extension, so
-# ignore the lot and add the source forms back.  Enumerating the
-# binaries instead means every new test needs a line here, and one
-# forgotten line commits a binary.
-/tests/test_*
-!/tests/test_*.c
-!/tests/test_*.h
-!/tests/test_*.sh
-/tests/*.log
-/tests/*.trs
+# Everything built in tests/ is a compiled binary with no extension, so
+# ignore the directory's contents and add the source forms back.  The
+# inverse — listing the binaries — needs a new line for every test, and
+# one forgotten line commits a binary.
+/tests/*
+!/tests/*.am
+!/tests/*.c
+!/tests/*.h
+!/tests/*.py
+!/tests/*.sh
 
 # Distribution tarballs
 *.tar.gz

@@ -4,10 +4,18 @@ AM_CPPFLAGS = \
     -I$(top_srcdir)/src \
     -I$(srcdir)
 
-check_PROGRAMS = test_archive_path test_script test_config_root \
+# Unit tests run as tests; httpget is a harness test_http.sh drives, so
+# it is built but never run on its own.
+unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env
 
+check_PROGRAMS = $(unit_tests) httpget
+
 noinst_HEADERS = test.h
+
+httpget_SOURCES = httpget.c
+httpget_CFLAGS = -D_GNU_SOURCE
+httpget_LDADD = $(top_builddir)/src/libaept.la
 
 # archive.c is #included by the test, so only its dependencies are listed
 # here; util.c and msg.c supply the allocators and logging it calls into.
@@ -71,9 +79,10 @@ dist_check_SCRIPTS = \
     test_upgrade_conffiles.sh \
     test_update_size_limit.sh \
     test_exec_path.sh \
-    test_ssl_client_cert.sh
+    test_ssl_client_cert.sh \
+    test_http.sh
 
-EXTRA_DIST = aeptlib.sh ptydrive.py
+EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py
 
 TEST_EXTENSIONS = .sh
 
@@ -83,6 +92,7 @@ SH_LOG_COMPILER = $(SHELL)
 
 AM_TESTS_ENVIRONMENT = \
     AEPT_BIN='$(abs_top_builddir)/src/aept'; export AEPT_BIN; \
-    srcdir='$(abs_srcdir)'; export srcdir;
+    srcdir='$(abs_srcdir)'; export srcdir; \
+    HTTPGET='$(abs_builddir)/httpget'; export HTTPGET;
 
-TESTS = $(check_PROGRAMS) $(dist_check_SCRIPTS)
+TESTS = $(unit_tests) $(dist_check_SCRIPTS)
