@@ -29,10 +29,14 @@ libaept_la_SOURCES = \
     libfetch/common.h \
     libfetch/fetch.h
 
-libaept_la_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
+# -fvisibility=hidden: the ABI is what AEPT_API marks in the headers, not
+# whatever is spelled aept_*.  This is also what keeps src/libfetch/ out of
+# the dynamic symbol table now that its own prefix no longer does the job.
+libaept_la_CFLAGS = -D_GNU_SOURCE -fvisibility=hidden \
+    $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/src/libfetch
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
-libaept_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex '^aept_'
+libaept_la_LDFLAGS = -version-info 0:0:0
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include

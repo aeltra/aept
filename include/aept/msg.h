@@ -7,6 +7,8 @@
 #ifndef MSG_H_7BF97F
 #define MSG_H_7BF97F
 
+#include "aept/aept.h"   /* AEPT_API */
+
 struct aept_ctx;
 struct aept_transaction;
 
@@ -21,7 +23,10 @@ enum aept_log_level {
  * cleared by aept_cleanup().  Immutable after aept_init() returns. */
 void aept_log_set_ctx(struct aept_ctx *ctx);
 
-void aept_log(int level, const char *file, int line, const char *fmt, ...)
+/* Exported: the aept_log_*() macros below expand to this, and the CLI
+ * links against libaept like any other consumer. */
+AEPT_API void aept_log(int level, const char *file, int line,
+                       const char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
 
 #define aept_log_error(fmt, ...) \

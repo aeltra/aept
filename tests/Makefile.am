@@ -15,12 +15,17 @@ noinst_HEADERS = test.h
 
 httpget_SOURCES = httpget.c
 httpget_CFLAGS = -D_GNU_SOURCE
+# -static: libaept is built with -fvisibility=hidden, so internals such
+# as aept_download() are absent from the shared object's symbol table.
+# The static archive keeps them, and these three reach past aept.h.
 httpget_LDADD = $(top_builddir)/src/libaept.la
+httpget_LDFLAGS = -static
 
 # Also a harness, driven by test_threads.sh.
 threadrace_SOURCES = threadrace.c
 threadrace_CFLAGS = -D_GNU_SOURCE
 threadrace_LDADD = $(top_builddir)/src/libaept.la $(PTHREAD_LIBS)
+threadrace_LDFLAGS = -static
 
 # archive.c is #included by the test, so only its dependencies are listed
 # here; util.c and msg.c supply the allocators and logging it calls into.
@@ -73,6 +78,7 @@ test_trigger_entries_CFLAGS = -D_GNU_SOURCE
 test_ssl_env_SOURCES = test_ssl_env.c
 test_ssl_env_CFLAGS = -D_GNU_SOURCE
 test_ssl_env_LDADD = $(top_builddir)/src/libaept.la
+test_ssl_env_LDFLAGS = -static
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.

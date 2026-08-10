@@ -39,6 +39,19 @@ and two `-Wsign-compare` in `src/libfetch/`. Anything else is new.
 
 **aept** (Aeltra Package Tool) is a minimal package manager for .aep packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification), plus `rm`, `diff` and `/bin/sh`. Every one of them is exec'd by absolute path from the `AEPT_*_BIN` defines in `internal.h` — aept normally runs as root, so no exec may resolve through `PATH` or `$SHELL`.
 
+**Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
+is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
+exports **32** symbols: the 29 in `aept.h`, plus `aept_log()`,
+`aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
+`libaept` like any other consumer. Before this it exported 139, including every
+internal helper, and `src/libfetch/` stayed hidden only because its names
+failed the old `-export-symbols-regex '^aept_'`. Tests that reach past `aept.h`
+link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
+hidden visibility does not apply. Check with
+`nm -D --defined-only src/.libs/libaept.so`, **after `make clean`** — a
+`CFLAGS` change in `Makefile.am` does not force a recompile, so a stale tree
+reports the old surface.
+
 ## Coding Conventions
 
 - **4 spaces** indentation, no tabs

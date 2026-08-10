@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+#include "aept/aept.h"   /* AEPT_API */
+
 struct aept_ctx;
 
 typedef struct {
@@ -20,10 +22,13 @@ typedef struct {
     int sorted;
 } aept_fileset_t;
 
-void *aept_malloc(size_t size);
+/* aept_malloc() and aept_asprintf() are exported: the CLI links against
+ * libaept and needs OOM-safe allocation on the same terms the library
+ * uses it.  realloc/strdup are not -- nothing outside has asked. */
+AEPT_API void *aept_malloc(size_t size);
 void *aept_realloc(void *ptr, size_t size);
 char *aept_strdup(const char *s);
-int aept_asprintf(char **strp, const char *fmt, ...)
+AEPT_API int aept_asprintf(char **strp, const char *fmt, ...)
 	__attribute__((format(printf, 2, 3)));
 
 int aept_pkg_name_is_safe(const char *name);

@@ -7,6 +7,31 @@
 #ifndef AEPT_H_7BF97F
 #define AEPT_H_7BF97F
 
+/* --- Visibility ---------------------------------------------------------- */
+
+/* libaept is compiled with -fvisibility=hidden, so nothing leaves the
+ * shared object unless it is marked AEPT_API.  The ABI is therefore
+ * what these markings say it is, rather than whatever happened to be
+ * named aept_* -- which used to export 139 symbols for a header that
+ * declares 29.
+ *
+ * Everything in this header is exported.  Three utilities outside it
+ * are too, because a C caller linking against libaept needs them and
+ * the aept CLI is exactly that caller: aept_log() (backing the
+ * aept_log_*() macros in msg.h) and aept_malloc()/aept_asprintf() from
+ * util.h.  Nothing else is: the library's own modules call each other
+ * through the unmarked headers in include/aept/.
+ *
+ * Tests reaching internals link the static archive (-static in
+ * tests/Makefile.am), where hidden visibility does not apply. */
+#ifndef AEPT_API
+#  if defined(__GNUC__) || defined(__clang__)
+#    define AEPT_API __attribute__((visibility("default")))
+#  else
+#    define AEPT_API
+#  endif
+#endif
+
 /* --- Opaque context handle ----------------------------------------------- */
 
 /* An aept_ctx_t is not thread-safe: all calls on a given context must be
@@ -17,14 +42,14 @@ typedef struct aept_ctx aept_ctx_t;
 
 /* --- Lifecycle ----------------------------------------------------------- */
 
-aept_ctx_t *aept_init(void);
-void aept_cleanup(aept_ctx_t *ctx);
+AEPT_API aept_ctx_t *aept_init(void);
+AEPT_API void aept_cleanup(aept_ctx_t *ctx);
 
 /* --- Configuration ------------------------------------------------------- */
 
-int  aept_load_config(aept_ctx_t *ctx, const char *path);
-void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
-void aept_set_verbosity(aept_ctx_t *ctx, int level);
+AEPT_API int  aept_load_config(aept_ctx_t *ctx, const char *path);
+AEPT_API void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
+AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
 /* --- Flags --------------------------------------------------------------- */
 
@@ -44,8 +69,8 @@ enum {
     AEPT_FLAG_KEEP_GOING,
 };
 
-void aept_set_flag(aept_ctx_t *ctx, int flag, int value);
-int  aept_get_flag(aept_ctx_t *ctx, int flag);
+AEPT_API void aept_set_flag(aept_ctx_t *ctx, int flag, int value);
+AEPT_API int  aept_get_flag(aept_ctx_t *ctx, int flag);
 
 /* --- Callbacks ----------------------------------------------------------- */
 
@@ -57,7 +82,7 @@ enum {
 };
 
 typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
-void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
+AEPT_API void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
 
 typedef struct aept_transaction {
     const char **install;   int n_install;
@@ -67,31 +92,31 @@ typedef struct aept_transaction {
 } aept_transaction_t;
 
 typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
-void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);
+AEPT_API void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);
 
 /* Return non-zero to proceed, 0 to abort. */
 typedef int (*aept_confirm_fn)(void *userdata);
-void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
+AEPT_API void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
 
 /* --- Cancellation -------------------------------------------------------- */
 
-void aept_cancel(aept_ctx_t *ctx);
+AEPT_API void aept_cancel(aept_ctx_t *ctx);
 
 /* --- Mutating operations ------------------------------------------------- */
 
-int aept_update(aept_ctx_t *ctx);
-int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
+AEPT_API int aept_update(aept_ctx_t *ctx);
+AEPT_API int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
                  const char **local_paths, int local_count);
-int aept_upgrade(aept_ctx_t *ctx);
-int aept_remove(aept_ctx_t *ctx, const char **names, int count);
-int aept_autoremove(aept_ctx_t *ctx);
-int aept_clean(aept_ctx_t *ctx);
+AEPT_API int aept_upgrade(aept_ctx_t *ctx);
+AEPT_API int aept_remove(aept_ctx_t *ctx, const char **names, int count);
+AEPT_API int aept_autoremove(aept_ctx_t *ctx);
+AEPT_API int aept_clean(aept_ctx_t *ctx);
 
-int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
-int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
-int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
-int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
-int aept_mark_manual_all(aept_ctx_t *ctx);
+AEPT_API int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
+AEPT_API int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
+AEPT_API int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
+AEPT_API int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
+AEPT_API int aept_mark_manual_all(aept_ctx_t *ctx);
 
 /* --- Query: list --------------------------------------------------------- */
 
@@ -108,10 +133,10 @@ typedef struct {
     int count;
 } aept_pkg_list_t;
 
-int  aept_list(aept_ctx_t *ctx, const char *pattern,
+AEPT_API int  aept_list(aept_ctx_t *ctx, const char *pattern,
                int filter_installed, int filter_upgradable,
                aept_pkg_list_t *out);
-void aept_pkg_list_free(aept_pkg_list_t *list);
+AEPT_API void aept_pkg_list_free(aept_pkg_list_t *list);
 
 /* --- Query: show --------------------------------------------------------- */
 
@@ -135,19 +160,19 @@ typedef struct {
 } aept_pkg_info_t;
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-int  aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
-void aept_pkg_info_free(aept_pkg_info_t *info);
+AEPT_API int  aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
+AEPT_API void aept_pkg_info_free(aept_pkg_info_t *info);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-int aept_files(aept_ctx_t *ctx, const char *name,
+AEPT_API int aept_files(aept_ctx_t *ctx, const char *name,
                char ***paths_out, int *count_out);
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-int aept_owns(aept_ctx_t *ctx, const char *path,
+AEPT_API int aept_owns(aept_ctx_t *ctx, const char *path,
               char ***owners_out, int *count_out);
 
-int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
+AEPT_API int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
 
 #endif
