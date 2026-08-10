@@ -114,12 +114,12 @@ int fetch_default_port(const char *scheme)
     struct servent *se;
 
     if ((se = getservbyname(scheme, "tcp")) != NULL)
-        return (ntohs(se->s_port));
+        return ntohs(se->s_port);
     if (strcasecmp(scheme, SCHEME_HTTP) == 0)
-        return (HTTP_DEFAULT_PORT);
+        return HTTP_DEFAULT_PORT;
     if (strcasecmp(scheme, SCHEME_HTTPS) == 0)
-        return (HTTPS_DEFAULT_PORT);
-    return (0);
+        return HTTPS_DEFAULT_PORT;
+    return 0;
 }
 
 /*
@@ -127,7 +127,7 @@ int fetch_default_port(const char *scheme)
  */
 int fetch_default_proxy_port(const char *scheme)
 {
-    return (HTTP_DEFAULT_PROXY_PORT);
+    return HTTP_DEFAULT_PROXY_PORT;
 }
 
 /*
@@ -139,14 +139,14 @@ conn_t *fetch_reopen(int sd)
 
     /* allocate and fill connection structure */
     if ((conn = calloc(1, sizeof(*conn))) == NULL)
-        return (NULL);
+        return NULL;
     conn->ftp_home = NULL;
     conn->cache_url = NULL;
     conn->next_buf = NULL;
     conn->next_len = 0;
     conn->sd = sd;
     conn->buf_events = POLLIN;
-    return (conn);
+    return conn;
 }
 
 /*
@@ -161,15 +161,15 @@ int fetch_bind(int sd, int af, const char *addr)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = 0;
     if (getaddrinfo(addr, NULL, &hints, &res0))
-        return (-1);
+        return -1;
     for (res = res0; res; res = res->ai_next) {
         if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
             freeaddrinfo(res0);
-            return (0);
+            return 0;
         }
     }
     freeaddrinfo(res0);
-    return (-1);
+    return -1;
 }
 
 static int compute_timeout(const struct timeval *tv)
@@ -206,7 +206,7 @@ conn_t *fetch_connect(struct url *cache_url, struct url *url, int af,
     hints.ai_protocol = 0;
     if ((error = getaddrinfo(url->host, pbuf, &hints, &res0)) != 0) {
         netdb_seterr(error);
-        return (NULL);
+        return NULL;
     }
     bindaddr = getenv("FETCH_BIND_ADDRESS");
 
@@ -267,7 +267,7 @@ conn_t *fetch_connect(struct url *cache_url, struct url *url, int af,
     freeaddrinfo(res0);
     if (sd == -1) {
         fetch_syserr();
-        return (NULL);
+        return NULL;
     }
 
     if (sock_flags & SOCK_NONBLOCK)
@@ -276,11 +276,11 @@ conn_t *fetch_connect(struct url *cache_url, struct url *url, int af,
     if ((conn = fetch_reopen(sd)) == NULL) {
         fetch_syserr();
         close(sd);
-        return (NULL);
+        return NULL;
     }
     conn->cache_url = fetchCopyURL(cache_url);
     conn->cache_af = af;
-    return (conn);
+    return conn;
 }
 
 /*
@@ -294,7 +294,7 @@ struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit)
     struct fetch_ctx *ctx = calloc(1, sizeof(*ctx));
 
     if (ctx == NULL)
-        return (NULL);
+        return NULL;
 
     if (global_limit < 0)
         ctx->cache_global_limit = INT_MAX;
@@ -307,7 +307,7 @@ struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit)
     else
         ctx->cache_per_host_limit = per_host_limit;
 
-    return (ctx);
+    return ctx;
 }
 
 /*
@@ -623,10 +623,10 @@ int fetch_ssl(struct fetch_ctx *fctx, conn_t *conn, const struct url *URL,
         free(str);
     }
 
-    return (0);
+    return 0;
 err:
     tls_seterr(FETCH_ERR_TLS);
-    return (-1);
+    return -1;
 }
 
 /*
@@ -667,7 +667,7 @@ ssize_t fetch_read(conn_t *conn, char *buf, size_t len)
                     if (timeout_cur < 0) {
                         errno = ETIMEDOUT;
                         fetch_syserr();
-                        return (-1);
+                        return -1;
                     }
                 } else {
                     timeout_cur = -1;
@@ -678,7 +678,7 @@ ssize_t fetch_read(conn_t *conn, char *buf, size_t len)
                     if (errno == EINTR && fetchRestartCalls)
                         continue;
                     fetch_syserr();
-                    return (-1);
+                    return -1;
                 }
             } while (pfd.revents == 0);
         }
@@ -709,9 +709,9 @@ ssize_t fetch_read(conn_t *conn, char *buf, size_t len)
             break;
 
         if (errno != EINTR || !fetchRestartCalls)
-            return (-1);
+            return -1;
     }
-    return (rlen);
+    return rlen;
 }
 
 /*
@@ -728,7 +728,7 @@ int fetch_getln(conn_t *conn)
     if (conn->buf == NULL) {
         if ((conn->buf = malloc(MIN_BUF_SIZE)) == NULL) {
             errno = ENOMEM;
-            return (-1);
+            return -1;
         }
         conn->bufsize = MIN_BUF_SIZE;
     }
@@ -745,7 +745,7 @@ int fetch_getln(conn_t *conn)
         len = fetch_read(conn, conn->buf + conn->buflen,
                          conn->bufsize - conn->buflen);
         if (len == -1)
-            return (-1);
+            return -1;
         if (len == 0)
             break;
         next = memchr(conn->buf + conn->buflen, '\n', len);
@@ -755,11 +755,11 @@ int fetch_getln(conn_t *conn)
             tmpsize = conn->bufsize * 2;
             if (tmpsize < conn->bufsize) {
                 errno = ENOMEM;
-                return (-1);
+                return -1;
             }
             if ((tmp = realloc(tmp, tmpsize)) == NULL) {
                 errno = ENOMEM;
-                return (-1);
+                return -1;
             }
             conn->buf = tmp;
             conn->bufsize = tmpsize;
@@ -775,7 +775,7 @@ int fetch_getln(conn_t *conn)
         conn->buf[conn->buflen] = '\0';
         conn->next_len = 0;
     }
-    return (0);
+    return 0;
 }
 
 /*
@@ -809,14 +809,14 @@ ssize_t fetch_write(conn_t *conn, const void *buf, size_t len)
             if (waittv.tv_sec < 0) {
                 errno = ETIMEDOUT;
                 fetch_syserr();
-                return (-1);
+                return -1;
             }
             errno = 0;
             r = select(conn->sd + 1, NULL, &writefds, NULL, &waittv);
             if (r == -1) {
                 if (errno == EINTR && fetchRestartCalls)
                     continue;
-                return (-1);
+                return -1;
             }
         }
         errno = 0;
@@ -828,18 +828,18 @@ ssize_t fetch_write(conn_t *conn, const void *buf, size_t len)
             /* we consider a short write a failure */
             errno = EPIPE;
             fetch_syserr();
-            return (-1);
+            return -1;
         }
         if (wlen < 0) {
             if (errno == EINTR && fetchRestartCalls)
                 continue;
-            return (-1);
+            return -1;
         }
         total += wlen;
         buf = (const char *)buf + wlen;
         len -= wlen;
     }
-    return (total);
+    return total;
 }
 
 /*
@@ -867,7 +867,7 @@ int fetch_close(conn_t *conn)
     free(conn->ftp_home);
     free(conn->buf);
     free(conn);
-    return (ret);
+    return ret;
 }
 
 #define MAX_ADDRESS_BYTES sizeof(struct in6_addr)
@@ -953,11 +953,11 @@ int fetch_no_proxy_match(const char *host)
 
     if ((no_proxy = getenv("NO_PROXY")) == NULL &&
         (no_proxy = getenv("no_proxy")) == NULL)
-        return (0);
+        return 0;
 
     /* asterisk matches any hostname */
     if (strcmp(no_proxy, "*") == 0)
-        return (1);
+        return 1;
 
     h_len = strlen(host);
     addr_len = host_to_address(addr, sizeof addr, host, h_len);
@@ -976,17 +976,17 @@ int fetch_no_proxy_match(const char *host)
         if (d_len > 0 && h_len >= d_len &&
             strncasecmp(host + h_len - d_len, p, d_len) == 0) {
             /* domain name matches */
-            return (1);
+            return 1;
         }
 
         if (cidr_match(addr, addr_len, p, d_len)) {
-            return (1);
+            return 1;
         }
 
         p = q + 1;
     } while (*q);
 
-    return (0);
+    return 0;
 }
 
 struct fetchIO {

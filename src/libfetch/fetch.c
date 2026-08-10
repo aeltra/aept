@@ -66,7 +66,7 @@ fetchIO *fetchGetURL(struct fetch_ctx *fctx, const char *URL, const char *flags)
     fetchIO *f;
 
     if ((u = fetchParseURL(URL)) == NULL)
-        return (NULL);
+        return NULL;
 
     if (strcasecmp(u->scheme, SCHEME_HTTP) == 0 ||
         strcasecmp(u->scheme, SCHEME_HTTPS) == 0) {
@@ -77,7 +77,7 @@ fetchIO *fetchGetURL(struct fetch_ctx *fctx, const char *URL, const char *flags)
     }
 
     fetchFreeURL(u);
-    return (f);
+    return f;
 }
 
 /*
@@ -90,24 +90,24 @@ struct url *fetchMakeURL(const char *scheme, const char *host, int port,
 
     if (!scheme || (!host && !doc)) {
         url_seterr(URL_MALFORMED);
-        return (NULL);
+        return NULL;
     }
 
     if (port < 0 || port > 65535) {
         url_seterr(URL_BAD_PORT);
-        return (NULL);
+        return NULL;
     }
 
     /* allocate struct url */
     if ((u = calloc(1, sizeof(*u))) == NULL) {
         fetch_syserr();
-        return (NULL);
+        return NULL;
     }
 
     if ((u->doc = strdup(doc ? doc : "/")) == NULL) {
         fetch_syserr();
         free(u);
-        return (NULL);
+        return NULL;
     }
 
 #define seturl(x) snprintf(u->x, sizeof(u->x), "%s", x)
@@ -118,7 +118,7 @@ struct url *fetchMakeURL(const char *scheme, const char *host, int port,
 #undef seturl
     u->port = port;
 
-    return (u);
+    return u;
 }
 
 int fetch_urlpath_safe(char x)
@@ -166,12 +166,12 @@ struct url *fetchCopyURL(const struct url *src)
     /* allocate struct url */
     if ((dst = malloc(sizeof(*dst))) == NULL) {
         fetch_syserr();
-        return (NULL);
+        return NULL;
     }
     if ((doc = strdup(src->doc)) == NULL) {
         fetch_syserr();
         free(dst);
-        return (NULL);
+        return NULL;
     }
     *dst = *src;
     dst->doc = doc;
@@ -185,12 +185,12 @@ struct url *fetchCopyURL(const struct url *src)
 static int fetch_hexval(char ch)
 {
     if (ch >= '0' && ch <= '9')
-        return (ch - '0');
+        return ch - '0';
     else if (ch >= 'a' && ch <= 'f')
-        return (ch - 'a' + 10);
+        return ch - 'a' + 10;
     else if (ch >= 'A' && ch <= 'F')
-        return (ch - 'A' + 10);
-    return (-1);
+        return ch - 'A' + 10;
+    return -1;
 }
 
 /*
@@ -214,7 +214,7 @@ static const char *fetch_pctdecode(char *dst, const char *src, const char *brk,
             s += 2;
         } else if (s[0] == '%') {
             /* Invalid escape sequence. */
-            return (NULL);
+            return NULL;
         } else {
             c = *s;
         }
@@ -223,7 +223,7 @@ static const char *fetch_pctdecode(char *dst, const char *src, const char *brk,
         dlen--;
         *dst++ = c;
     }
-    return (s);
+    return s;
 }
 
 /*
@@ -241,7 +241,7 @@ struct url *fetchParseURL(const char *URL)
     /* allocate struct url */
     if ((u = calloc(1, sizeof(*u))) == NULL) {
         fetch_syserr();
-        return (NULL);
+        return NULL;
     }
 
     if (*URL == '/' || strncmp(URL, "file:", 5) == 0) {
@@ -359,11 +359,11 @@ find_user:
     }
     u->doc[i] = '\0';
 
-    return (u);
+    return u;
 
 ouch:
     free(u);
-    return (NULL);
+    return NULL;
 }
 
 /*
