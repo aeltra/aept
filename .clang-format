@@ -1,0 +1,29 @@
+# Formatting for aept.  Derived from what src/*.c already does, not from a
+# preset: 4-space indent, function braces on their own line, control-statement
+# braces attached.
+#
+# Applied to src/libfetch/ to bring the fork in line with the rest of the tree.
+# Written against clang-format 19; older versions differ slightly, so a
+# reformat with another version may churn lines it should not.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 80
+
+# int aept_foo(...) on one line, not the BSD split declaration
+AlwaysBreakAfterReturnType: None
+
+# Functions get a brace on the next line; if/for/while keep theirs attached.
+BreakBeforeBraces: Linux
+
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+SpaceAfterCStyleCast: false
+
+# The include groups here are deliberate (system, then <solv/...>, then
+# "aept/..."), and re-sorting them would scramble that.
+SortIncludes: false
