@@ -54,6 +54,13 @@ reports the old surface.
 
 ## Coding Conventions
 
+`.clang-format` at the top level encodes these, derived from what `src/*.c`
+already did rather than from a preset. It was applied to `src/libfetch/` to
+bring the fork in line; the rest of the tree has not been run through it, so
+`clang-format -i` on `src/*.c` would reflow the 37 lines currently over 80
+columns. Written against **clang-format 19** — other versions differ slightly
+and will churn lines they should not.
+
 - **4 spaces** indentation, no tabs
 - Header guards: `{NAME}_H_7BF97F` suffix (e.g. `ARCHIVE_H_7BF97F`)
 - Project headers: `#include "aept/foo.h"` — all in `include/aept/`

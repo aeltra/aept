@@ -46,51 +46,51 @@
 typedef struct fetchIO fetchIO;
 
 struct url {
-	char		 scheme[URL_SCHEMELEN + 1];
-	char		 user[URL_USERLEN + 1];
-	char		 pwd[URL_PWDLEN + 1];
-	char		 host[URL_HOSTLEN + 1];
-	int		 port;
-	char		*doc;
+    char scheme[URL_SCHEMELEN + 1];
+    char user[URL_USERLEN + 1];
+    char pwd[URL_PWDLEN + 1];
+    char host[URL_HOSTLEN + 1];
+    int port;
+    char *doc;
 };
 
 /* Recognized schemes */
-#define SCHEME_HTTP	"http"
-#define SCHEME_HTTPS	"https"
+#define SCHEME_HTTP "http"
+#define SCHEME_HTTPS "https"
 
 enum {
-	/* Error categories */
-	FETCH_ERRCAT_FETCH = 0,
-	FETCH_ERRCAT_ERRNO,
-	FETCH_ERRCAT_NETDB,
-	FETCH_ERRCAT_HTTP,
-	FETCH_ERRCAT_URL,
-	FETCH_ERRCAT_TLS,
+    /* Error categories */
+    FETCH_ERRCAT_FETCH = 0,
+    FETCH_ERRCAT_ERRNO,
+    FETCH_ERRCAT_NETDB,
+    FETCH_ERRCAT_HTTP,
+    FETCH_ERRCAT_URL,
+    FETCH_ERRCAT_TLS,
 
-	/* Error FETCH category codes */
-	FETCH_OK = 0,
-	FETCH_ERR_UNKNOWN,
-	FETCH_ERR_UNCHANGED,
+    /* Error FETCH category codes */
+    FETCH_OK = 0,
+    FETCH_ERR_UNKNOWN,
+    FETCH_ERR_UNCHANGED,
 
-	/* Error URL category codes */
-	FETCH_ERR_URL_MALFORMED = 1,
-	FETCH_ERR_URL_BAD_SCHEME,
-	FETCH_ERR_URL_BAD_PORT,
-	FETCH_ERR_URL_BAD_HOST,
-	FETCH_ERR_URL_BAD_AUTH,
+    /* Error URL category codes */
+    FETCH_ERR_URL_MALFORMED = 1,
+    FETCH_ERR_URL_BAD_SCHEME,
+    FETCH_ERR_URL_BAD_PORT,
+    FETCH_ERR_URL_BAD_HOST,
+    FETCH_ERR_URL_BAD_AUTH,
 
-	/* Error TLS category codes */
-	FETCH_ERR_TLS = 1,
-	FETCH_ERR_TLS_SERVER_CERT_ABSENT,
-	FETCH_ERR_TLS_SERVER_CERT_HOSTNAME,
-	FETCH_ERR_TLS_SERVER_CERT_UNTRUSTED,
-	FETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED,
-	FETCH_ERR_TLS_HANDSHAKE,
+    /* Error TLS category codes */
+    FETCH_ERR_TLS = 1,
+    FETCH_ERR_TLS_SERVER_CERT_ABSENT,
+    FETCH_ERR_TLS_SERVER_CERT_HOSTNAME,
+    FETCH_ERR_TLS_SERVER_CERT_UNTRUSTED,
+    FETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED,
+    FETCH_ERR_TLS_HANDSHAKE,
 };
 
 struct fetch_error {
-	unsigned int category;
-	int code;
+    unsigned int category;
+    int code;
 };
 
 #if defined(__cplusplus)
@@ -102,7 +102,7 @@ extern "C" {
  * was created from, so the context must outlive the stream. */
 struct fetch_ctx;
 struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit);
-void		 fetch_ctx_free(struct fetch_ctx *);
+void fetch_ctx_free(struct fetch_ctx *);
 
 /*
  * Select the client certificate, taking precedence over the
@@ -116,38 +116,38 @@ void		 fetch_ctx_free(struct fetch_ctx *);
  * cache: a connection opened while presenting one certificate is never
  * reused by a context configured with another.
  */
-void		fetch_set_client_certificate(struct fetch_ctx *ctx,
-			const char *cert_file, const char *key_file);
+void fetch_set_client_certificate(struct fetch_ctx *ctx, const char *cert_file,
+                                  const char *key_file);
 
-void		fetchIO_close(fetchIO *);
-ssize_t		fetchIO_read(fetchIO *, void *, size_t);
+void fetchIO_close(fetchIO *);
+ssize_t fetchIO_read(fetchIO *, void *, size_t);
 
 /* HTTP */
-fetchIO		*fetchGetHTTP(struct fetch_ctx *, struct url *, const char *);
+fetchIO *fetchGetHTTP(struct fetch_ctx *, struct url *, const char *);
 
 /* Generic */
-fetchIO		*fetchGetURL(struct fetch_ctx *, const char *, const char *);
+fetchIO *fetchGetURL(struct fetch_ctx *, const char *, const char *);
 
 /* URL parsing.  Internal to the library: nothing outside it needs to
  * build or inspect a struct url, but redirects and the connection
  * cache do. */
-struct url	*fetchMakeURL(const char *, const char *, int,
-		     const char *, const char *, const char *);
-struct url	*fetchParseURL(const char *);
-struct url	*fetchCopyURL(const struct url *);
-void		 fetchFreeURL(struct url *);
+struct url *fetchMakeURL(const char *, const char *, int, const char *,
+                         const char *, const char *);
+struct url *fetchParseURL(const char *);
+struct url *fetchCopyURL(const struct url *);
+void fetchFreeURL(struct url *);
 
 /* Last error code, per-thread */
 extern _Thread_local struct fetch_error fetchLastErrCode;
 
 /* I/O timeout */
-extern int		 fetchTimeout;
+extern int fetchTimeout;
 
 /* Restart interrupted syscalls */
-extern volatile int	 fetchRestartCalls;
+extern volatile int fetchRestartCalls;
 
 /* Extra verbosity */
-extern int		 fetchDebug;
+extern int fetchDebug;
 
 #if defined(__cplusplus)
 }

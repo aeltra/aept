@@ -56,238 +56,231 @@
 
 /*** Error-reporting functions ***********************************************/
 
-void
-fetch_set_client_certificate(struct fetch_ctx *ctx, const char *cert_file,
-    const char *key_file)
+void fetch_set_client_certificate(struct fetch_ctx *ctx, const char *cert_file,
+                                  const char *key_file)
 {
-	ctx->ssl_client_cert_file = cert_file;
-	ctx->ssl_client_key_file = key_file;
+    ctx->ssl_client_cert_file = cert_file;
+    ctx->ssl_client_key_file = key_file;
 }
 
 /*
  * Emit status message
  */
-void
-fetch_info(const char *fmt, ...)
+void fetch_info(const char *fmt, ...)
 {
-	va_list ap;
+    va_list ap;
 
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	fputc('\n', stderr);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
 }
-
 
 /*** Network-related utility functions ***************************************/
 
-uintmax_t
-fetch_parseuint(const char *str, const char **endptr, int radix, uintmax_t max)
+uintmax_t fetch_parseuint(const char *str, const char **endptr, int radix,
+                          uintmax_t max)
 {
-	uintmax_t val = 0, maxx = max / radix, d;
-	const char *p;
+    uintmax_t val = 0, maxx = max / radix, d;
+    const char *p;
 
-	for (p = str; isxdigit((unsigned char)*p); p++) {
-		unsigned char ch = (unsigned char)*p;
-		if (isdigit(ch))
-			d = ch - '0';
-		else	d = tolower(ch) - 'a' + 10;
-		if (d >= radix || val > maxx) goto err;
-		val *= radix;
-		if (val > max-d) goto err;
-		val += d;
-	}
-	if (p == str || val > max) goto err;
-	*endptr = p;
-	return val;
+    for (p = str; isxdigit((unsigned char)*p); p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (isdigit(ch))
+            d = ch - '0';
+        else
+            d = tolower(ch) - 'a' + 10;
+        if (d >= radix || val > maxx)
+            goto err;
+        val *= radix;
+        if (val > max - d)
+            goto err;
+        val += d;
+    }
+    if (p == str || val > max)
+        goto err;
+    *endptr = p;
+    return val;
 err:
-	*endptr = "\xff";
-	return 0;
+    *endptr = "\xff";
+    return 0;
 }
 
 /*
  * Return the default port for a scheme
  */
-int
-fetch_default_port(const char *scheme)
+int fetch_default_port(const char *scheme)
 {
-	struct servent *se;
+    struct servent *se;
 
-	if ((se = getservbyname(scheme, "tcp")) != NULL)
-		return (ntohs(se->s_port));
-	if (strcasecmp(scheme, SCHEME_HTTP) == 0)
-		return (HTTP_DEFAULT_PORT);
-	if (strcasecmp(scheme, SCHEME_HTTPS) == 0)
-		return (HTTPS_DEFAULT_PORT);
-	return (0);
+    if ((se = getservbyname(scheme, "tcp")) != NULL)
+        return (ntohs(se->s_port));
+    if (strcasecmp(scheme, SCHEME_HTTP) == 0)
+        return (HTTP_DEFAULT_PORT);
+    if (strcasecmp(scheme, SCHEME_HTTPS) == 0)
+        return (HTTPS_DEFAULT_PORT);
+    return (0);
 }
 
 /*
  * Return the default proxy port for a scheme
  */
-int
-fetch_default_proxy_port(const char *scheme)
+int fetch_default_proxy_port(const char *scheme)
 {
-	return (HTTP_DEFAULT_PROXY_PORT);
+    return (HTTP_DEFAULT_PROXY_PORT);
 }
-
 
 /*
  * Create a connection for an existing descriptor.
  */
-conn_t *
-fetch_reopen(int sd)
+conn_t *fetch_reopen(int sd)
 {
-	conn_t *conn;
+    conn_t *conn;
 
-	/* allocate and fill connection structure */
-	if ((conn = calloc(1, sizeof(*conn))) == NULL)
-		return (NULL);
-	conn->ftp_home = NULL;
-	conn->cache_url = NULL;
-	conn->next_buf = NULL;
-	conn->next_len = 0;
-	conn->sd = sd;
-	conn->buf_events = POLLIN;
-	return (conn);
+    /* allocate and fill connection structure */
+    if ((conn = calloc(1, sizeof(*conn))) == NULL)
+        return (NULL);
+    conn->ftp_home = NULL;
+    conn->cache_url = NULL;
+    conn->next_buf = NULL;
+    conn->next_len = 0;
+    conn->sd = sd;
+    conn->buf_events = POLLIN;
+    return (conn);
 }
-
 
 /*
  * Bind a socket to a specific local address
  */
-int
-fetch_bind(int sd, int af, const char *addr)
+int fetch_bind(int sd, int af, const char *addr)
 {
-	struct addrinfo hints, *res, *res0;
+    struct addrinfo hints, *res, *res0;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = af;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = 0;
-	if (getaddrinfo(addr, NULL, &hints, &res0))
-		return (-1);
-	for (res = res0; res; res = res->ai_next) {
-		if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
-			freeaddrinfo(res0);
-			return (0);
-		}
-	}
-	freeaddrinfo(res0);
-	return (-1);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = af;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    if (getaddrinfo(addr, NULL, &hints, &res0))
+        return (-1);
+    for (res = res0; res; res = res->ai_next) {
+        if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
+            freeaddrinfo(res0);
+            return (0);
+        }
+    }
+    freeaddrinfo(res0);
+    return (-1);
 }
 
-
-static int
-compute_timeout(const struct timeval *tv)
+static int compute_timeout(const struct timeval *tv)
 {
-	struct timeval cur;
-	int timeout;
+    struct timeval cur;
+    int timeout;
 
-	gettimeofday(&cur, NULL);
-	timeout = (tv->tv_sec - cur.tv_sec) * 1000 + (tv->tv_usec - cur.tv_usec) / 1000;
-	return timeout;
+    gettimeofday(&cur, NULL);
+    timeout =
+        (tv->tv_sec - cur.tv_sec) * 1000 + (tv->tv_usec - cur.tv_usec) / 1000;
+    return timeout;
 }
-
 
 /*
  * Establish a TCP connection to the specified port on the specified host.
  */
-conn_t *
-fetch_connect(struct url *cache_url, struct url *url, int af, int verbose)
+conn_t *fetch_connect(struct url *cache_url, struct url *url, int af,
+                      int verbose)
 {
-	conn_t *conn;
-	char pbuf[10];
-	const char *bindaddr;
-	struct addrinfo hints, *res, *res0;
-	int sd, error, sock_flags = SOCK_CLOEXEC;
+    conn_t *conn;
+    char pbuf[10];
+    const char *bindaddr;
+    struct addrinfo hints, *res, *res0;
+    int sd, error, sock_flags = SOCK_CLOEXEC;
 
-	if (verbose)
-		fetch_info("looking up %s", url->host);
+    if (verbose)
+        fetch_info("looking up %s", url->host);
 
-	/* look up host name and set up socket address structure */
-	snprintf(pbuf, sizeof(pbuf), "%d", url->port);
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = af;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = 0;
-	if ((error = getaddrinfo(url->host, pbuf, &hints, &res0)) != 0) {
-		netdb_seterr(error);
-		return (NULL);
-	}
-	bindaddr = getenv("FETCH_BIND_ADDRESS");
+    /* look up host name and set up socket address structure */
+    snprintf(pbuf, sizeof(pbuf), "%d", url->port);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = af;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    if ((error = getaddrinfo(url->host, pbuf, &hints, &res0)) != 0) {
+        netdb_seterr(error);
+        return (NULL);
+    }
+    bindaddr = getenv("FETCH_BIND_ADDRESS");
 
-	if (verbose)
-		fetch_info("connecting to %s:%d", url->host, url->port);
+    if (verbose)
+        fetch_info("connecting to %s:%d", url->host, url->port);
 
-	if (fetchTimeout)
-		sock_flags |= SOCK_NONBLOCK;
+    if (fetchTimeout)
+        sock_flags |= SOCK_NONBLOCK;
 
-	/* try to connect */
-	for (sd = -1, res = res0; res; sd = -1, res = res->ai_next) {
-		if ((sd = socket(res->ai_family, res->ai_socktype | sock_flags,
-			 res->ai_protocol)) == -1)
-			continue;
-		if (bindaddr != NULL && *bindaddr != '\0' &&
-		    fetch_bind(sd, res->ai_family, bindaddr) != 0) {
-			fetch_info("failed to bind to '%s'", bindaddr);
-			close(sd);
-			continue;
-		}
+    /* try to connect */
+    for (sd = -1, res = res0; res; sd = -1, res = res->ai_next) {
+        if ((sd = socket(res->ai_family, res->ai_socktype | sock_flags,
+                         res->ai_protocol)) == -1)
+            continue;
+        if (bindaddr != NULL && *bindaddr != '\0' &&
+            fetch_bind(sd, res->ai_family, bindaddr) != 0) {
+            fetch_info("failed to bind to '%s'", bindaddr);
+            close(sd);
+            continue;
+        }
 
-		if (connect(sd, res->ai_addr, res->ai_addrlen) == 0)
-			break;
+        if (connect(sd, res->ai_addr, res->ai_addrlen) == 0)
+            break;
 
-		if (fetchTimeout) {
-			struct timeval timeout_end;
-			struct pollfd pfd = { .fd = sd, .events = POLLOUT };
-			int r = -1;
+        if (fetchTimeout) {
+            struct timeval timeout_end;
+            struct pollfd pfd = {.fd = sd, .events = POLLOUT};
+            int r = -1;
 
-			gettimeofday(&timeout_end, NULL);
-			timeout_end.tv_sec += fetchTimeout;
+            gettimeofday(&timeout_end, NULL);
+            timeout_end.tv_sec += fetchTimeout;
 
-			do {
-				int timeout_cur = compute_timeout(&timeout_end);
-				if (timeout_cur < 0) {
-					errno = ETIMEDOUT;
-					break;
-				}
-				errno = 0;
-				r = poll(&pfd, 1, timeout_cur);
-				if (r == -1) {
-					if (errno == EINTR && fetchRestartCalls)
-						continue;
-					break;
-				}
-			} while (pfd.revents == 0);
+            do {
+                int timeout_cur = compute_timeout(&timeout_end);
+                if (timeout_cur < 0) {
+                    errno = ETIMEDOUT;
+                    break;
+                }
+                errno = 0;
+                r = poll(&pfd, 1, timeout_cur);
+                if (r == -1) {
+                    if (errno == EINTR && fetchRestartCalls)
+                        continue;
+                    break;
+                }
+            } while (pfd.revents == 0);
 
-			if (r == 1 && (pfd.revents & POLLOUT) == POLLOUT) {
-				socklen_t len = sizeof(error);
-				if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
-				    error == 0)
-					break;
-				errno = error;
-			}
-		}
-		close(sd);
-	}
-	freeaddrinfo(res0);
-	if (sd == -1) {
-		fetch_syserr();
-		return (NULL);
-	}
+            if (r == 1 && (pfd.revents & POLLOUT) == POLLOUT) {
+                socklen_t len = sizeof(error);
+                if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
+                    error == 0)
+                    break;
+                errno = error;
+            }
+        }
+        close(sd);
+    }
+    freeaddrinfo(res0);
+    if (sd == -1) {
+        fetch_syserr();
+        return (NULL);
+    }
 
-	if (sock_flags & SOCK_NONBLOCK)
-		fcntl(sd, F_SETFL, fcntl(sd, F_GETFL) & ~O_NONBLOCK);
+    if (sock_flags & SOCK_NONBLOCK)
+        fcntl(sd, F_SETFL, fcntl(sd, F_GETFL) & ~O_NONBLOCK);
 
-	if ((conn = fetch_reopen(sd)) == NULL) {
-		fetch_syserr();
-		close(sd);
-		return (NULL);
-	}
-	conn->cache_url = fetchCopyURL(cache_url);
-	conn->cache_af = af;
-	return (conn);
+    if ((conn = fetch_reopen(sd)) == NULL) {
+        fetch_syserr();
+        close(sd);
+        return (NULL);
+    }
+    conn->cache_url = fetchCopyURL(cache_url);
+    conn->cache_af = af;
+    return (conn);
 }
 
 /*
@@ -296,74 +289,71 @@ fetch_connect(struct url *cache_url, struct url *url, int af, int verbose)
  * lives here, so two contexts never see each other's connections or
  * each other's client certificate.
  */
-struct fetch_ctx *
-fetch_ctx_new(int global_limit, int per_host_limit)
+struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit)
 {
-	struct fetch_ctx *ctx = calloc(1, sizeof(*ctx));
+    struct fetch_ctx *ctx = calloc(1, sizeof(*ctx));
 
-	if (ctx == NULL)
-		return (NULL);
+    if (ctx == NULL)
+        return (NULL);
 
-	if (global_limit < 0)
-		ctx->cache_global_limit = INT_MAX;
-	else if (per_host_limit > global_limit)
-		ctx->cache_global_limit = per_host_limit;
-	else
-		ctx->cache_global_limit = global_limit;
-	if (per_host_limit < 0)
-		ctx->cache_per_host_limit = INT_MAX;
-	else
-		ctx->cache_per_host_limit = per_host_limit;
+    if (global_limit < 0)
+        ctx->cache_global_limit = INT_MAX;
+    else if (per_host_limit > global_limit)
+        ctx->cache_global_limit = per_host_limit;
+    else
+        ctx->cache_global_limit = global_limit;
+    if (per_host_limit < 0)
+        ctx->cache_per_host_limit = INT_MAX;
+    else
+        ctx->cache_per_host_limit = per_host_limit;
 
-	return (ctx);
+    return (ctx);
 }
 
 /*
  * Flush the cache, free all associated resources and the context.
  */
-void
-fetch_ctx_free(struct fetch_ctx *ctx)
+void fetch_ctx_free(struct fetch_ctx *ctx)
 {
-	conn_t *conn;
+    conn_t *conn;
 
-	if (ctx == NULL)
-		return;
+    if (ctx == NULL)
+        return;
 
-	while ((conn = ctx->connection_cache) != NULL) {
-		ctx->connection_cache = conn->next_cached;
-		(*conn->cache_close)(conn);
-	}
+    while ((conn = ctx->connection_cache) != NULL) {
+        ctx->connection_cache = conn->next_cached;
+        (*conn->cache_close)(conn);
+    }
 
-	free(ctx);
+    free(ctx);
 }
 
 /*
  * Check connection cache for an existing entry matching
  * protocol/host/port/user/password/family.
  */
-conn_t *
-fetch_cache_get(struct fetch_ctx *ctx, const struct url *url, int af)
+conn_t *fetch_cache_get(struct fetch_ctx *ctx, const struct url *url, int af)
 {
-	conn_t *conn, *last_conn = NULL;
+    conn_t *conn, *last_conn = NULL;
 
-	for (conn = ctx->connection_cache; conn; conn = conn->next_cached) {
-		if (conn->cache_url->port == url->port &&
-		    strcmp(conn->cache_url->scheme, url->scheme) == 0 &&
-		    strcmp(conn->cache_url->host, url->host) == 0 &&
-		    strcmp(conn->cache_url->user, url->user) == 0 &&
-		    strcmp(conn->cache_url->pwd, url->pwd) == 0 &&
-		    (conn->cache_af == AF_UNSPEC || af == AF_UNSPEC ||
-		     conn->cache_af == af)) {
-			if (last_conn != NULL)
-				last_conn->next_cached = conn->next_cached;
-			else
-				ctx->connection_cache = conn->next_cached;
-			return conn;
-		}
-		last_conn = conn;
-	}
+    for (conn = ctx->connection_cache; conn; conn = conn->next_cached) {
+        if (conn->cache_url->port == url->port &&
+            strcmp(conn->cache_url->scheme, url->scheme) == 0 &&
+            strcmp(conn->cache_url->host, url->host) == 0 &&
+            strcmp(conn->cache_url->user, url->user) == 0 &&
+            strcmp(conn->cache_url->pwd, url->pwd) == 0 &&
+            (conn->cache_af == AF_UNSPEC || af == AF_UNSPEC ||
+             conn->cache_af == af)) {
+            if (last_conn != NULL)
+                last_conn->next_cached = conn->next_cached;
+            else
+                ctx->connection_cache = conn->next_cached;
+            return conn;
+        }
+        last_conn = conn;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 /*
@@ -371,46 +361,45 @@ fetch_cache_get(struct fetch_ctx *ctx, const struct url *url, int af)
  * If the connection is freed due to LRU or if the cache
  * is explicitly closed, the given callback is called.
  */
-void
-fetch_cache_put(struct fetch_ctx *ctx, conn_t *conn, int (*closecb)(conn_t *))
+void fetch_cache_put(struct fetch_ctx *ctx, conn_t *conn,
+                     int (*closecb)(conn_t *))
 {
-	conn_t *iter, *last, *next_cached;
-	int global_count, host_count;
+    conn_t *iter, *last, *next_cached;
+    int global_count, host_count;
 
-	if (conn->cache_url == NULL || ctx->cache_global_limit == 0) {
-		(*closecb)(conn);
-		return;
-	}
+    if (conn->cache_url == NULL || ctx->cache_global_limit == 0) {
+        (*closecb)(conn);
+        return;
+    }
 
-	global_count = host_count = 0;
-	last = NULL;
-	for (iter = ctx->connection_cache; iter; iter = next_cached) {
-		int host_match;
+    global_count = host_count = 0;
+    last = NULL;
+    for (iter = ctx->connection_cache; iter; iter = next_cached) {
+        int host_match;
 
-		next_cached = iter->next_cached;
-		++global_count;
-		host_match = strcmp(conn->cache_url->host,
-		    iter->cache_url->host) == 0;
-		if (host_match)
-			++host_count;
-		if (global_count < ctx->cache_global_limit &&
-		    host_count < ctx->cache_per_host_limit) {
-			last = iter;
-			continue;
-		}
-		--global_count;
-		if (host_match)
-			--host_count;
-		if (last != NULL)
-			last->next_cached = iter->next_cached;
-		else
-			ctx->connection_cache = iter->next_cached;
-		(*iter->cache_close)(iter);
-	}
+        next_cached = iter->next_cached;
+        ++global_count;
+        host_match = strcmp(conn->cache_url->host, iter->cache_url->host) == 0;
+        if (host_match)
+            ++host_count;
+        if (global_count < ctx->cache_global_limit &&
+            host_count < ctx->cache_per_host_limit) {
+            last = iter;
+            continue;
+        }
+        --global_count;
+        if (host_match)
+            --host_count;
+        if (last != NULL)
+            last->next_cached = iter->next_cached;
+        else
+            ctx->connection_cache = iter->next_cached;
+        (*iter->cache_close)(iter);
+    }
 
-	conn->cache_close = closecb;
-	conn->next_cached = ctx->connection_cache;
-	ctx->connection_cache = conn;
+    conn->cache_close = closecb;
+    conn->next_cached = ctx->connection_cache;
+    ctx->connection_cache = conn;
 }
 
 /*
@@ -427,64 +416,67 @@ fetch_cache_put(struct fetch_ctx *ctx, conn_t *conn, int (*closecb)(conn_t *))
  */
 static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
 {
-	const char *ca_file = NULL;
+    const char *ca_file = NULL;
 
 #ifdef CA_CERT_FILE
-	if (access(CA_CERT_FILE, R_OK) == 0) {
-		ca_file = CA_CERT_FILE;
+    if (access(CA_CERT_FILE, R_OK) == 0) {
+        ca_file = CA_CERT_FILE;
 #ifdef CA_CRL_FILE
-		if (access(CA_CRL_FILE, R_OK) == 0) {
-			X509_STORE *crl_store = SSL_CTX_get_cert_store(ctx);
-			X509_LOOKUP *crl_lookup = X509_STORE_add_lookup(crl_store, X509_LOOKUP_file());
-			if (!crl_lookup || !X509_load_crl_file(crl_lookup, CA_CRL_FILE, X509_FILETYPE_PEM)) {
-				fprintf(stderr, "Could not load CRL file %s\n", CA_CRL_FILE);
-				return 0;
-			}
-			X509_STORE_set_flags(crl_store, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
-		}
+        if (access(CA_CRL_FILE, R_OK) == 0) {
+            X509_STORE *crl_store = SSL_CTX_get_cert_store(ctx);
+            X509_LOOKUP *crl_lookup =
+                X509_STORE_add_lookup(crl_store, X509_LOOKUP_file());
+            if (!crl_lookup || !X509_load_crl_file(crl_lookup, CA_CRL_FILE,
+                                                   X509_FILETYPE_PEM)) {
+                fprintf(stderr, "Could not load CRL file %s\n", CA_CRL_FILE);
+                return 0;
+            }
+            X509_STORE_set_flags(crl_store, X509_V_FLAG_CRL_CHECK |
+                                                X509_V_FLAG_CRL_CHECK_ALL);
+        }
 #endif
-	}
+    }
 #endif
-	if (ca_file) {
-		if (SSL_CTX_load_verify_locations(ctx, ca_file, NULL) != 1) {
-			fprintf(stderr, "Could not load CA file %s\n", ca_file);
-			return 0;
-		}
-	} else {
-		/*
-		 * Two calls, because a system may ship one or the other:
-		 * on Debian the file is a symlink to the bundle and the
-		 * directory is the hashed store, elsewhere only the
-		 * directory exists.  Failing both means an empty trust
-		 * store, which is worth saying out loud -- every fetch
-		 * would otherwise fail with a certificate error that
-		 * looks like the server's fault.
-		 */
-		int have_file, have_dir;
+    if (ca_file) {
+        if (SSL_CTX_load_verify_locations(ctx, ca_file, NULL) != 1) {
+            fprintf(stderr, "Could not load CA file %s\n", ca_file);
+            return 0;
+        }
+    } else {
+        /*
+         * Two calls, because a system may ship one or the other:
+         * on Debian the file is a symlink to the bundle and the
+         * directory is the hashed store, elsewhere only the
+         * directory exists.  Failing both means an empty trust
+         * store, which is worth saying out loud -- every fetch
+         * would otherwise fail with a certificate error that
+         * looks like the server's fault.
+         */
+        int have_file, have_dir;
 
-		have_file = SSL_CTX_load_verify_locations(ctx,
-		    X509_get_default_cert_file(), NULL) == 1;
-		have_dir = SSL_CTX_load_verify_locations(ctx, NULL,
-		    X509_get_default_cert_dir()) == 1;
+        have_file = SSL_CTX_load_verify_locations(
+                        ctx, X509_get_default_cert_file(), NULL) == 1;
+        have_dir = SSL_CTX_load_verify_locations(
+                       ctx, NULL, X509_get_default_cert_dir()) == 1;
 
-		if (!have_file && !have_dir) {
-			fprintf(stderr, "Could not load any trusted CA "
-			    "certificates from %s or %s\n",
-			    X509_get_default_cert_file(),
-			    X509_get_default_cert_dir());
-			return 0;
-		}
+        if (!have_file && !have_dir) {
+            fprintf(stderr,
+                    "Could not load any trusted CA "
+                    "certificates from %s or %s\n",
+                    X509_get_default_cert_file(), X509_get_default_cert_dir());
+            return 0;
+        }
 
-		/*
-		 * Whichever of the two failed left its complaint on the
-		 * error queue, and map_tls_error() reads that queue to
-		 * describe a later handshake failure.  Drop it.
-		 */
-		ERR_clear_error();
-	}
+        /*
+         * Whichever of the two failed left its complaint on the
+         * error queue, and map_tls_error() reads that queue to
+         * describe a later handshake failure.  Drop it.
+         */
+        ERR_clear_error();
+    }
 
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
-	return 1;
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
+    return 1;
 }
 
 /*
@@ -502,436 +494,447 @@ static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
  * not silently start authenticating as somebody else.
  */
 static int fetch_ssl_setup_client_certificate(struct fetch_ctx *fctx,
-    SSL_CTX *ctx, int verbose)
+                                              SSL_CTX *ctx, int verbose)
 {
-	const char *cert_file = NULL, *key_file = NULL;
+    const char *cert_file = NULL, *key_file = NULL;
 
-	cert_file = fctx->ssl_client_cert_file;
-	if (cert_file) key_file = fctx->ssl_client_key_file;
+    cert_file = fctx->ssl_client_cert_file;
+    if (cert_file)
+        key_file = fctx->ssl_client_key_file;
 
 #ifdef CLIENT_CERT_FILE
-	if (!cert_file && access(CLIENT_CERT_FILE, R_OK) == 0) {
-		cert_file = CLIENT_CERT_FILE;
+    if (!cert_file && access(CLIENT_CERT_FILE, R_OK) == 0) {
+        cert_file = CLIENT_CERT_FILE;
 #ifdef CLIENT_KEY_FILE
-		if (access(CLIENT_KEY_FILE, R_OK) == 0)
-			key_file = CLIENT_KEY_FILE;
+        if (access(CLIENT_KEY_FILE, R_OK) == 0)
+            key_file = CLIENT_KEY_FILE;
 #endif
-	}
+    }
 #endif
-	if (!cert_file) return 1;
-	if (!key_file) key_file = cert_file;
+    if (!cert_file)
+        return 1;
+    if (!key_file)
+        key_file = cert_file;
 
-	if (verbose) {
-		fetch_info("Using client cert file: %s", cert_file);
-		fetch_info("Using client key file: %s", key_file);
-	}
+    if (verbose) {
+        fetch_info("Using client cert file: %s", cert_file);
+        fetch_info("Using client key file: %s", key_file);
+    }
 
-	if (SSL_CTX_use_certificate_chain_file(ctx, cert_file) != 1) {
-		fprintf(stderr, "Could not load client certificate %s\n",
-			cert_file);
-		return 0;
-	}
+    if (SSL_CTX_use_certificate_chain_file(ctx, cert_file) != 1) {
+        fprintf(stderr, "Could not load client certificate %s\n", cert_file);
+        return 0;
+    }
 
-	if (SSL_CTX_use_PrivateKey_file(ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-		fprintf(stderr, "Could not load client key %s\n", key_file);
-		return 0;
-	}
+    if (SSL_CTX_use_PrivateKey_file(ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+        fprintf(stderr, "Could not load client key %s\n", key_file);
+        return 0;
+    }
 
-	return 1;
+    return 1;
 }
 
 static int map_tls_error(void)
 {
-	unsigned long err = ERR_peek_error();
-	if (ERR_GET_LIB(err) != ERR_LIB_SSL) err = ERR_peek_last_error();
-	if (ERR_GET_LIB(err) != ERR_LIB_SSL) return FETCH_ERR_TLS;
-	switch (ERR_GET_REASON(err)) {
-	case SSL_R_CERTIFICATE_VERIFY_FAILED:
-		return FETCH_ERR_TLS_SERVER_CERT_UNTRUSTED;
-	case SSL_AD_REASON_OFFSET + TLS1_AD_UNKNOWN_CA:
-		return FETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED;
-	case SSL_AD_REASON_OFFSET + SSL3_AD_HANDSHAKE_FAILURE:
-		return FETCH_ERR_TLS_HANDSHAKE;
-	default:
-		return FETCH_ERR_TLS;
-	}
+    unsigned long err = ERR_peek_error();
+    if (ERR_GET_LIB(err) != ERR_LIB_SSL)
+        err = ERR_peek_last_error();
+    if (ERR_GET_LIB(err) != ERR_LIB_SSL)
+        return FETCH_ERR_TLS;
+    switch (ERR_GET_REASON(err)) {
+    case SSL_R_CERTIFICATE_VERIFY_FAILED:
+        return FETCH_ERR_TLS_SERVER_CERT_UNTRUSTED;
+    case SSL_AD_REASON_OFFSET + TLS1_AD_UNKNOWN_CA:
+        return FETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED;
+    case SSL_AD_REASON_OFFSET + SSL3_AD_HANDSHAKE_FAILURE:
+        return FETCH_ERR_TLS_HANDSHAKE;
+    default:
+        return FETCH_ERR_TLS;
+    }
 }
 
 /*
  * Enable SSL on a connection.
  */
-int
-fetch_ssl(struct fetch_ctx *fctx, conn_t *conn, const struct url *URL,
-    int verbose)
+int fetch_ssl(struct fetch_ctx *fctx, conn_t *conn, const struct url *URL,
+              int verbose)
 {
-	conn->ssl_meth = TLS_client_method();
-	conn->ssl_ctx = SSL_CTX_new(conn->ssl_meth);
-	if (conn->ssl_ctx == NULL) goto err;
-	SSL_CTX_set_mode(conn->ssl_ctx, SSL_MODE_AUTO_RETRY);
+    conn->ssl_meth = TLS_client_method();
+    conn->ssl_ctx = SSL_CTX_new(conn->ssl_meth);
+    if (conn->ssl_ctx == NULL)
+        goto err;
+    SSL_CTX_set_mode(conn->ssl_ctx, SSL_MODE_AUTO_RETRY);
 
-	if (!fetch_ssl_setup_peer_verification(conn->ssl_ctx, verbose)) goto err;
-	if (!fetch_ssl_setup_client_certificate(fctx, conn->ssl_ctx, verbose))
-		goto err;
+    if (!fetch_ssl_setup_peer_verification(conn->ssl_ctx, verbose))
+        goto err;
+    if (!fetch_ssl_setup_client_certificate(fctx, conn->ssl_ctx, verbose))
+        goto err;
 
-	conn->ssl = SSL_new(conn->ssl_ctx);
-	if (conn->ssl == NULL) goto err;
+    conn->ssl = SSL_new(conn->ssl_ctx);
+    if (conn->ssl == NULL)
+        goto err;
 
-	conn->buf_events = 0;
-	SSL_set_fd(conn->ssl, conn->sd);
-	if (!SSL_set_tlsext_host_name(conn->ssl, (char *)(uintptr_t)URL->host)) {
-		fprintf(stderr,
-		    "TLS server name indication extension failed for host %s\n",
-		    URL->host);
-		goto err;
-	}
+    conn->buf_events = 0;
+    SSL_set_fd(conn->ssl, conn->sd);
+    if (!SSL_set_tlsext_host_name(conn->ssl, (char *)(uintptr_t)URL->host)) {
+        fprintf(stderr,
+                "TLS server name indication extension failed for host %s\n",
+                URL->host);
+        goto err;
+    }
 
-	if (SSL_connect(conn->ssl) == -1) {
-		tls_seterr(map_tls_error());
-		return -1;
-	}
+    if (SSL_connect(conn->ssl) == -1) {
+        tls_seterr(map_tls_error());
+        return -1;
+    }
 
-	conn->ssl_cert = SSL_get_peer_certificate(conn->ssl);
-	if (!conn->ssl_cert) goto err;
+    conn->ssl_cert = SSL_get_peer_certificate(conn->ssl);
+    if (!conn->ssl_cert)
+        goto err;
 
-	/*
-	 * Unconditional: upstream let SSL_NO_VERIFY_HOSTNAME switch this
-	 * off, which turned any certificate the CA store accepts into a
-	 * certificate for every host.  aept runs as root and installs
-	 * what it downloads, so there is no caller for whom that is a
-	 * reasonable trade.
-	 */
-	if (verbose)
-		fetch_info("Verify hostname");
-	if (X509_check_host(conn->ssl_cert, URL->host, strlen(URL->host),
-			X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL) != 1) {
-		tls_seterr(FETCH_ERR_TLS_SERVER_CERT_HOSTNAME);
-		return -1;
-	}
+    /*
+     * Unconditional: upstream let SSL_NO_VERIFY_HOSTNAME switch this
+     * off, which turned any certificate the CA store accepts into a
+     * certificate for every host.  aept runs as root and installs
+     * what it downloads, so there is no caller for whom that is a
+     * reasonable trade.
+     */
+    if (verbose)
+        fetch_info("Verify hostname");
+    if (X509_check_host(conn->ssl_cert, URL->host, strlen(URL->host),
+                        X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL) != 1) {
+        tls_seterr(FETCH_ERR_TLS_SERVER_CERT_HOSTNAME);
+        return -1;
+    }
 
-	if (verbose) {
-		X509_NAME *name;
-		char *str;
+    if (verbose) {
+        X509_NAME *name;
+        char *str;
 
-		fetch_info("SSL connection established using %s\n", SSL_get_cipher(conn->ssl));
-		name = X509_get_subject_name(conn->ssl_cert);
-		str = X509_NAME_oneline(name, 0, 0);
-		fetch_info("Certificate subject: %s", str);
-		free(str);
-		name = X509_get_issuer_name(conn->ssl_cert);
-		str = X509_NAME_oneline(name, 0, 0);
-		fetch_info("Certificate issuer: %s", str);
-		free(str);
-	}
+        fetch_info("SSL connection established using %s\n",
+                   SSL_get_cipher(conn->ssl));
+        name = X509_get_subject_name(conn->ssl_cert);
+        str = X509_NAME_oneline(name, 0, 0);
+        fetch_info("Certificate subject: %s", str);
+        free(str);
+        name = X509_get_issuer_name(conn->ssl_cert);
+        str = X509_NAME_oneline(name, 0, 0);
+        fetch_info("Certificate issuer: %s", str);
+        free(str);
+    }
 
-	return (0);
+    return (0);
 err:
-	tls_seterr(FETCH_ERR_TLS);
-	return (-1);
+    tls_seterr(FETCH_ERR_TLS);
+    return (-1);
 }
 
 /*
  * Read a character from a connection w/ timeout
  */
-ssize_t
-fetch_read(conn_t *conn, char *buf, size_t len)
+ssize_t fetch_read(conn_t *conn, char *buf, size_t len)
 {
-	struct timeval timeout_end;
-	struct pollfd pfd;
-	int timeout_cur;
-	ssize_t rlen;
-	int r;
+    struct timeval timeout_end;
+    struct pollfd pfd;
+    int timeout_cur;
+    ssize_t rlen;
+    int r;
 
-	if (len == 0)
-		return 0;
+    if (len == 0)
+        return 0;
 
-	if (conn->next_len != 0) {
-		if (conn->next_len < len)
-			len = conn->next_len;
-		memmove(buf, conn->next_buf, len);
-		conn->next_len -= len;
-		conn->next_buf += len;
-		return len;
-	}
+    if (conn->next_len != 0) {
+        if (conn->next_len < len)
+            len = conn->next_len;
+        memmove(buf, conn->next_buf, len);
+        conn->next_len -= len;
+        conn->next_buf += len;
+        return len;
+    }
 
-	if (fetchTimeout) {
-		gettimeofday(&timeout_end, NULL);
-		timeout_end.tv_sec += fetchTimeout;
-	}
+    if (fetchTimeout) {
+        gettimeofday(&timeout_end, NULL);
+        timeout_end.tv_sec += fetchTimeout;
+    }
 
-	pfd.fd = conn->sd;
-	for (;;) {
-		pfd.events = conn->buf_events;
-		if (pfd.events) {
-			do {
-				if (fetchTimeout) {
-					timeout_cur = compute_timeout(&timeout_end);
-					if (timeout_cur < 0) {
-						errno = ETIMEDOUT;
-						fetch_syserr();
-						return (-1);
-					}
-				} else {
-					timeout_cur = -1;
-				}
-				errno = 0;
-				r = poll(&pfd, 1, timeout_cur);
-				if (r == -1) {
-					if (errno == EINTR && fetchRestartCalls)
-						continue;
-					fetch_syserr();
-					return (-1);
-				}
-			} while (pfd.revents == 0);
-		}
+    pfd.fd = conn->sd;
+    for (;;) {
+        pfd.events = conn->buf_events;
+        if (pfd.events) {
+            do {
+                if (fetchTimeout) {
+                    timeout_cur = compute_timeout(&timeout_end);
+                    if (timeout_cur < 0) {
+                        errno = ETIMEDOUT;
+                        fetch_syserr();
+                        return (-1);
+                    }
+                } else {
+                    timeout_cur = -1;
+                }
+                errno = 0;
+                r = poll(&pfd, 1, timeout_cur);
+                if (r == -1) {
+                    if (errno == EINTR && fetchRestartCalls)
+                        continue;
+                    fetch_syserr();
+                    return (-1);
+                }
+            } while (pfd.revents == 0);
+        }
 
-		if (conn->ssl != NULL) {
-			rlen = SSL_read(conn->ssl, buf, len);
-			if (rlen == -1) {
-				switch (SSL_get_error(conn->ssl, rlen)) {
-				case SSL_ERROR_WANT_READ:
-					conn->buf_events = POLLIN;
-					continue;
-				case SSL_ERROR_WANT_WRITE:
-					conn->buf_events = POLLOUT;
-					continue;
-				default:
-					errno = EIO;
-					fetch_syserr();
-					return -1;
-				}
-			} else {
-				/* Assume buffering on the SSL layer. */
-				conn->buf_events = 0;
-			}
-		} else {
-			rlen = read(conn->sd, buf, len);
-		}
-		if (rlen >= 0)
-			break;
-	
-		if (errno != EINTR || !fetchRestartCalls)
-			return (-1);
-	}
-	return (rlen);
+        if (conn->ssl != NULL) {
+            rlen = SSL_read(conn->ssl, buf, len);
+            if (rlen == -1) {
+                switch (SSL_get_error(conn->ssl, rlen)) {
+                case SSL_ERROR_WANT_READ:
+                    conn->buf_events = POLLIN;
+                    continue;
+                case SSL_ERROR_WANT_WRITE:
+                    conn->buf_events = POLLOUT;
+                    continue;
+                default:
+                    errno = EIO;
+                    fetch_syserr();
+                    return -1;
+                }
+            } else {
+                /* Assume buffering on the SSL layer. */
+                conn->buf_events = 0;
+            }
+        } else {
+            rlen = read(conn->sd, buf, len);
+        }
+        if (rlen >= 0)
+            break;
+
+        if (errno != EINTR || !fetchRestartCalls)
+            return (-1);
+    }
+    return (rlen);
 }
-
 
 /*
  * Read a line of text from a connection w/ timeout
  */
 #define MIN_BUF_SIZE 1024
 
-int
-fetch_getln(conn_t *conn)
+int fetch_getln(conn_t *conn)
 {
-	char *tmp, *next;
-	size_t tmpsize;
-	ssize_t len;
+    char *tmp, *next;
+    size_t tmpsize;
+    ssize_t len;
 
-	if (conn->buf == NULL) {
-		if ((conn->buf = malloc(MIN_BUF_SIZE)) == NULL) {
-			errno = ENOMEM;
-			return (-1);
-		}
-		conn->bufsize = MIN_BUF_SIZE;
-	}
+    if (conn->buf == NULL) {
+        if ((conn->buf = malloc(MIN_BUF_SIZE)) == NULL) {
+            errno = ENOMEM;
+            return (-1);
+        }
+        conn->bufsize = MIN_BUF_SIZE;
+    }
 
-	conn->buflen = 0;
-	next = NULL;
+    conn->buflen = 0;
+    next = NULL;
 
-	do {
-		/*
-		 * conn->bufsize != conn->buflen at this point,
-		 * so the buffer can be NUL-terminated below for
-		 * the case of len == 0.
-		 */
-		len = fetch_read(conn, conn->buf + conn->buflen,
-		    conn->bufsize - conn->buflen);
-		if (len == -1)
-			return (-1);
-		if (len == 0)
-			break;
-		next = memchr(conn->buf + conn->buflen, '\n', len);
-		conn->buflen += len;
-		if (conn->buflen == conn->bufsize && next == NULL) {
-			tmp = conn->buf;
-			tmpsize = conn->bufsize * 2;
-			if (tmpsize < conn->bufsize) {
-				errno = ENOMEM;
-				return (-1);
-			}
-			if ((tmp = realloc(tmp, tmpsize)) == NULL) {
-				errno = ENOMEM;
-				return (-1);
-			}
-			conn->buf = tmp;
-			conn->bufsize = tmpsize;
-		}
-	} while (next == NULL);
+    do {
+        /*
+         * conn->bufsize != conn->buflen at this point,
+         * so the buffer can be NUL-terminated below for
+         * the case of len == 0.
+         */
+        len = fetch_read(conn, conn->buf + conn->buflen,
+                         conn->bufsize - conn->buflen);
+        if (len == -1)
+            return (-1);
+        if (len == 0)
+            break;
+        next = memchr(conn->buf + conn->buflen, '\n', len);
+        conn->buflen += len;
+        if (conn->buflen == conn->bufsize && next == NULL) {
+            tmp = conn->buf;
+            tmpsize = conn->bufsize * 2;
+            if (tmpsize < conn->bufsize) {
+                errno = ENOMEM;
+                return (-1);
+            }
+            if ((tmp = realloc(tmp, tmpsize)) == NULL) {
+                errno = ENOMEM;
+                return (-1);
+            }
+            conn->buf = tmp;
+            conn->bufsize = tmpsize;
+        }
+    } while (next == NULL);
 
-	if (next != NULL) {
-		*next = '\0';
-		conn->next_buf = next + 1;
-		conn->next_len = conn->buflen - (conn->next_buf - conn->buf);
-		conn->buflen = next - conn->buf;
-	} else {
-		conn->buf[conn->buflen] = '\0';
-		conn->next_len = 0;
-	}
-	return (0);
+    if (next != NULL) {
+        *next = '\0';
+        conn->next_buf = next + 1;
+        conn->next_len = conn->buflen - (conn->next_buf - conn->buf);
+        conn->buflen = next - conn->buf;
+    } else {
+        conn->buf[conn->buflen] = '\0';
+        conn->next_len = 0;
+    }
+    return (0);
 }
 
 /*
  * Write a vector to a connection w/ timeout
  * Note: can modify the iovec.
  */
-ssize_t
-fetch_write(conn_t *conn, const void *buf, size_t len)
+ssize_t fetch_write(conn_t *conn, const void *buf, size_t len)
 {
-	struct timeval now, timeout, waittv;
-	fd_set writefds;
-	ssize_t wlen, total;
-	int r;
+    struct timeval now, timeout, waittv;
+    fd_set writefds;
+    ssize_t wlen, total;
+    int r;
 
-	if (fetchTimeout) {
-		FD_ZERO(&writefds);
-		gettimeofday(&timeout, NULL);
-		timeout.tv_sec += fetchTimeout;
-	}
+    if (fetchTimeout) {
+        FD_ZERO(&writefds);
+        gettimeofday(&timeout, NULL);
+        timeout.tv_sec += fetchTimeout;
+    }
 
-	total = 0;
-	while (len) {
-		while (fetchTimeout && !FD_ISSET(conn->sd, &writefds)) {
-			FD_SET(conn->sd, &writefds);
-			gettimeofday(&now, NULL);
-			waittv.tv_sec = timeout.tv_sec - now.tv_sec;
-			waittv.tv_usec = timeout.tv_usec - now.tv_usec;
-			if (waittv.tv_usec < 0) {
-				waittv.tv_usec += 1000000;
-				waittv.tv_sec--;
-			}
-			if (waittv.tv_sec < 0) {
-				errno = ETIMEDOUT;
-				fetch_syserr();
-				return (-1);
-			}
-			errno = 0;
-			r = select(conn->sd + 1, NULL, &writefds, NULL, &waittv);
-			if (r == -1) {
-				if (errno == EINTR && fetchRestartCalls)
-					continue;
-				return (-1);
-			}
-		}
-		errno = 0;
-		if (conn->ssl != NULL)
-			wlen = SSL_write(conn->ssl, buf, len);
-		else
-			wlen = send(conn->sd, buf, len, MSG_NOSIGNAL);
-		if (wlen == 0) {
-			/* we consider a short write a failure */
-			errno = EPIPE;
-			fetch_syserr();
-			return (-1);
-		}
-		if (wlen < 0) {
-			if (errno == EINTR && fetchRestartCalls)
-				continue;
-			return (-1);
-		}
-		total += wlen;
-		buf = (const char *)buf + wlen;
-		len -= wlen;
-	}
-	return (total);
+    total = 0;
+    while (len) {
+        while (fetchTimeout && !FD_ISSET(conn->sd, &writefds)) {
+            FD_SET(conn->sd, &writefds);
+            gettimeofday(&now, NULL);
+            waittv.tv_sec = timeout.tv_sec - now.tv_sec;
+            waittv.tv_usec = timeout.tv_usec - now.tv_usec;
+            if (waittv.tv_usec < 0) {
+                waittv.tv_usec += 1000000;
+                waittv.tv_sec--;
+            }
+            if (waittv.tv_sec < 0) {
+                errno = ETIMEDOUT;
+                fetch_syserr();
+                return (-1);
+            }
+            errno = 0;
+            r = select(conn->sd + 1, NULL, &writefds, NULL, &waittv);
+            if (r == -1) {
+                if (errno == EINTR && fetchRestartCalls)
+                    continue;
+                return (-1);
+            }
+        }
+        errno = 0;
+        if (conn->ssl != NULL)
+            wlen = SSL_write(conn->ssl, buf, len);
+        else
+            wlen = send(conn->sd, buf, len, MSG_NOSIGNAL);
+        if (wlen == 0) {
+            /* we consider a short write a failure */
+            errno = EPIPE;
+            fetch_syserr();
+            return (-1);
+        }
+        if (wlen < 0) {
+            if (errno == EINTR && fetchRestartCalls)
+                continue;
+            return (-1);
+        }
+        total += wlen;
+        buf = (const char *)buf + wlen;
+        len -= wlen;
+    }
+    return (total);
 }
-
 
 /*
  * Close connection
  */
-int
-fetch_close(conn_t *conn)
+int fetch_close(conn_t *conn)
 {
-	int ret;
+    int ret;
 
-	if (conn->ssl) {
-		SSL_shutdown(conn->ssl);
-		SSL_set_connect_state(conn->ssl);
-		SSL_free(conn->ssl);
-	}
-	if (conn->ssl_ctx) {
-		SSL_CTX_free(conn->ssl_ctx);
-	}
-	if (conn->ssl_cert) {
-		X509_free(conn->ssl_cert);
-	}
+    if (conn->ssl) {
+        SSL_shutdown(conn->ssl);
+        SSL_set_connect_state(conn->ssl);
+        SSL_free(conn->ssl);
+    }
+    if (conn->ssl_ctx) {
+        SSL_CTX_free(conn->ssl_ctx);
+    }
+    if (conn->ssl_cert) {
+        X509_free(conn->ssl_cert);
+    }
 
-	ret = close(conn->sd);
-	if (conn->cache_url)
-		fetchFreeURL(conn->cache_url);
-	free(conn->ftp_home);
-	free(conn->buf);
-	free(conn);
-	return (ret);
+    ret = close(conn->sd);
+    if (conn->cache_url)
+        fetchFreeURL(conn->cache_url);
+    free(conn->ftp_home);
+    free(conn->buf);
+    free(conn);
+    return (ret);
 }
 
+#define MAX_ADDRESS_BYTES sizeof(struct in6_addr)
+#define MAX_ADDRESS_STRING INET6_ADDRSTRLEN
+#define MAX_CIDR_STRING (MAX_ADDRESS_STRING + 4)
 
-#define MAX_ADDRESS_BYTES	sizeof(struct in6_addr)
-#define MAX_ADDRESS_STRING	INET6_ADDRSTRLEN
-#define MAX_CIDR_STRING		(MAX_ADDRESS_STRING+4)
-
-static size_t host_to_address(uint8_t *buf, size_t buf_len, const char *host, size_t len)
+static size_t host_to_address(uint8_t *buf, size_t buf_len, const char *host,
+                              size_t len)
 {
-	char tmp[MAX_ADDRESS_STRING];
+    char tmp[MAX_ADDRESS_STRING];
 
-	if (len >= sizeof tmp) return 0;
-	if (buf_len < sizeof(struct in6_addr)) return 0;
+    if (len >= sizeof tmp)
+        return 0;
+    if (buf_len < sizeof(struct in6_addr))
+        return 0;
 
-	/* Make zero terminated copy of the hostname */
-	memcpy(tmp, host, len);
-	tmp[len] = 0;
+    /* Make zero terminated copy of the hostname */
+    memcpy(tmp, host, len);
+    tmp[len] = 0;
 
-	if (inet_pton(AF_INET, tmp, (struct in_addr *) buf))
-		return sizeof(struct in_addr);
-	if (inet_pton(AF_INET6, tmp, (struct in6_addr *) buf))
-		return sizeof(struct in6_addr);
-	return 0;
+    if (inet_pton(AF_INET, tmp, (struct in_addr *)buf))
+        return sizeof(struct in_addr);
+    if (inet_pton(AF_INET6, tmp, (struct in6_addr *)buf))
+        return sizeof(struct in6_addr);
+    return 0;
 }
 
 static int bitcmp(const uint8_t *a, const uint8_t *b, int len)
 {
-	int bytes, bits, mask, r;
+    int bytes, bits, mask, r;
 
-	bytes = len / 8;
-	bits  = len % 8;
-	if (bytes != 0) {
-		r = memcmp(a, b, bytes);
-		if (r != 0) return r;
-	}
-	if (bits != 0) {
-		mask = (0xff << (8 - bits)) & 0xff;
-		return ((int) (a[bytes] & mask)) - ((int) (b[bytes] & mask));
-	}
-	return 0;
+    bytes = len / 8;
+    bits = len % 8;
+    if (bytes != 0) {
+        r = memcmp(a, b, bytes);
+        if (r != 0)
+            return r;
+    }
+    if (bits != 0) {
+        mask = (0xff << (8 - bits)) & 0xff;
+        return ((int)(a[bytes] & mask)) - ((int)(b[bytes] & mask));
+    }
+    return 0;
 }
 
-static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr, size_t cidr_len)
+static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr,
+                      size_t cidr_len)
 {
-	const char *slash;
-	uint8_t cidr_addr[MAX_ADDRESS_BYTES];
-	size_t cidr_addrlen;
-	long bits;
+    const char *slash;
+    uint8_t cidr_addr[MAX_ADDRESS_BYTES];
+    size_t cidr_addrlen;
+    long bits;
 
-	if (!addr_len || cidr_len > MAX_CIDR_STRING) return 0;
-	slash = memchr(cidr, '/', cidr_len);
-	if (!slash) return 0;
-	bits = strtol(slash + 1, NULL, 10);
-	if (!bits || bits > 128) return 0;
+    if (!addr_len || cidr_len > MAX_CIDR_STRING)
+        return 0;
+    slash = memchr(cidr, '/', cidr_len);
+    if (!slash)
+        return 0;
+    bits = strtol(slash + 1, NULL, 10);
+    if (!bits || bits > 128)
+        return 0;
 
-	cidr_addrlen = host_to_address(cidr_addr, sizeof cidr_addr, cidr, slash - cidr);
-	if (cidr_addrlen != addr_len || bits > addr_len*8) return 0;
-	return bitcmp(cidr_addr, addr, bits) == 0;
+    cidr_addrlen =
+        host_to_address(cidr_addr, sizeof cidr_addr, cidr, slash - cidr);
+    if (cidr_addrlen != addr_len || bits > addr_len * 8)
+        return 0;
+    return bitcmp(cidr_addr, addr, bits) == 0;
 }
 
 /*
@@ -942,94 +945,89 @@ static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr, si
  * (for compatability with lynx and curl, see the discussion at
  * <http://curl.haxx.se/mail/archive_pre_oct_99/0009.html>).
  */
-int
-fetch_no_proxy_match(const char *host)
+int fetch_no_proxy_match(const char *host)
 {
-	const char *no_proxy, *p, *q;
-	uint8_t addr[MAX_ADDRESS_BYTES];
-	size_t h_len, d_len, addr_len;
+    const char *no_proxy, *p, *q;
+    uint8_t addr[MAX_ADDRESS_BYTES];
+    size_t h_len, d_len, addr_len;
 
-	if ((no_proxy = getenv("NO_PROXY")) == NULL &&
-	    (no_proxy = getenv("no_proxy")) == NULL)
-		return (0);
+    if ((no_proxy = getenv("NO_PROXY")) == NULL &&
+        (no_proxy = getenv("no_proxy")) == NULL)
+        return (0);
 
-	/* asterisk matches any hostname */
-	if (strcmp(no_proxy, "*") == 0)
-		return (1);
+    /* asterisk matches any hostname */
+    if (strcmp(no_proxy, "*") == 0)
+        return (1);
 
-	h_len = strlen(host);
-	addr_len = host_to_address(addr, sizeof addr, host, h_len);
-	p = no_proxy;
-	do {
-		/* position p at the beginning of a domain suffix */
-		while (*p == ',' || isspace((unsigned char)*p))
-			p++;
+    h_len = strlen(host);
+    addr_len = host_to_address(addr, sizeof addr, host, h_len);
+    p = no_proxy;
+    do {
+        /* position p at the beginning of a domain suffix */
+        while (*p == ',' || isspace((unsigned char)*p))
+            p++;
 
-		/* position q at the first separator character */
-		for (q = p; *q; ++q)
-			if (*q == ',' || isspace((unsigned char)*q))
-				break;
+        /* position q at the first separator character */
+        for (q = p; *q; ++q)
+            if (*q == ',' || isspace((unsigned char)*q))
+                break;
 
-		d_len = q - p;
-		if (d_len > 0 && h_len >= d_len &&
-		    strncasecmp(host + h_len - d_len,
-			p, d_len) == 0) {
-			/* domain name matches */
-			return (1);
-		}
+        d_len = q - p;
+        if (d_len > 0 && h_len >= d_len &&
+            strncasecmp(host + h_len - d_len, p, d_len) == 0) {
+            /* domain name matches */
+            return (1);
+        }
 
-		if (cidr_match(addr, addr_len, p, d_len)) {
-			return (1);
-		}
+        if (cidr_match(addr, addr_len, p, d_len)) {
+            return (1);
+        }
 
-		p = q + 1;
-	} while (*q);
+        p = q + 1;
+    } while (*q);
 
-	return (0);
+    return (0);
 }
 
 struct fetchIO {
-	void *io_cookie;
-	ssize_t (*io_read)(void *, void *, size_t);
-	ssize_t (*io_write)(void *, const void *, size_t);
-	void (*io_close)(void *);
+    void *io_cookie;
+    ssize_t (*io_read)(void *, void *, size_t);
+    ssize_t (*io_write)(void *, const void *, size_t);
+    void (*io_close)(void *);
 };
 
-void
-fetchIO_close(fetchIO *f)
+void fetchIO_close(fetchIO *f)
 {
-	if (f->io_close != NULL)
-		(*f->io_close)(f->io_cookie);
+    if (f->io_close != NULL)
+        (*f->io_close)(f->io_cookie);
 
-	free(f);
+    free(f);
 }
 
-fetchIO *
-fetchIO_unopen(void *io_cookie, ssize_t (*io_read)(void *, void *, size_t),
-    ssize_t (*io_write)(void *, const void *, size_t),
-    void (*io_close)(void *))
+fetchIO *fetchIO_unopen(void *io_cookie,
+                        ssize_t (*io_read)(void *, void *, size_t),
+                        ssize_t (*io_write)(void *, const void *, size_t),
+                        void (*io_close)(void *))
 {
-	fetchIO *f;
+    fetchIO *f;
 
-	f = malloc(sizeof(*f));
-	if (f == NULL)
-		return f;
+    f = malloc(sizeof(*f));
+    if (f == NULL)
+        return f;
 
-	f->io_cookie = io_cookie;
-	f->io_read = io_read;
-	f->io_write = io_write;
-	f->io_close = io_close;
+    f->io_cookie = io_cookie;
+    f->io_read = io_read;
+    f->io_write = io_write;
+    f->io_close = io_close;
 
-	return f;
+    return f;
 }
 
-ssize_t
-fetchIO_read(fetchIO *f, void *buf, size_t len)
+ssize_t fetchIO_read(fetchIO *f, void *buf, size_t len)
 {
-	if (f->io_read == NULL) {
-		errno = EBADF;
-		return -1;
-	}
-	return (*f->io_read)(f->io_cookie, buf, len);
+    if (f->io_read == NULL) {
+        errno = EBADF;
+        return -1;
+    }
+    return (*f->io_read)(f->io_cookie, buf, len);
 }
-
