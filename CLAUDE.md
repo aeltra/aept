@@ -134,7 +134,7 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 **Key subsystems:**
 
 - **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos.
-- **archive.c** — Two-level AEP extraction (outer AR → inner tar). Adapted from opkg's `opkg_archive.c`. Handles nested decompression with libarchive callbacks. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
+- **archive.c** — Two-level AEP extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.
