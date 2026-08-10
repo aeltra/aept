@@ -13,8 +13,9 @@
 # calling libfetch directly, because aept_download() is the boundary
 # that must survive the fork unchanged.
 #
-# One assertion below deliberately pins behaviour that is wrong; it is
-# marked DEFECT and says what it should become.
+# The fork is done, so this now doubles as the regression suite for the
+# HTTP layer: assertions that once pinned a defect have been flipped to
+# the behaviour the fix produces.
 
 set -u
 
@@ -57,6 +58,15 @@ body_is() {
     cmp -s "$out" "$work/want" \
         || fail "$1: body differs from expectation:
   got:  $(head -c 80 "$out" | tr -d '\0')
+  want: $2"
+}
+
+# The same, for a download that did not go through get().
+body_is_file() {
+    printf '%s' "$2" > "$work/want"
+    cmp -s "$1" "$work/want" \
+        || fail "$1: body differs from expectation:
+  got:  $(head -c 80 "$1" | tr -d '\0')
   want: $2"
 }
 
@@ -119,20 +129,54 @@ note "a 404 fails and leaves no output file"
 
 # ── a body that ends early ───────────────────────────────────────────
 #
-# DEFECT, pinned deliberately.  The server promises 1000 bytes, sends
-# 10, and hangs up.  aept reports success and writes the 10 bytes, so a
-# transfer cut short is indistinguishable from a complete one at this
-# layer.  Packages survive it because their SHA256 is checked afterwards
-# and a signed index survives it because the signature will not verify,
-# but an unsigned index is accepted truncated.
-#
-# This assertion exists to make the fork provably behaviour-preserving,
-# not to bless the behaviour.  When it is fixed, this becomes
-# expect_fail and the note below goes away.
+# The server promises 1000 bytes, sends 10, and hangs up.  This used to
+# be reported as a successful download of 10 bytes, so a transfer cut
+# short was indistinguishable from a complete one at this layer.
+# Packages survived it because their SHA256 is checked afterwards, and a
+# signed index survived it because the signature would not verify — but
+# an unsigned index was accepted truncated.
 
-expect_ok /truncated
-size_is /truncated 10
-note "DEFECT pinned: a short read is reported as a successful download"
+expect_fail /truncated
+[ -e "$out" ] && fail "/truncated: a short body was left on disk"
+note "a body shorter than its Content-Length fails, leaving no file"
+
+# The same, from a server that had announced keep-alive.  Whether the
+# connection was a candidate for reuse must not change the verdict.
+expect_fail /truncated-ka
+[ -e "$out" ] && fail "/truncated-ka: a short body was left on disk"
+note "a short body fails even when the server had promised keep-alive"
+
+# Chunked framing has its own end-of-body marker, and a stream that
+# stops mid-chunk never reaches it.
+expect_fail /chunktrunc
+[ -e "$out" ] && fail "/chunktrunc: a partial chunk was left on disk"
+note "a chunked body cut off mid-chunk fails"
+
+# A chunk with a corrupt frame must fail too.  Here the framing is
+# wrong but a valid terminating chunk follows, so a client that shrugs
+# at the bad trailer sees a clean six-byte body rather than an error.
+expect_fail /chunkbad
+[ -e "$out" ] && fail "/chunkbad: a mis-framed chunk was left on disk:
+$(wc -c < "$out") bytes"
+note "a chunk not followed by CRLF fails"
+
+# ── a failed stream does not poison the connection cache ─────────────
+#
+# /chunkbad abandons the stream at an unknown point in the protocol
+# with the connection still open and further bytes pending on it.  If
+# that connection goes back into the cache, the next request reuses it
+# and is answered by those leftover bytes — a *successful* download of
+# somebody else's body.  Two downloads on one context, so the cache is
+# in play.
+
+verdicts=$(timeout 60 "$HTTPGET" "$base/chunkbad" "$work/t" \
+    "$base/ok" "$work/u" 2>/dev/null)
+printf '%s' "$verdicts" | tr '\n' ' ' | grep -q '^fail ok' \
+    || fail "after a failed stream the next download did not recover:
+$verdicts"
+body_is_file "$work/u" 'hello from ok
+'
+note "a failed stream's connection is dropped, not reused"
 
 # ── no content length at all ─────────────────────────────────────────
 

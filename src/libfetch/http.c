@@ -187,7 +187,24 @@ http_fillbuf(struct httpio *io, size_t len)
 			io->error = 1;
 			return (-1);
 		}
-		if (io->contentlength)
+		if (io->buflen == 0) {
+			/*
+			 * The peer hung up.  If it promised a length and
+			 * still owes us bytes, the body is short, and a
+			 * transfer cut in half must not be handed to the
+			 * caller as a complete one: an unsigned index would
+			 * be accepted truncated.  Without a promised length
+			 * the close *is* the end of the body.
+			 */
+			if (io->contentlength > 0) {
+				io->error = 1;
+				errno = EIO;
+				return (-1);
+			}
+			io->eof = 1;
+			return (0);
+		}
+		if (io->contentlength > 0)
 			io->contentlength -= io->buflen;
 		io->bufpos = 0;
 		return (io->buflen);
@@ -214,6 +231,12 @@ http_fillbuf(struct httpio *io, size_t len)
 		io->error = 1;
 		return (-1);
 	}
+	if (io->buflen == 0) {
+		/* End of file in the middle of a chunk: same story. */
+		io->error = 1;
+		errno = EIO;
+		return (-1);
+	}
 	io->chunksize -= io->buflen;
 	if (io->contentlength >= 0)
 		io->contentlength -= io->buflen;
@@ -222,11 +245,24 @@ http_fillbuf(struct httpio *io, size_t len)
 		char endl[2];
 		ssize_t len2;
 
+		/*
+		 * Every chunk is followed by CRLF.  Missing it means the
+		 * framing is not what the server claimed, so the stream
+		 * has to be abandoned -- and io->error is what says so:
+		 * a bare -1 from here leaves the flag clear, and
+		 * http_readfn then hands the caller the bytes it had
+		 * already collected as if the body had simply ended.
+		 */
 		len2 = fetch_read(io->conn, endl, 2);
-		if (len2 == 1 && fetch_read(io->conn, endl + 1, 1) != 1)
+		if (len2 == 1 && fetch_read(io->conn, endl + 1, 1) != 1) {
+			io->error = 1;
 			return (-1);
-		if (len2 == -1 || endl[0] != '\r' || endl[1] != '\n')
+		}
+		if (len2 == -1 || endl[0] != '\r' || endl[1] != '\n') {
+			io->error = 1;
+			errno = EIO;
 			return (-1);
+		}
 	}
 
 	io->bufpos = 0;
@@ -243,8 +279,17 @@ http_readfn(void *v, void *buf, size_t len)
 	struct httpio *io = (struct httpio *)v;
 	size_t l, pos;
 
-	if (io->error)
+	if (io->error) {
+		/*
+		 * A read that failed part-way returns the bytes it did
+		 * get, so the failure is reported on the next call --
+		 * by which time errno belongs to whatever the caller
+		 * did in between.  Restate it, or a caller that retries
+		 * on EINTR can spin here forever.
+		 */
+		errno = EIO;
 		return (-1);
+	}
 	if (io->eof)
 		return (0);
 
@@ -285,7 +330,12 @@ http_closefn(void *v)
 	struct httpio *io = (struct httpio *)v;
 	conn_t *conn = io->conn;
 
-	if (io->keep_alive) {
+	/*
+	 * A stream that failed stopped at an unknown point in the
+	 * protocol, so the connection cannot be reused: the next request
+	 * on it would be answered by the tail of this one's body.
+	 */
+	if (io->keep_alive && !io->error) {
 		fetch_cache_put(io->ctx, conn, fetch_close);
 	} else {
 		fetch_close(conn);

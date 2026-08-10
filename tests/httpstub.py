@@ -149,6 +149,38 @@ class Handler(socketserver.BaseRequestHandler):
             send(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n")
             send(b"0123456789")
             return False
+        elif path == "/truncated-ka":
+            # The same, but having announced keep-alive first: a server
+            # that meant to hold the connection open and then died.
+            send(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n"
+                 b"Connection: keep-alive\r\n\r\n")
+            send(b"0123456789")
+            return False
+        elif path == "/chunkbad":
+            # Chunked with a corrupt frame, built to be as convincing as
+            # possible to a client that does not check the framing: the
+            # chunk is followed by "@@" where CRLF belongs, but a valid
+            # terminating chunk follows right after, so a client that
+            # merely shrugs at the bad trailer sees the stream end
+            # cleanly with a six-byte body.
+            #
+            # Unlike the truncation cases the connection then stays
+            # open, and what is already on the wire is a complete,
+            # plausible response.  Whoever reuses this connection is
+            # answered by that instead of by their own request.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n"
+                 b"Connection: keep-alive\r\n\r\n")
+            send(b"6\r\nfirst-@@0\r\n\r\n")
+            send(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n"
+                 b"Connection: keep-alive\r\n\r\npoisoned\n")
+            return True
+        elif path == "/chunktrunc":
+            # Chunked, and the stream stops in the middle of a chunk:
+            # sixteen bytes are promised, six arrive, and there is no
+            # terminating zero-length chunk.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            send(b"10\r\nfirst-")
+            return False
         elif path == "/noclen":
             # No length at all: the body ends when the connection does.
             send(b"HTTP/1.1 200 OK\r\n\r\n")
