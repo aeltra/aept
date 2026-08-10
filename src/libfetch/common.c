@@ -54,10 +54,6 @@
 #include "fetch.h"
 #include "common.h"
 
-/*** Local data **************************************************************/
-
-static int ssl_verify_mode = SSL_VERIFY_PEER;
-
 /*** Error-reporting functions ***********************************************/
 
 void
@@ -418,9 +414,16 @@ fetch_cache_put(struct fetch_ctx *ctx, conn_t *conn, int (*closecb)(conn_t *))
 }
 
 /*
- * Configure peer verification based on environment:
+ * Configure peer verification:
  *   1. If compile time #define CA_CERT_FILE is set, and it exists, use it.
- *   2. Use system default CA store settings.
+ *   2. Otherwise use the CA store OpenSSL was built to look in.
+ *
+ * Deliberately not SSL_CTX_set_default_verify_paths(): that resolves
+ * the default store through $SSL_CERT_FILE and $SSL_CERT_DIR, so one
+ * environment variable replaces every CA aept trusts -- with the
+ * attacker's own, if they have one, and it reports success either way.
+ * X509_get_default_cert_{file,dir}() return the compiled-in paths, so
+ * naming them explicitly gets the same store without the override.
  */
 static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
 {
@@ -442,24 +445,61 @@ static int fetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
 #endif
 	}
 #endif
-	if (ca_file)
-		SSL_CTX_load_verify_locations(ctx, ca_file, NULL);
-	else
-		SSL_CTX_set_default_verify_paths(ctx);
+	if (ca_file) {
+		if (SSL_CTX_load_verify_locations(ctx, ca_file, NULL) != 1) {
+			fprintf(stderr, "Could not load CA file %s\n", ca_file);
+			return 0;
+		}
+	} else {
+		/*
+		 * Two calls, because a system may ship one or the other:
+		 * on Debian the file is a symlink to the bundle and the
+		 * directory is the hashed store, elsewhere only the
+		 * directory exists.  Failing both means an empty trust
+		 * store, which is worth saying out loud -- every fetch
+		 * would otherwise fail with a certificate error that
+		 * looks like the server's fault.
+		 */
+		int have_file, have_dir;
 
-	SSL_CTX_set_verify(ctx, ssl_verify_mode, 0);
+		have_file = SSL_CTX_load_verify_locations(ctx,
+		    X509_get_default_cert_file(), NULL) == 1;
+		have_dir = SSL_CTX_load_verify_locations(ctx, NULL,
+		    X509_get_default_cert_dir()) == 1;
+
+		if (!have_file && !have_dir) {
+			fprintf(stderr, "Could not load any trusted CA "
+			    "certificates from %s or %s\n",
+			    X509_get_default_cert_file(),
+			    X509_get_default_cert_dir());
+			return 0;
+		}
+
+		/*
+		 * Whichever of the two failed left its complaint on the
+		 * error queue, and map_tls_error() reads that queue to
+		 * describe a later handshake failure.  Drop it.
+		 */
+		ERR_clear_error();
+	}
+
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
 	return 1;
 }
 
 /*
  * Configure client certificate:
  *  1. Use the files set with fetch_set_client_certificate() if any
- *  2. Use SSL_CLIENT_{CERT,KEY}_FILE environment variables if set
- *  3. Use compile time set CLIENT_{CERT,KEY}_FILE #define's if set
- *  4. No client certificate used
+ *  2. Use compile time set CLIENT_{CERT,KEY}_FILE #define's if set
+ *  3. No client certificate used
  *
  * If the key file is not specified, it is assumed that the certificate
  * file is a .pem file containing both the cert and the key.
+ *
+ * Upstream also read SSL_CLIENT_{CERT,KEY}_FILE from the environment.
+ * That is gone: the client identity aept presents to a repository is
+ * configuration, and a process that inherits a stray variable should
+ * not silently start authenticating as somebody else.
  */
 static int fetch_ssl_setup_client_certificate(struct fetch_ctx *fctx,
     SSL_CTX *ctx, int verbose)
@@ -468,11 +508,6 @@ static int fetch_ssl_setup_client_certificate(struct fetch_ctx *fctx,
 
 	cert_file = fctx->ssl_client_cert_file;
 	if (cert_file) key_file = fctx->ssl_client_key_file;
-
-	if (!cert_file) {
-		cert_file = getenv("SSL_CLIENT_CERT_FILE");
-		if (cert_file) key_file = getenv("SSL_CLIENT_KEY_FILE");
-	}
 
 #ifdef CLIENT_CERT_FILE
 	if (!cert_file && access(CLIENT_CERT_FILE, R_OK) == 0) {
@@ -562,17 +597,19 @@ fetch_ssl(struct fetch_ctx *fctx, conn_t *conn, const struct url *URL,
 	conn->ssl_cert = SSL_get_peer_certificate(conn->ssl);
 	if (!conn->ssl_cert) goto err;
 
-	if (getenv("SSL_NO_VERIFY_HOSTNAME") == NULL) {
-		if (verbose)
-			fetch_info("Verify hostname");
-		if (X509_check_host(conn->ssl_cert, URL->host, strlen(URL->host),
-				X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS,
-				NULL) != 1) {
-			if (ssl_verify_mode != SSL_VERIFY_NONE) {
-				tls_seterr(FETCH_ERR_TLS_SERVER_CERT_HOSTNAME);
-				return -1;
-			}
-		}
+	/*
+	 * Unconditional: upstream let SSL_NO_VERIFY_HOSTNAME switch this
+	 * off, which turned any certificate the CA store accepts into a
+	 * certificate for every host.  aept runs as root and installs
+	 * what it downloads, so there is no caller for whom that is a
+	 * reasonable trade.
+	 */
+	if (verbose)
+		fetch_info("Verify hostname");
+	if (X509_check_host(conn->ssl_cert, URL->host, strlen(URL->host),
+			X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL) != 1) {
+		tls_seterr(FETCH_ERR_TLS_SERVER_CERT_HOSTNAME);
+		return -1;
 	}
 
 	if (verbose) {
