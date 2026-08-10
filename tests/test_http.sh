@@ -220,6 +220,19 @@ body_is "proxy" 'reached via proxy
 '
 note "HTTP_PROXY is honoured, and the request goes out proxy-style"
 
+# Credentials for the proxy ride in the proxy URL, exactly as they do
+# for an origin server.  This is the *only* way to authenticate to a
+# proxy: upstream's $HTTP_PROXY_AUTH was removed, so if this path ever
+# breaks there is nothing left to fall back on.
+
+rm -f "$out"
+HTTP_PROXY="http://user:pass@127.0.0.1:$STUB_PORT" \
+    timeout 60 "$HTTPGET" "http://repo.invalid/ok" "$out" >/dev/null 2>&1 \
+    || fail "proxy auth: credentials in the proxy URL were rejected"
+body_is "proxy auth" 'reached via authenticated proxy
+'
+note "credentials in the proxy URL produce a Proxy-Authorization header"
+
 # ── connection reuse ─────────────────────────────────────────────────
 #
 # The cache only engages when the server says "Connection: keep-alive"

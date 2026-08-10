@@ -18,9 +18,12 @@ Build dependencies: libarchive and OpenSSL (pkg-config), libsolv + libsolvext
 (AC_CHECK_LIB). `src/libfetch/` is a **fork**, no longer tracked upstream — edit it
 directly; there is no patch series and no re-import script. It has been pruned
 to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
-and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`
-and `HTTP_AUTH` are gone. `tests/test_http.sh` characterises its behaviour —
-run it after any change there.
+and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
+`HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
+nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
+a proxy; there is no environment variable that supplies a user and password.
+`tests/test_http.sh` characterises its behaviour — run it after any change
+there.
 
 Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
 three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)

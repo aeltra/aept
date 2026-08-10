@@ -709,47 +709,21 @@ http_basic_auth(conn_t *conn, const char *hdr, const char *usr, const char *pwd)
 }
 
 /*
- * Send an authorization header
- */
-static int
-http_authorize(conn_t *conn, const char *hdr, const char *p)
-{
-	/* basic authorization */
-	if (strncasecmp(p, "basic:", 6) == 0) {
-		char *user, *pwd, *str;
-		int r;
-
-		/* skip realm */
-		for (p += 6; *p && *p != ':'; ++p)
-			/* nothing */ ;
-		if (!*p || strchr(++p, ':') == NULL)
-			return (-1);
-		if ((str = strdup(p)) == NULL)
-			return (-1); /* XXX */
-		user = str;
-		pwd = strchr(str, ':');
-		*pwd++ = '\0';
-		r = http_basic_auth(conn, hdr, user, pwd);
-		free(str);
-		return (r);
-	}
-	return (-1);
-}
-
-/*
  * Send a Proxy authorization header
+ *
+ * Credentials come from the proxy URL and nowhere else.  Upstream also
+ * accepted them in $HTTP_PROXY_AUTH, as "basic:<realm>:<user>:<pass>";
+ * that is gone, along with the http_authorize() parser it was the last
+ * caller of.  $HTTP_PROXY carries a URL, and a URL already has a place
+ * to put a user and a password.
  */
 static void
 http_proxy_authorize(conn_t *conn, struct url *purl)
 {
-	const char *p;
-
 	if (!purl) return;
 	if (*purl->user || *purl->pwd)
 		http_basic_auth(conn, "Proxy-Authorization",
 		    purl->user, purl->pwd);
-	else if ((p = getenv("HTTP_PROXY_AUTH")) != NULL && *p != '\0')
-		http_authorize(conn, "Proxy-Authorization", p);
 }
 
 /*****************************************************************************

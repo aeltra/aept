@@ -93,10 +93,17 @@ class Handler(socketserver.BaseRequestHandler):
             # A client going through a proxy sends the whole URL as the
             # request target rather than just the path.  That is the
             # only way to tell, from the server side, that the proxy
-            # path was taken.
+            # path was taken.  The body also reports whether the client
+            # authenticated itself to the proxy, and with what.
             if target.lower().startswith("http://"):
-                self.request.sendall(
-                    response("200 OK", b"reached via proxy\n"))
+                got = headers.get("proxy-authorization", "")
+                if not got:
+                    body = b"reached via proxy\n"
+                elif got == "Basic dXNlcjpwYXNz":     # user:pass
+                    body = b"reached via authenticated proxy\n"
+                else:
+                    body = b"proxy credentials rejected\n"
+                self.request.sendall(response("200 OK", body))
                 continue
 
             path = target.split("?", 1)[0]
