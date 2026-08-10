@@ -22,8 +22,12 @@ and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
 `HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
 nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
 a proxy; there is no environment variable that supplies a user and password.
-`tests/test_http.sh` characterises its behaviour — run it after any change
-there. It carries **no OpenSSL compatibility shims**: 1.1.1 is the floor, so
+Range requests, restart/resume, `If-Modified-Since` and `struct url_stat` are
+gone as well: aept never set `url->offset`, so that machinery was unreachable
+by design yet live enough that an **unsolicited `206 Partial Content` was
+accepted and written out as a whole file**. `206` and `416` are now protocol
+errors. `tests/test_http.sh` characterises its behaviour — run it after any
+change there. It carries **no OpenSSL compatibility shims**: 1.1.1 is the floor, so
 `TLS_client_method()` and `X509_check_host()` are used unguarded, and
 `src/libfetch/common.h` includes `<openssl/{err,ssl,x509,x509v3}.h>` directly.
 

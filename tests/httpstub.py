@@ -163,6 +163,15 @@ class Handler(socketserver.BaseRequestHandler):
                  b"Connection: keep-alive\r\n\r\n")
             send(b"0123456789")
             return False
+        elif path == "/partial206":
+            # 206 with a byte range, to a client that never sent a
+            # Range header: 500 bytes out of a declared 1000.
+            body = b"P" * 500
+            send(b"HTTP/1.1 206 Partial Content\r\n"
+                 b"Content-Range: bytes 500-999/1000\r\n"
+                 b"Content-Length: 500\r\n"
+                 b"Connection: close\r\n\r\n" + body)
+            return False
         elif path == "/chunkbad":
             # Chunked with a corrupt frame, built to be as convincing as
             # possible to a client that does not check the framing: the

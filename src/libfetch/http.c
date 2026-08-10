@@ -386,8 +386,6 @@ typedef enum {
 	hdr_unknown = 1,
 	hdr_connection,
 	hdr_content_length,
-	hdr_content_range,
-	hdr_last_modified,
 	hdr_location,
 	hdr_transfer_encoding,
 	hdr_www_authenticate
@@ -400,8 +398,6 @@ static struct {
 } hdr_names[] = {
 	{ hdr_connection,		"Connection" },
 	{ hdr_content_length,		"Content-Length" },
-	{ hdr_content_range,		"Content-Range" },
-	{ hdr_last_modified,		"Last-Modified" },
 	{ hdr_location,			"Location" },
 	{ hdr_transfer_encoding,	"Transfer-Encoding" },
 	{ hdr_www_authenticate,		"WWW-Authenticate" },
@@ -521,114 +517,6 @@ http_next_header(conn_t *conn, const char **p)
 			return (hdr_names[i].num);
 	return (hdr_unknown);
 }
-
-/*
- * Parse a last-modified header
- */
-static int
-http_month(const char *name)
-{
-	static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-	int i;
-
-	for (i = 0; i < 12; i++)
-		if (strncasecmp(name, months + i * 3, 3) == 0)
-			return (i);
-	return (-1);
-}
-
-static int
-http_parse_mtime(const char *p, time_t *mtime)
-{
-	struct tm tm;
-	char mon[4];
-	int mday, year, hour, min, sec, end;
-
-	/* RFC2616 §3.3.1 requires compliant client to accept the Internet
-	 * standard, and the two obsolete, date formats:
-	 *  Sun, 06 Nov 1994 08:49:37 GMT  ; RFC 822, updated by RFC 1123
-	 *  Sunday, 06-Nov-94 08:49:37 GMT ; RFC 850, obsoleted by RFC 1036
-	 *  Sun Nov  6 08:49:37 1994       ; ANSI C's asctime() format
-	 *
-	 * The day of the week is redundant -- timegm() derives it -- and it
-	 * is the only field that differs between the three, so it is matched
-	 * with %*s and discarded, which covers "Sun,", "Sunday," and "Sun"
-	 * alike.  The month names are fixed by the protocol rather than
-	 * taken from the locale, so match them directly; that keeps this
-	 * independent of LC_TIME, which is process-wide state a header
-	 * parser has no business modifying.  %n is only assigned once the
-	 * trailing literal has matched, so it doubles as that check.
-	 */
-	end = -1;
-	if (sscanf(p, "%*s %2d %3s %4d %2d:%2d:%2d GMT%n",
-	    &mday, mon, &year, &hour, &min, &sec, &end) == 6 && end > 0)
-		goto parsed;
-
-	end = -1;
-	if (sscanf(p, "%*s %2d-%3s-%2d %2d:%2d:%2d GMT%n",
-	    &mday, mon, &year, &hour, &min, &sec, &end) == 6 && end > 0) {
-		year += year < 69 ? 2000 : 1900;
-		goto parsed;
-	}
-
-	end = -1;
-	if (sscanf(p, "%*s %3s %2d %2d:%2d:%2d %4d%n",
-	    mon, &mday, &hour, &min, &sec, &year, &end) == 6 && end > 0)
-		goto parsed;
-
-	return (-1);
-
-parsed:
-	memset(&tm, 0, sizeof(tm));
-	if ((tm.tm_mon = http_month(mon)) < 0)
-		return (-1);
-	if (mday < 1 || mday > 31 || year < 1900 ||
-	    hour > 23 || min > 59 || sec > 60)
-		return (-1);
-	tm.tm_mday = mday;
-	tm.tm_year = year - 1900;
-	tm.tm_hour = hour;
-	tm.tm_min = min;
-	tm.tm_sec = sec;
-
-	*mtime = timegm(&tm);
-	return (0);
-}
-
-/*
- * Parse a content-range header
- */
-static int
-http_parse_range(const char *p, off_t *offset, off_t *length, off_t *size)
-{
-	off_t first, last, len;
-
-	if (strncasecmp(p, "bytes ", 6) != 0)
-		return (-1);
-	p += 6;
-	if (*p == '*') {
-		first = last = -1;
-		++p;
-	} else {
-		first = fetch_parseuint(p, &p, 10, OFF_MAX);
-		if (*p != '-')
-			return (-1);
-		last = fetch_parseuint(p+1, &p, 10, OFF_MAX);
-	}
-	if (first > last || *p != '/')
-		return (-1);
-	len = fetch_parseuint(p+1, &p, 10, OFF_MAX);
-	if (*p || len < last - first + 1)
-		return (-1);
-	if (first == -1)
-		*length = 0;
-	else
-		*length = last - first + 1;
-	*offset = first;
-	*size = len;
-	return (0);
-}
-
 
 /*****************************************************************************
  * Helper functions for authorization
@@ -855,21 +743,6 @@ http_get_proxy(struct url * url, const char *flags)
 	return (NULL);
 }
 
-static void
-set_if_modified_since(conn_t *conn, time_t last_modified)
-{
-	static const char weekdays[] = "SunMonTueWedThuFriSat";
-	static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-	struct tm tm;
-	char buf[80];
-	gmtime_r(&last_modified, &tm);
-	snprintf(buf, sizeof(buf), "%.3s, %02d %.3s %4ld %02d:%02d:%02d GMT",
-	    weekdays + tm.tm_wday * 3, tm.tm_mday, months + tm.tm_mon * 3,
-	    (long)(tm.tm_year + 1900), tm.tm_hour, tm.tm_min, tm.tm_sec);
-	http_cmd(conn, "If-Modified-Since: %s\r\n", buf);
-}
-
-
 /*****************************************************************************
  * Core
  */
@@ -882,15 +755,14 @@ set_if_modified_since(conn_t *conn, time_t last_modified)
  */
 static fetchIO *
 http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
-    struct url_stat *us, struct url *purl, const char *flags)
+    struct url *purl, const char *flags)
 {
 	conn_t *conn;
 	struct url *url, *new;
-	int chunked, direct, if_modified_since, need_auth, noredirect, nocache;
+	int chunked, direct, need_auth, noredirect, nocache;
 	int keep_alive, verbose, cached;
 	int e, i, n;
-	off_t offset, clength, length, size;
-	time_t mtime;
+	off_t clength;
 	const char *p, *q;
 	fetchIO *f;
 	hdr_t h;
@@ -900,7 +772,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 	noredirect = CHECK_FLAG('A');
 	nocache = CHECK_FLAG('C');
 	verbose = CHECK_FLAG('v');
-	if_modified_since = CHECK_FLAG('i');
 	keep_alive = 0;
 
 	if (direct && purl) {
@@ -920,11 +791,7 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 	do {
 		new = NULL;
 		chunked = 0;
-		offset = 0;
 		clength = -1;
-		length = -1;
-		size = -1;
-		mtime = 0;
 
 		/* check port */
 		if (!url->port)
@@ -964,8 +831,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 
 		if (nocache)
 			http_cmd(conn, "Cache-Control: no-cache\r\n");
-		if (if_modified_since && url->last_modified > 0)
-			set_if_modified_since(conn, url->last_modified);
 
 		/* virtual host */
 		http_cmd(conn, "Host: %s\r\n", host);
@@ -995,8 +860,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 			http_cmd(conn, "User-Agent: %s\r\n", p);
 		else
 			http_cmd(conn, "User-Agent: %s\r\n", _LIBFETCH_VER);
-		if (url->offset > 0)
-			http_cmd(conn, "Range: bytes=%lld-\r\n", (long long)url->offset);
 		http_cmd(conn, "\r\n");
 
 		/*
@@ -1011,10 +874,21 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 		/* get reply */
 		switch (http_get_reply(conn)) {
 		case HTTP_OK:
-		case HTTP_PARTIAL:
 		case HTTP_NOT_MODIFIED:
 			/* fine */
 			break;
+		case HTTP_PARTIAL:
+		case HTTP_BAD_RANGE:
+			/*
+			 * A range reply, or a complaint about a range,
+			 * to a request that carried no Range header --
+			 * aept never sends one.  Accepting a 206 would
+			 * mean writing part of a file and calling it
+			 * whole: a server could hand back the second
+			 * half of an index and nothing downstream could
+			 * tell the difference.
+			 */
+			goto protocol_error;
 		case HTTP_MOVED_PERM:
 		case HTTP_MOVED_TEMP:
 		case HTTP_SEE_OTHER:
@@ -1045,13 +919,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 			 */
 			http_seterr(conn->err);
 			goto ouch;
-		case HTTP_BAD_RANGE:
-			/*
-			 * This can happen if we ask for 0 bytes because
-			 * we already have the whole file.  Consider this
-			 * a success for now, and check sizes later.
-			 */
-			break;
 		case HTTP_PROTOCOL_ERROR:
 			/* fall through */
 		case -1:
@@ -1083,14 +950,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 				clength = fetch_parseuint(p, &q, 10, OFF_MAX);
 				if (*q) goto protocol_error;
 				break;
-			case hdr_content_range:
-				if (http_parse_range(p, &offset, &length, &size) < 0)
-					goto protocol_error;
-				break;
-			case hdr_last_modified:
-				if (http_parse_mtime(p, &mtime) < 0)
-					goto protocol_error;
-				break;
 			case hdr_location:
 				if (!HTTP_REDIRECT(conn->err))
 					break;
@@ -1118,8 +977,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 					strcpy(new->user, url->user);
 					strcpy(new->pwd, url->pwd);
 				}
-				new->offset = url->offset;
-				new->length = url->length;
 				break;
 			case hdr_transfer_encoding:
 				/* XXX weak test*/
@@ -1147,22 +1004,8 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 			continue;
 		}
 
-		/* requested range not satisfiable */
-		if (conn->err == HTTP_BAD_RANGE) {
-			if (url->offset == size && url->length == 0) {
-				/* asked for 0 bytes; fake it */
-				offset = url->offset;
-				conn->err = HTTP_OK;
-				break;
-			} else {
-				http_seterr(conn->err);
-				goto ouch;
-			}
-		}
-
 		/* we have a hit or an error */
 		if (conn->err == HTTP_OK ||
-		    conn->err == HTTP_PARTIAL ||
 		    conn->err == HTTP_NOT_MODIFIED ||
 		    HTTP_ERROR(conn->err))
 			break;
@@ -1184,32 +1027,6 @@ http_request(struct fetch_ctx *fctx, struct url *URL, const char *op,
 		http_seterr(e);
 		goto ouch;
 	}
-
-	/* check for inconsistencies */
-	if (clength != -1 && length != -1 && clength != length)
-		goto protocol_error;
-	if (clength == -1)
-		clength = length;
-	if (clength != -1)
-		length = offset + clength;
-	if (length != -1 && size != -1 && length != size)
-		goto protocol_error;
-	if (size == -1)
-		size = length;
-
-	/* fill in stats */
-	if (us) {
-		us->size = size;
-		us->atime = us->mtime = mtime;
-	}
-
-	/* too far? */
-	if (URL->offset > 0 && offset > URL->offset)
-		goto protocol_error;
-
-	/* report back real offset and size */
-	URL->offset = offset;
-	URL->length = clength;
 
 	if (clength == -1 && !chunked)
 		keep_alive = 0;
@@ -1274,6 +1091,6 @@ ouch:
 fetchIO *
 fetchGetHTTP(struct fetch_ctx *fctx, struct url *URL, const char *flags)
 {
-	return (http_request(fctx, URL, "GET", NULL,
+	return (http_request(fctx, URL, "GET",
 	    http_get_proxy(URL, flags), flags));
 }

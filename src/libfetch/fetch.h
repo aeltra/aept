@@ -52,21 +52,6 @@ struct url {
 	char		 host[URL_HOSTLEN + 1];
 	int		 port;
 	char		*doc;
-	off_t		 offset;
-	size_t		 length;
-	time_t		 last_modified;
-};
-
-struct url_stat {
-	off_t		 size;
-	time_t		 atime;
-	time_t		 mtime;
-};
-
-struct url_list {
-	size_t		 length;
-	size_t		 alloc_size;
-	struct url	*urls;
 };
 
 /* Recognized schemes */

@@ -178,6 +178,19 @@ body_is_file "$work/u" 'hello from ok
 '
 note "a failed stream's connection is dropped, not reused"
 
+# ── an unsolicited range reply ───────────────────────────────────────
+#
+# aept never sends a Range header, so 206 can only come from a server
+# that decided to send part of a file unasked.  Taking it would mean
+# writing 500 bytes of a 1000-byte object and reporting success — the
+# truncation case again, dressed as a legitimate status code.  The
+# range machinery that used to accept this is gone.
+
+expect_fail /partial206
+[ -e "$out" ] && fail "/partial206: a partial body was left on disk:
+$(wc -c < "$out") bytes"
+note "an unsolicited 206 is refused, not written as a whole file"
+
 # ── no content length at all ─────────────────────────────────────────
 
 expect_ok /noclen
