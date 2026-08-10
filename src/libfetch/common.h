@@ -38,7 +38,19 @@
 
 #include <sys/types.h>
 #include <limits.h>
-#include "openssl-compat.h"
+
+/*
+ * OpenSSL 1.1.1 or newer is required (see configure.ac), so these are
+ * included directly.  They used to arrive via an openssl-compat.h that
+ * also carried a private X509_check_host() for OpenSSL older than
+ * 1.0.2; nothing in the tree needs that any more.
+ *
+ * x509v3.h is what declares X509_check_host() and its flags.
+ */
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 /*
  * Everything a fetch reads from its caller's configuration, plus the

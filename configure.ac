@@ -16,8 +16,10 @@ AC_DEFINE([_GNU_SOURCE], [1], [Enable GNU extensions])
 # Require libarchive
 PKG_CHECK_MODULES([LIBARCHIVE], [libarchive])
 
-# Require OpenSSL (for libfetch)
-PKG_CHECK_MODULES([OPENSSL], [openssl])
+# Require OpenSSL (for libfetch).  1.1.1 is the floor: it gives us
+# TLS_client_method() and X509_check_host(), so src/libfetch/ carries no
+# compatibility shims for either.
+PKG_CHECK_MODULES([OPENSSL], [openssl >= 1.1.1])
 
 # Require libsolv
 AC_CHECK_HEADER([solv/pool.h], [],

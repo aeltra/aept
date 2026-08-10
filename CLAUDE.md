@@ -14,7 +14,7 @@ make distcheck       # VPATH build from the release tarball + suite
 make clean           # remove build artifacts
 ```
 
-Build dependencies: libarchive and OpenSSL (pkg-config), libsolv + libsolvext
+Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv + libsolvext
 (AC_CHECK_LIB). `src/libfetch/` is a **fork**, no longer tracked upstream — edit it
 directly; there is no patch series and no re-import script. It has been pruned
 to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
@@ -23,7 +23,9 @@ and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
 nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
 a proxy; there is no environment variable that supplies a user and password.
 `tests/test_http.sh` characterises its behaviour — run it after any change
-there.
+there. It carries **no OpenSSL compatibility shims**: 1.1.1 is the floor, so
+`TLS_client_method()` and `X509_check_host()` are used unguarded, and
+`src/libfetch/common.h` includes `<openssl/{err,ssl,x509,x509v3}.h>` directly.
 
 Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
 three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)
