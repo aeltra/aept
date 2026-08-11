@@ -10,10 +10,15 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * The helpers are "static inline" rather than plain "static": a test
+ * that uses only some of them would otherwise draw -Wunused-function
+ * for the rest, and the suite is meant to build warning-free.
+ */
 static int test_count;
 static int test_failed;
 
-static void test_ok(int pass, const char *label)
+static inline void test_ok(int pass, const char *label)
 {
     test_count++;
     printf("%sok %d - %s\n", pass ? "" : "not ", test_count, label);
@@ -22,7 +27,7 @@ static void test_ok(int pass, const char *label)
 }
 
 /* Compare a possibly-NULL string against a possibly-NULL expectation. */
-static void test_str_eq(const char *got, const char *want, const char *label)
+static inline void test_str_eq(const char *got, const char *want, const char *label)
 {
     int pass =
         (got == NULL && want == NULL) || (got != NULL && want != NULL && strcmp(got, want) == 0);
@@ -33,7 +38,7 @@ static void test_str_eq(const char *got, const char *want, const char *label)
         printf("#   got:  %s\n#   want: %s\n", got ? got : "(NULL)", want ? want : "(NULL)");
 }
 
-static void test_int_eq(int got, int want, const char *label)
+static inline void test_int_eq(int got, int want, const char *label)
 {
     int pass = (got == want);
 
@@ -44,7 +49,7 @@ static void test_int_eq(int got, int want, const char *label)
 }
 
 /* Print the TAP plan and return the process exit status. */
-static int test_summary(void)
+static inline int test_summary(void)
 {
     printf("1..%d\n", test_count);
     return test_failed ? 1 : 0;

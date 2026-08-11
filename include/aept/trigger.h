@@ -35,7 +35,8 @@ void aept_trigger_ctx_add_fresh(aept_trigger_ctx_t *tctx, const char *name);
 int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx, const char *name);
 
 /* Fire all pending triggers after transaction completes.
- * Scans info_dir/*.triggers directly to find interested packages. */
+ * Scans the .triggers files in info_dir directly to find interested
+ * packages. */
 int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx);
 
 #endif

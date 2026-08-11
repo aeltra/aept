@@ -37,9 +37,10 @@ rest of the tree, and its two OpenSSL setup helpers return **0 on success,
 is the inverse. aept includes it as `"libfetch/fetch.h"`, not `<fetch.h>`:
 it is a vendored header, not a system one.
 
-Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
-three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)
-and two `-Wsign-compare` in `src/libfetch/`. Anything else is new.
+**The tree builds warning-free.** `make check CFLAGS="-O2 -g -Wall -Wextra
+-Wno-unused-parameter"` emits nothing, tests included, so any warning at all is
+one you introduced. Note that a `CFLAGS` change does not force a recompile —
+`make clean` first or you are reading stale objects.
 
 ## Project Overview
 

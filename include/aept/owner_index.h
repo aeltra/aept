@@ -11,8 +11,8 @@ struct aept_ctx;
 
 /*
  * In-memory index mapping normalized file paths to the package that
- * owns them.  Replaces per-file directory scans of {info_dir}/*.list
- * during file-clash checks.
+ * owns them.  Replaces per-file directory scans of the .list files in
+ * {info_dir} during file-clash checks.
  *
  * aept_op_install builds one index at the start of the transaction
  * and threads it through do_install_package, do_upgrade_package, and

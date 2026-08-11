@@ -11,8 +11,8 @@
 
 struct aept_ctx;
 
-/* Load the installed-package database from {info_dir}/*.control into
- * the solver as the installed repo. */
+/* Load the installed-package database from the .control files in
+ * {info_dir} into the solver as the installed repo. */
 int aept_status_load(struct aept_ctx *ctx);
 
 /* Read raw control fields from control_src, append a

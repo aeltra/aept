@@ -78,7 +78,14 @@ void libfetch_info(const char *fmt, ...)
 
 /*** Network-related utility functions ***************************************/
 
-uintmax_t libfetch_parseuint(const char *str, const char **endptr, int radix, uintmax_t max)
+/*
+ * The radix is unsigned so that the digit check below compares like
+ * with like: `d` is a uintmax_t, and against a signed radix the
+ * comparison was -Wsign-compare noise.  Every caller passes a literal
+ * 10 or 16.
+ */
+uintmax_t libfetch_parseuint(const char *str, const char **endptr, unsigned int radix,
+                             uintmax_t max)
 {
     uintmax_t val = 0, maxx = max / radix, d;
     const char *p;
@@ -910,12 +917,19 @@ static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr, si
     slash = memchr(cidr, '/', cidr_len);
     if (!slash)
         return 0;
+    /*
+     * Reject a non-positive prefix length here rather than leaving it
+     * to the width check below.  That check compared a long against a
+     * size_t, so a negative `bits` was converted to a huge unsigned
+     * value and rejected by accident -- correct, but only as a side
+     * effect of the conversion the compiler was warning about.
+     */
     bits = strtol(slash + 1, NULL, 10);
-    if (!bits || bits > 128)
+    if (bits < 1 || bits > 128)
         return 0;
 
     cidr_addrlen = host_to_address(cidr_addr, sizeof cidr_addr, cidr, slash - cidr);
-    if (cidr_addrlen != addr_len || bits > addr_len * 8)
+    if (cidr_addrlen != addr_len || (size_t)bits > addr_len * 8)
         return 0;
     return bitcmp(cidr_addr, addr, bits) == 0;
 }

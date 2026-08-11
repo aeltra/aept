@@ -111,7 +111,7 @@ struct libfetch_conn {
 };
 
 void libfetch_info(const char *, ...) LIBFETCH_PRINTFLIKE(1, 2);
-uintmax_t libfetch_parseuint(const char *p, const char **endptr, int radix, uintmax_t max);
+uintmax_t libfetch_parseuint(const char *p, const char **endptr, unsigned int radix, uintmax_t max);
 int libfetch_default_port(const char *);
 int libfetch_default_proxy_port(const char *);
 int libfetch_bind(int, int, const char *);

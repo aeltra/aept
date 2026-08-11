@@ -5,6 +5,7 @@
 #     git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
 # For diffing across one of these, `git diff -w` hides most of the noise.
-#
-# Append the hash of the tree-wide clang-format commit here after committing
-# it -- the hash cannot be known before the commit exists.
+
+# Apply clang-format to the whole tree (2026-08-11).  59 files, provably
+# whitespace-only: the token streams before and after are identical.
+481f447db8e61d92bbb3283d851a8473f63c57ca
