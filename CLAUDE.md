@@ -12,6 +12,7 @@ make check           # run the test suite
 make check VERBOSE=1 # ... dumping failing output to the console
 make distcheck       # VPATH build from the release tarball + suite
 make clean           # remove build artifacts
+make format          # clang-format the files you changed (see Coding Conventions)
 ```
 
 Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv + libsolvext
@@ -59,10 +60,26 @@ reports the old surface.
 
 ## Coding Conventions
 
-`.clang-format` at the top level encodes these and governs the **whole tree**,
-`src/libfetch/` included. Run `clang-format -i` freely; the config is written
-against **clang-format 19**, so check `clang-format --version` before a
-tree-wide run.
+**All code is formatted with clang-format before it is committed.** No
+exceptions and no hand-tuning afterwards — the config is the style, and a
+commit that leaves the tree unformatted is a commit that will be reformatted by
+somebody else's edit later.
+
+```bash
+make format        # format what you changed: unstaged, staged and new files
+make format-all    # the whole tree — for a .clang-format change or a fresh import
+make format-check  # read-only; silent when clean, names offenders when not
+```
+
+`make format` is the one for day-to-day use: it touches only the files you
+have changed, so it never buries your diff under an unrelated reformat.
+`make format-check` exits non-zero on the first badly formatted file, so it
+works as a pre-commit hook or a CI step.
+
+`.clang-format` at the top level encodes the style and governs the **whole
+tree**, `src/libfetch/` included. It is written against **clang-format 19** —
+check `clang-format --version` before a tree-wide run, because other versions
+differ slightly and will churn lines they should not.
 
 Two settings are chosen for stability under editing rather than looks, because
 a formatter that reflows lines you did not touch breaks string-matching edits:

@@ -30,7 +30,65 @@ noinst_HEADERS = \
     include/aept/util.h \
     include/aept/verify.h
 
+EXTRA_DIST = .clang-format .git-blame-ignore-revs
+
+# ── formatting ───────────────────────────────────────────────────────────
+#
+# Every commit is expected to be clang-format clean; see CLAUDE.md.  "format"
+# is the one to use day to day -- it touches only what you have changed, so it
+# never buries your diff under an unrelated reformat.  "format-all" exists for
+# a config change or a fresh import, and "format-check" is the read-only form
+# for a hook or CI.
+
+FORMAT_DIRS = src include tests
+
+# Everything this working tree has touched: unstaged, staged and new.  Paths
+# that were deleted are dropped, since they cannot be formatted.
+FORMAT_CHANGED = \
+	{ git diff --name-only; \
+	  git diff --cached --name-only; \
+	  git ls-files --others --exclude-standard; } 2>/dev/null \
+	| sort -u | grep -E '\.[ch]$$' \
+	| while read f; do test -f "$$f" && echo "$$f"; done
+
+FORMAT_ALL = find $(FORMAT_DIRS) \( -name '*.c' -o -name '*.h' \) -print | sort
+
+# Fail loudly rather than silently doing nothing.
+check_clang_format = \
+	if test "$(CLANG_FORMAT)" = no; then \
+	    echo "clang-format not found; re-run configure after installing it" >&2; \
+	    exit 1; \
+	fi
+
+format:
+	@$(check_clang_format); \
+	cd $(top_srcdir) || exit 1; \
+	if ! git rev-parse --git-dir >/dev/null 2>&1; then \
+	    echo "make format needs a git checkout; use make format-all" >&2; \
+	    exit 1; \
+	fi; \
+	files=`$(FORMAT_CHANGED)`; \
+	if test -z "$$files"; then \
+	    echo "no changed C files to format"; \
+	else \
+	    $(CLANG_FORMAT) -i $$files || exit 1; \
+	    echo "formatted:"; echo "$$files" | sed 's/^/  /'; \
+	fi
+
+format-all:
+	@$(check_clang_format); \
+	cd $(top_srcdir) || exit 1; \
+	files=`$(FORMAT_ALL)`; \
+	$(CLANG_FORMAT) -i $$files || exit 1; \
+	echo "formatted `echo $$files | wc -w` files"
+
+format-check:
+	@$(check_clang_format); \
+	cd $(top_srcdir) || exit 1; \
+	files=`$(FORMAT_ALL)`; \
+	$(CLANG_FORMAT) --dry-run -Werror $$files
+
 readme:
 	$(srcdir)/scripts/update-readme.sh
 
-.PHONY: readme
+.PHONY: readme format format-all format-check

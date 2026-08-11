@@ -29,6 +29,10 @@ AC_CHECK_LIB([solv], [pool_create], [:],
 AC_CHECK_LIB([solvext], [repo_add_debpackages], [:],
   [AC_MSG_ERROR([libsolvext library not found])])
 
+# clang-format, for the format targets only.  Not required to build.
+AC_CHECK_PROGS([CLANG_FORMAT], [clang-format], [no])
+AC_SUBST([CLANG_FORMAT])
+
 # Threads, for the concurrency test only.  On glibc >= 2.34 and musl
 # the pthread symbols live in libc, so this usually resolves to nothing.
 save_LIBS=$LIBS
