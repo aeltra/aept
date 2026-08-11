@@ -54,13 +54,13 @@ typedef struct aept_config {
 
 /* Forward declarations */
 struct aept_solver;
-struct fetch_ctx;
+struct libfetch_ctx;
 
 /* Full definition of the opaque context handle (aept_ctx_t). */
 struct aept_ctx {
     aept_config_t config;
     struct aept_solver *solver;   /* NULL until aept_solver_init() */
-    struct fetch_ctx *http;       /* connection cache + TLS config */
+    struct libfetch_ctx *http;    /* connection cache + TLS config */
     int lock_fd;
 
     /* Callbacks — set once, read-only after init */

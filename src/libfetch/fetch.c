@@ -42,8 +42,8 @@
 /* Per-thread: an error is set and read inside a single call, so it
  * belongs to the thread that made the call rather than to any shared
  * configuration. */
-_Thread_local struct fetch_error fetchLastErrCode;
-int fetchTimeout;
+_Thread_local struct libfetch_error libfetch_last_error;
+int libfetch_timeout;
 /*
  * Do not restart syscalls interrupted by a signal: aept relies on a
  * signal breaking out of a transfer so that cancellation works.  This
@@ -51,8 +51,7 @@ int fetchTimeout;
  * every context assigning it was a data race on a shared global for no
  * benefit -- the value was always the same.
  */
-volatile int fetchRestartCalls = 0;
-int fetchDebug;
+volatile int libfetch_restart_calls = 0;
 
 /*** Public API **************************************************************/
 
@@ -60,33 +59,35 @@ int fetchDebug;
  * Parse the given URL and return a read-only stream connected to the
  * document it references.  HTTP and HTTPS are the only schemes.
  */
-fetchIO *fetchGetURL(struct fetch_ctx *fctx, const char *URL, const char *flags)
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL,
+                                const char *flags)
 {
-    struct url *u;
-    fetchIO *f;
+    struct libfetch_url *u;
+    libfetch_io_t *f;
 
-    if ((u = fetchParseURL(URL)) == NULL)
+    if ((u = libfetch_parse_url(URL)) == NULL)
         return NULL;
 
-    if (strcasecmp(u->scheme, SCHEME_HTTP) == 0 ||
-        strcasecmp(u->scheme, SCHEME_HTTPS) == 0) {
-        f = fetchGetHTTP(fctx, u, flags);
+    if (strcasecmp(u->scheme, LIBFETCH_SCHEME_HTTP) == 0 ||
+        strcasecmp(u->scheme, LIBFETCH_SCHEME_HTTPS) == 0) {
+        f = libfetch_get_http(fctx, u, flags);
     } else {
         url_seterr(URL_BAD_SCHEME);
         f = NULL;
     }
 
-    fetchFreeURL(u);
+    libfetch_free_url(u);
     return f;
 }
 
 /*
  * Make a URL
  */
-struct url *fetchMakeURL(const char *scheme, const char *host, int port,
-                         const char *doc, const char *user, const char *pwd)
+struct libfetch_url *libfetch_make_url(const char *scheme, const char *host,
+                                       int port, const char *doc,
+                                       const char *user, const char *pwd)
 {
-    struct url *u;
+    struct libfetch_url *u;
 
     if (!scheme || (!host && !doc)) {
         url_seterr(URL_MALFORMED);
@@ -98,14 +99,14 @@ struct url *fetchMakeURL(const char *scheme, const char *host, int port,
         return NULL;
     }
 
-    /* allocate struct url */
+    /* allocate struct libfetch_url */
     if ((u = calloc(1, sizeof(*u))) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         return NULL;
     }
 
     if ((u->doc = strdup(doc ? doc : "/")) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         free(u);
         return NULL;
     }
@@ -121,7 +122,7 @@ struct url *fetchMakeURL(const char *scheme, const char *host, int port,
     return u;
 }
 
-int fetch_urlpath_safe(char x)
+int libfetch_urlpath_safe(char x)
 {
     if ((x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') ||
         (x >= 'a' && x <= 'z'))
@@ -158,18 +159,18 @@ int fetch_urlpath_safe(char x)
 /*
  * Copy an existing URL.
  */
-struct url *fetchCopyURL(const struct url *src)
+struct libfetch_url *libfetch_copy_url(const struct libfetch_url *src)
 {
-    struct url *dst;
+    struct libfetch_url *dst;
     char *doc;
 
-    /* allocate struct url */
+    /* allocate struct libfetch_url */
     if ((dst = malloc(sizeof(*dst))) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         return NULL;
     }
     if ((doc = strdup(src->doc)) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         free(dst);
         return NULL;
     }
@@ -182,7 +183,7 @@ struct url *fetchCopyURL(const struct url *src)
 /*
  * Return value of the given hex digit.
  */
-static int fetch_hexval(char ch)
+static int libfetch_hexval(char ch)
 {
     if (ch >= '0' && ch <= '9')
         return ch - '0';
@@ -200,16 +201,16 @@ static int fetch_hexval(char ch)
  * character).  No terminator is written to dst (it is the caller's
  * responsibility).
  */
-static const char *fetch_pctdecode(char *dst, const char *src, const char *brk,
-                                   size_t dlen)
+static const char *libfetch_pctdecode(char *dst, const char *src,
+                                      const char *brk, size_t dlen)
 {
     int d1, d2;
     char c;
     const char *s;
 
     for (s = src; *s != '\0' && !strchr(brk, *s); s++) {
-        if (s[0] == '%' && (d1 = fetch_hexval(s[1])) >= 0 &&
-            (d2 = fetch_hexval(s[2])) >= 0 && (d1 > 0 || d2 > 0)) {
+        if (s[0] == '%' && (d1 = libfetch_hexval(s[1])) >= 0 &&
+            (d2 = libfetch_hexval(s[2])) >= 0 && (d1 > 0 || d2 > 0)) {
             c = d1 << 4 | d2;
             s += 2;
         } else if (s[0] == '%') {
@@ -231,16 +232,16 @@ static const char *fetch_pctdecode(char *dst, const char *src, const char *brk,
  * [method:/][/[user[:pwd]@]host[:port]/][document]
  * This almost, but not quite, RFC1738 URL syntax.
  */
-struct url *fetchParseURL(const char *URL)
+struct libfetch_url *libfetch_parse_url(const char *URL)
 {
     const char *p, *q;
-    struct url *u;
+    struct libfetch_url *u;
     size_t i, count;
     int pre_quoted;
 
-    /* allocate struct url */
+    /* allocate struct libfetch_url */
     if ((u = calloc(1, sizeof(*u))) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         return NULL;
     }
 
@@ -251,10 +252,10 @@ struct url *fetchParseURL(const char *URL)
     if (strncmp(URL, "http:", 5) == 0 || strncmp(URL, "https:", 6) == 0) {
         pre_quoted = 1;
         if (URL[4] == ':') {
-            strcpy(u->scheme, SCHEME_HTTP);
+            strcpy(u->scheme, LIBFETCH_SCHEME_HTTP);
             URL += 5;
         } else {
-            strcpy(u->scheme, SCHEME_HTTPS);
+            strcpy(u->scheme, LIBFETCH_SCHEME_HTTPS);
             URL += 6;
         }
 
@@ -275,7 +276,7 @@ find_user:
     if (p != NULL && *p == '@') {
         /* username */
         q = URL;
-        q = fetch_pctdecode(u->user, q, ":@", URL_USERLEN);
+        q = libfetch_pctdecode(u->user, q, ":@", LIBFETCH_URL_USERLEN);
         if (q == NULL) {
             url_seterr(URL_BAD_AUTH);
             goto ouch;
@@ -283,7 +284,7 @@ find_user:
 
         /* password */
         if (*q == ':') {
-            q = fetch_pctdecode(u->pwd, q + 1, "@", URL_PWDLEN);
+            q = libfetch_pctdecode(u->pwd, q + 1, "@", LIBFETCH_URL_PWDLEN);
             if (q == NULL) {
                 url_seterr(URL_BAD_AUTH);
                 goto ouch;
@@ -301,7 +302,7 @@ find_user:
     /* hostname */
     if (*p == '[' && (q = strchr(p + 1, ']')) != NULL &&
         (*++q == '\0' || *q == '/' || *q == ':')) {
-        if ((i = q - p - 2) >= URL_HOSTLEN) {
+        if ((i = q - p - 2) >= LIBFETCH_URL_HOSTLEN) {
             url_seterr(URL_BAD_HOST);
             goto ouch;
         }
@@ -309,7 +310,7 @@ find_user:
         p = q;
     } else {
         for (i = 0; *p && (*p != '/') && (*p != ':'); p++) {
-            if (i >= URL_HOSTLEN) {
+            if (i >= LIBFETCH_URL_HOSTLEN) {
                 url_seterr(URL_BAD_HOST);
                 goto ouch;
             }
@@ -319,7 +320,7 @@ find_user:
 
     /* port */
     if (*p == ':') {
-        u->port = fetch_parseuint(p + 1, &p, 10, IPPORT_MAX);
+        u->port = libfetch_parseuint(p + 1, &p, 10, IPPORT_MAX);
         if (*p && *p != '/') {
             /* invalid port */
             url_seterr(URL_BAD_PORT);
@@ -333,18 +334,18 @@ find_user:
 
     count = 1;
     for (i = 0; p[i] != '\0'; ++i) {
-        if ((!pre_quoted && p[i] == '%') || !fetch_urlpath_safe(p[i]))
+        if ((!pre_quoted && p[i] == '%') || !libfetch_urlpath_safe(p[i]))
             count += 3;
         else
             ++count;
     }
 
     if ((u->doc = malloc(count)) == NULL) {
-        fetch_syserr();
+        libfetch_syserr();
         goto ouch;
     }
     for (i = 0; *p != '\0'; ++p) {
-        if ((!pre_quoted && *p == '%') || !fetch_urlpath_safe(*p)) {
+        if ((!pre_quoted && *p == '%') || !libfetch_urlpath_safe(*p)) {
             u->doc[i++] = '%';
             if ((unsigned char)*p < 160)
                 u->doc[i++] = '0' + ((unsigned char)*p) / 16;
@@ -369,7 +370,7 @@ ouch:
 /*
  * Free a URL
  */
-void fetchFreeURL(struct url *u)
+void libfetch_free_url(struct libfetch_url *u)
 {
     free(u->doc);
     free(u);

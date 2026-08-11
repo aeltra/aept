@@ -29,66 +29,66 @@
  * $FreeBSD: fetch.h,v 1.26 2004/09/21 18:35:20 des Exp $
  */
 
-#ifndef _FETCH_H_INCLUDED
-#define _FETCH_H_INCLUDED
+#ifndef LIBFETCH_H_7BF97F
+#define LIBFETCH_H_7BF97F
 
 #include <sys/types.h>
 #include <limits.h>
 #include <stdio.h>
 
-#define _LIBFETCH_VER "libfetch/2.0"
+#define LIBFETCH_VER "libfetch/2.0"
 
-#define URL_HOSTLEN 255
-#define URL_SCHEMELEN 16
-#define URL_USERLEN 256
-#define URL_PWDLEN 4096
+#define LIBFETCH_URL_HOSTLEN 255
+#define LIBFETCH_URL_SCHEMELEN 16
+#define LIBFETCH_URL_USERLEN 256
+#define LIBFETCH_URL_PWDLEN 4096
 
-typedef struct fetchIO fetchIO;
+typedef struct libfetch_io_t libfetch_io_t;
 
-struct url {
-    char scheme[URL_SCHEMELEN + 1];
-    char user[URL_USERLEN + 1];
-    char pwd[URL_PWDLEN + 1];
-    char host[URL_HOSTLEN + 1];
+struct libfetch_url {
+    char scheme[LIBFETCH_URL_SCHEMELEN + 1];
+    char user[LIBFETCH_URL_USERLEN + 1];
+    char pwd[LIBFETCH_URL_PWDLEN + 1];
+    char host[LIBFETCH_URL_HOSTLEN + 1];
     int port;
     char *doc;
 };
 
 /* Recognized schemes */
-#define SCHEME_HTTP "http"
-#define SCHEME_HTTPS "https"
+#define LIBFETCH_SCHEME_HTTP "http"
+#define LIBFETCH_SCHEME_HTTPS "https"
 
 enum {
     /* Error categories */
-    FETCH_ERRCAT_FETCH = 0,
-    FETCH_ERRCAT_ERRNO,
-    FETCH_ERRCAT_NETDB,
-    FETCH_ERRCAT_HTTP,
-    FETCH_ERRCAT_URL,
-    FETCH_ERRCAT_TLS,
+    LIBFETCH_ERRCAT_FETCH = 0,
+    LIBFETCH_ERRCAT_ERRNO,
+    LIBFETCH_ERRCAT_NETDB,
+    LIBFETCH_ERRCAT_HTTP,
+    LIBFETCH_ERRCAT_URL,
+    LIBFETCH_ERRCAT_TLS,
 
     /* Error FETCH category codes */
-    FETCH_OK = 0,
-    FETCH_ERR_UNKNOWN,
-    FETCH_ERR_UNCHANGED,
+    LIBFETCH_OK = 0,
+    LIBFETCH_ERR_UNKNOWN,
+    LIBFETCH_ERR_UNCHANGED,
 
     /* Error URL category codes */
-    FETCH_ERR_URL_MALFORMED = 1,
-    FETCH_ERR_URL_BAD_SCHEME,
-    FETCH_ERR_URL_BAD_PORT,
-    FETCH_ERR_URL_BAD_HOST,
-    FETCH_ERR_URL_BAD_AUTH,
+    LIBFETCH_ERR_URL_MALFORMED = 1,
+    LIBFETCH_ERR_URL_BAD_SCHEME,
+    LIBFETCH_ERR_URL_BAD_PORT,
+    LIBFETCH_ERR_URL_BAD_HOST,
+    LIBFETCH_ERR_URL_BAD_AUTH,
 
     /* Error TLS category codes */
-    FETCH_ERR_TLS = 1,
-    FETCH_ERR_TLS_SERVER_CERT_ABSENT,
-    FETCH_ERR_TLS_SERVER_CERT_HOSTNAME,
-    FETCH_ERR_TLS_SERVER_CERT_UNTRUSTED,
-    FETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED,
-    FETCH_ERR_TLS_HANDSHAKE,
+    LIBFETCH_ERR_TLS = 1,
+    LIBFETCH_ERR_TLS_SERVER_CERT_ABSENT,
+    LIBFETCH_ERR_TLS_SERVER_CERT_HOSTNAME,
+    LIBFETCH_ERR_TLS_SERVER_CERT_UNTRUSTED,
+    LIBFETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED,
+    LIBFETCH_ERR_TLS_HANDSHAKE,
 };
 
-struct fetch_error {
+struct libfetch_error {
     unsigned int category;
     int code;
 };
@@ -98,11 +98,11 @@ extern "C" {
 #endif
 
 /* Context: connection cache and per-caller TLS configuration.  A
- * stream returned by fetchGetURL() holds a reference to the context it
+ * stream returned by libfetch_get_url() holds a reference to the context it
  * was created from, so the context must outlive the stream. */
-struct fetch_ctx;
-struct fetch_ctx *fetch_ctx_new(int global_limit, int per_host_limit);
-void fetch_ctx_free(struct fetch_ctx *);
+struct libfetch_ctx;
+struct libfetch_ctx *libfetch_ctx_new(int global_limit, int per_host_limit);
+void libfetch_ctx_free(struct libfetch_ctx *);
 
 /*
  * Select the client certificate, taking precedence over the
@@ -116,38 +116,39 @@ void fetch_ctx_free(struct fetch_ctx *);
  * cache: a connection opened while presenting one certificate is never
  * reused by a context configured with another.
  */
-void fetch_set_client_certificate(struct fetch_ctx *ctx, const char *cert_file,
-                                  const char *key_file);
+void libfetch_set_client_certificate(struct libfetch_ctx *ctx,
+                                     const char *cert_file,
+                                     const char *key_file);
 
-void fetchIO_close(fetchIO *);
-ssize_t fetchIO_read(fetchIO *, void *, size_t);
+void libfetch_io_close(libfetch_io_t *);
+ssize_t libfetch_io_read(libfetch_io_t *, void *, size_t);
 
 /* HTTP */
-fetchIO *fetchGetHTTP(struct fetch_ctx *, struct url *, const char *);
+libfetch_io_t *libfetch_get_http(struct libfetch_ctx *, struct libfetch_url *,
+                                 const char *);
 
 /* Generic */
-fetchIO *fetchGetURL(struct fetch_ctx *, const char *, const char *);
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *,
+                                const char *);
 
 /* URL parsing.  Internal to the library: nothing outside it needs to
- * build or inspect a struct url, but redirects and the connection
+ * build or inspect a struct libfetch_url, but redirects and the connection
  * cache do. */
-struct url *fetchMakeURL(const char *, const char *, int, const char *,
-                         const char *, const char *);
-struct url *fetchParseURL(const char *);
-struct url *fetchCopyURL(const struct url *);
-void fetchFreeURL(struct url *);
+struct libfetch_url *libfetch_make_url(const char *, const char *, int,
+                                       const char *, const char *,
+                                       const char *);
+struct libfetch_url *libfetch_parse_url(const char *);
+struct libfetch_url *libfetch_copy_url(const struct libfetch_url *);
+void libfetch_free_url(struct libfetch_url *);
 
 /* Last error code, per-thread */
-extern _Thread_local struct fetch_error fetchLastErrCode;
+extern _Thread_local struct libfetch_error libfetch_last_error;
 
 /* I/O timeout */
-extern int fetchTimeout;
+extern int libfetch_timeout;
 
 /* Restart interrupted syscalls */
-extern volatile int fetchRestartCalls;
-
-/* Extra verbosity */
-extern int fetchDebug;
+extern volatile int libfetch_restart_calls;
 
 #if defined(__cplusplus)
 }

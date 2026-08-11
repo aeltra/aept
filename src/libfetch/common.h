@@ -29,8 +29,8 @@
  * $FreeBSD: common.h,v 1.30 2007/12/18 11:03:07 des Exp $
  */
 
-#ifndef _COMMON_H_INCLUDED
-#define _COMMON_H_INCLUDED
+#ifndef LIBFETCH_COMMON_H_7BF97F
+#define LIBFETCH_COMMON_H_7BF97F
 
 #define HTTP_DEFAULT_PORT 80
 #define HTTPS_DEFAULT_PORT 443
@@ -59,8 +59,8 @@
  * connection is never handed to a request that would have presented a
  * different client certificate.
  */
-struct fetch_ctx {
-    struct fetchconn *connection_cache;
+struct libfetch_ctx {
+    struct libfetch_conn *connection_cache;
     int cache_global_limit;
     int cache_per_host_limit;
     const char *ssl_client_cert_file;
@@ -89,9 +89,9 @@ struct fetch_ctx {
 #endif
 
 /* Connection */
-typedef struct fetchconn conn_t;
+typedef struct libfetch_conn libfetch_conn_t;
 
-struct fetchconn {
+struct libfetch_conn {
     int sd;                     /* socket descriptor */
     char *buf;                  /* buffer */
     size_t bufsize;             /* buffer size */
@@ -104,49 +104,53 @@ struct fetchconn {
     SSL_CTX *ssl_ctx;           /* SSL context */
     X509 *ssl_cert;             /* server certificate */
     const SSL_METHOD *ssl_meth; /* SSL method */
-    char *ftp_home;
-    struct url *cache_url;
+    struct libfetch_url *cache_url;
     int cache_af;
-    int (*cache_close)(conn_t *);
-    conn_t *next_cached;
+    int (*cache_close)(libfetch_conn_t *);
+    libfetch_conn_t *next_cached;
 };
 
-void fetch_info(const char *, ...) LIBFETCH_PRINTFLIKE(1, 2);
-uintmax_t fetch_parseuint(const char *p, const char **endptr, int radix,
-                          uintmax_t max);
-int fetch_default_port(const char *);
-int fetch_default_proxy_port(const char *);
-int fetch_bind(int, int, const char *);
-conn_t *fetch_cache_get(struct fetch_ctx *, const struct url *, int);
-void fetch_cache_put(struct fetch_ctx *, conn_t *, int (*)(conn_t *));
-conn_t *fetch_connect(struct url *, struct url *, int, int);
-conn_t *fetch_reopen(int);
-int fetch_ssl(struct fetch_ctx *, conn_t *, const struct url *, int);
-ssize_t fetch_read(conn_t *, char *, size_t);
-int fetch_getln(conn_t *);
-ssize_t fetch_write(conn_t *, const void *, size_t);
-int fetch_close(conn_t *);
-int fetch_no_proxy_match(const char *);
-int fetch_urlpath_safe(char);
+void libfetch_info(const char *, ...) LIBFETCH_PRINTFLIKE(1, 2);
+uintmax_t libfetch_parseuint(const char *p, const char **endptr, int radix,
+                             uintmax_t max);
+int libfetch_default_port(const char *);
+int libfetch_default_proxy_port(const char *);
+int libfetch_bind(int, int, const char *);
+libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *,
+                                    const struct libfetch_url *, int);
+void libfetch_cache_put(struct libfetch_ctx *, libfetch_conn_t *,
+                        int (*)(libfetch_conn_t *));
+libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *,
+                                  int, int);
+libfetch_conn_t *libfetch_reopen(int);
+int libfetch_ssl(struct libfetch_ctx *, libfetch_conn_t *,
+                 const struct libfetch_url *, int);
+ssize_t libfetch_read(libfetch_conn_t *, char *, size_t);
+int libfetch_getln(libfetch_conn_t *);
+ssize_t libfetch_write(libfetch_conn_t *, const void *, size_t);
+int libfetch_close(libfetch_conn_t *);
+int libfetch_no_proxy_match(const char *);
+int libfetch_urlpath_safe(char);
 
-static inline void _fetch_seterr(unsigned int category, int code)
+static inline void libfetch_set_error(unsigned int category, int code)
 {
-    fetchLastErrCode = (struct fetch_error){.category = category, .code = code};
+    libfetch_last_error =
+        (struct libfetch_error){.category = category, .code = code};
 }
-static inline void fetch_syserr(void)
+static inline void libfetch_syserr(void)
 {
-    _fetch_seterr(FETCH_ERRCAT_ERRNO, errno);
+    libfetch_set_error(LIBFETCH_ERRCAT_ERRNO, errno);
 }
 
-#define fetch_seterr(n) _fetch_seterr(FETCH_ERRCAT_FETCH, n)
-#define url_seterr(n) _fetch_seterr(FETCH_ERRCAT_URL, FETCH_ERR_##n)
-#define http_seterr(n) _fetch_seterr(FETCH_ERRCAT_HTTP, n)
-#define netdb_seterr(n) _fetch_seterr(FETCH_ERRCAT_NETDB, n)
-#define tls_seterr(n) _fetch_seterr(FETCH_ERRCAT_TLS, n)
+#define libfetch_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_FETCH, n)
+#define url_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_URL, LIBFETCH_ERR_##n)
+#define http_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_HTTP, n)
+#define netdb_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_NETDB, n)
+#define tls_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_TLS, n)
 
-fetchIO *fetchIO_unopen(void *, ssize_t (*)(void *, void *, size_t),
-                        ssize_t (*)(void *, const void *, size_t),
-                        void (*)(void *));
+libfetch_io_t *libfetch_io_unopen(void *, ssize_t (*)(void *, void *, size_t),
+                                  ssize_t (*)(void *, const void *, size_t),
+                                  void (*)(void *));
 
 /*
  * Check whether a particular flag is set

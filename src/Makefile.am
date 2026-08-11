@@ -34,7 +34,7 @@ libaept_la_SOURCES = \
 # the dynamic symbol table now that its own prefix no longer does the job.
 libaept_la_CFLAGS = -D_GNU_SOURCE -fvisibility=hidden \
     $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
-    -I$(top_builddir) -I$(top_srcdir)/include -I$(top_srcdir)/src/libfetch
+    -I$(top_builddir) -I$(top_srcdir)/include
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 libaept_la_LDFLAGS = -version-info 0:0:0
 

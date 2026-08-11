@@ -30,6 +30,11 @@ errors. `tests/test_http.sh` characterises its behaviour — run it after any
 change there. It carries **no OpenSSL compatibility shims**: 1.1.1 is the floor, so
 `TLS_client_method()` and `X509_check_host()` are used unguarded, and
 `src/libfetch/common.h` includes `<openssl/{err,ssl,x509,x509v3}.h>` directly.
+Its identifiers are all `libfetch_*` / `LIBFETCH_*` now, snake_case like the
+rest of the tree, and its two OpenSSL setup helpers return **0 on success,
+-1 on error** like everything else — they used to return 1 on success, which
+is the inverse. aept includes it as `"libfetch/fetch.h"`, not `<fetch.h>`:
+it is a vendored header, not a system one.
 
 Warning baseline for `make CFLAGS="-O2 -g -Wall -Wextra -Wno-unused-parameter"`:
 three `-Wcomment` in `include/aept/` (`status.h`, `trigger.h`, `owner_index.h`)

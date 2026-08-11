@@ -18,7 +18,7 @@
 #include <solv/queue.h>
 #include <solv/solvable.h>
 
-#include <fetch.h>
+#include "libfetch/fetch.h"
 
 #include "aept/aept.h"
 #include "aept/internal.h"
@@ -43,7 +43,7 @@ aept_ctx_t *aept_init(void)
     ctx->lock_fd = -1;
     ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
     aept_log_set_ctx(ctx);
-    ctx->http = fetch_ctx_new(4, 2);
+    ctx->http = libfetch_ctx_new(4, 2);
     if (!ctx->http) {
         aept_log_set_ctx(NULL);
         free(ctx);
@@ -57,7 +57,7 @@ void aept_cleanup(aept_ctx_t *ctx)
     if (!ctx)
         return;
 
-    fetch_ctx_free(ctx->http);
+    libfetch_ctx_free(ctx->http);
     ctx->http = NULL;
 
     if (ctx->config_loaded) {

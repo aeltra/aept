@@ -11,7 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <fetch.h>
+#include "libfetch/fetch.h"
 #include <solv/chksum.h>
 #include <solv/knownid.h>
 #include <solv/pool.h>
@@ -26,7 +26,7 @@
 int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
                   const char *name)
 {
-    fetchIO *fio = NULL;
+    libfetch_io_t *fio = NULL;
     FILE *fp = NULL;
     char *tmp = NULL;
     char buf[65536];
@@ -42,10 +42,10 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
      * aept later forked, maintainer scripts included.  Set
      * unconditionally: passing NULL clears any earlier selection.
      */
-    fetch_set_client_certificate(ctx->http, ctx->config.ssl_client_cert,
+    libfetch_set_client_certificate(ctx->http, ctx->config.ssl_client_cert,
                                  ctx->config.ssl_client_key);
 
-    fio = fetchGetURL(ctx->http, url, "");
+    fio = libfetch_get_url(ctx->http, url, "");
     if (!fio) {
         aept_log_error("failed to download '%s'", url);
         return -1;
@@ -63,7 +63,7 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
     }
 
     for (;;) {
-        n = fetchIO_read(fio, buf, sizeof(buf));
+        n = libfetch_io_read(fio, buf, sizeof(buf));
         if (aept_cancelled())
             goto cleanup;
         if (n == 0)
@@ -96,7 +96,7 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
 
 cleanup:
     if (fio)
-        fetchIO_close(fio);
+        libfetch_io_close(fio);
     if (fp)
         fclose(fp);
     if (ret != 0 && tmp)
