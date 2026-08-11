@@ -88,6 +88,7 @@ dist_check_SCRIPTS = \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
     test_upgrade_conffiles.sh \
+    test_hardlink_escape.sh \
     test_update_size_limit.sh \
     test_exec_path.sh \
     test_ssl_client_cert.sh \

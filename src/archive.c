@@ -100,12 +100,30 @@ static char *normalize_path(const char *raw)
 }
 
 /*
- * Build a safe destination path by joining a prefix directory and an
- * archive-relative entry path.  Returns NULL (and skips) for "." entries
- * and for paths that escape the prefix via "..".
+ * How an archive entry path came out of safe_join().
+ *
+ * The distinction is the point: a "." entry carries nothing and is
+ * uninteresting, while a path that climbs out of the extraction
+ * directory is an attack on the system being installed to.  Both used
+ * to be reported as a NULL return, so callers dropped the second as
+ * quietly as the first and extraction still reported success.  That
+ * silence is why the extraction bug fixed in 3a1e2dc went unnoticed.
  */
-static char *safe_join(const char *prefix, const char *entry_path)
+enum join_result {
+    JOIN_OK = 0,     /* *out holds the joined path; caller frees it */
+    JOIN_SKIP = 1,   /* benign entry with nothing to extract */
+    JOIN_ESCAPE = -1 /* path leaves the prefix — fatal, never extract */
+};
+
+/*
+ * Build a safe destination path by joining a prefix directory and an
+ * archive-relative entry path.  On JOIN_OK, *out is the joined path;
+ * otherwise *out is NULL.
+ */
+static int safe_join(const char *prefix, const char *entry_path, char **out)
 {
+    *out = NULL;
+
     /* Strip leading "./" or "/" from the entry path */
     while (entry_path[0] == '.' && entry_path[1] == '/')
         entry_path += 2;
@@ -114,12 +132,14 @@ static char *safe_join(const char *prefix, const char *entry_path)
 
     /* Bare "." means the root directory itself — skip */
     if (entry_path[0] == '\0')
-        return NULL;
+        return JOIN_SKIP;
     if (entry_path[0] == '.' && entry_path[1] == '\0')
-        return NULL;
+        return JOIN_SKIP;
 
-    if (!prefix)
-        return aept_strdup(entry_path);
+    if (!prefix) {
+        *out = aept_strdup(entry_path);
+        return JOIN_OK;
+    }
 
     /* Trim trailing slashes from prefix */
     size_t plen = strlen(prefix);
@@ -153,11 +173,12 @@ static char *safe_join(const char *prefix, const char *entry_path)
         aept_log_error("path '%s' escapes extraction directory", entry_path);
         free(resolved);
         free(norm_pfx);
-        return NULL;
+        return JOIN_ESCAPE;
     }
 
     free(norm_pfx);
-    return resolved;
+    *out = resolved;
+    return JOIN_OK;
 }
 
 /*
@@ -175,35 +196,51 @@ static int fileset_contains_entry(aept_fileset_t *fs, const char *entry_path)
     return r;
 }
 
-/* Rewrite the pathname of an entry.  Returns 0 on success, 1 to skip. */
+/* Rewrite the pathname of an entry.  Returns an enum join_result. */
 static int rewrite_pathname(struct archive_entry *entry, const char *dest)
 {
-    char *p = safe_join(dest, archive_entry_pathname(entry));
-    if (!p)
-        return 1;
+    char *p;
+    int r = safe_join(dest, archive_entry_pathname(entry), &p);
+    if (r != JOIN_OK)
+        return r;
     archive_entry_set_pathname(entry, p);
     free(p);
-    return 0;
+    return JOIN_OK;
 }
 
-/* Rewrite both pathname and hardlink target.  Returns 0/1/-1. */
+/*
+ * Rewrite both pathname and hardlink target.  Returns an enum
+ * join_result.
+ *
+ * The hardlink target is worth its own mention: unlike the pathname it
+ * never passes aept_archive_path_is_safe(), so "../../../etc/passwd" as
+ * a link target reaches safe_join() intact and only the containment
+ * check here stands between it and the rest of the filesystem.
+ */
 static int rewrite_all_paths(struct archive_entry *entry, const char *dest)
 {
-    if (rewrite_pathname(entry, dest))
-        return 1;
+    int r = rewrite_pathname(entry, dest);
+    if (r != JOIN_OK)
+        return r;
 
     const char *hl = archive_entry_hardlink(entry);
     if (hl) {
-        char *p = safe_join(dest, hl);
-        if (!p) {
+        char *p;
+        r = safe_join(dest, hl, &p);
+        if (r == JOIN_SKIP) {
             aept_log_error("not extracting '%s': hardlink to nowhere",
                            archive_entry_pathname(entry));
-            return 1;
+            return JOIN_SKIP;
+        }
+        if (r != JOIN_OK) {
+            aept_log_error("not extracting '%s': hardlink target leaves the extraction directory",
+                           archive_entry_pathname(entry));
+            return r;
         }
         archive_entry_set_hardlink(entry, p);
         free(p);
     }
-    return 0;
+    return JOIN_OK;
 }
 
 /*
@@ -484,14 +521,15 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
 
         int is_cf = have_cf && fileset_contains_entry(conffiles, raw_path);
 
-        int skip = rewrite_all_paths(entry, dest);
-        if (skip != 0) {
+        int joined = rewrite_all_paths(entry, dest);
+        if (joined != JOIN_OK) {
             free(keep_path);
             free(keep_link);
             keep_path = NULL;
             keep_link = NULL;
-            if (skip == 1)
+            if (joined == JOIN_SKIP)
                 continue;
+            /* JOIN_ESCAPE: abandon the whole archive, do not extract on. */
             goto cleanup;
         }
 
@@ -622,7 +660,10 @@ int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename, FIL
         if (!entry)
             return -1;
 
-        rewrite_pathname(entry, NULL);
+        /* No prefix here, so the only other outcome is JOIN_SKIP for an
+         * entry that names nothing — which cannot be the file wanted. */
+        if (rewrite_pathname(entry, NULL) != JOIN_OK)
+            continue;
 
         if (strcmp(archive_entry_pathname(entry), filename) == 0)
             return stream_entry(ar->ar, stream, 0);
@@ -738,10 +779,10 @@ int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected, const
         if (!fileset_contains_entry(selected, archive_entry_pathname(entry)))
             continue;
 
-        int skip = rewrite_all_paths(entry, prefix);
-        if (skip == 1)
+        int joined = rewrite_all_paths(entry, prefix);
+        if (joined == JOIN_SKIP)
             continue;
-        if (skip < 0)
+        if (joined != JOIN_OK)
             goto cleanup;
 
         aept_log_debug("extracting conffile '%s'", archive_entry_pathname(entry));
