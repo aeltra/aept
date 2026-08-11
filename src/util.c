@@ -78,8 +78,10 @@ int aept_pkg_name_is_safe(const char *name)
     /* Debian policy: [a-z0-9][a-z0-9.+\-]+ */
     for (const char *p = name; *p; p++) {
         char c = *p;
-        if (c >= 'a' && c <= 'z') continue;
-        if (c >= '0' && c <= '9') continue;
+        if (c >= 'a' && c <= 'z')
+            continue;
+        if (c >= '0' && c <= '9')
+            continue;
         if (p != name && (c == '.' || c == '+' || c == '-'))
             continue;
         return 0;
@@ -238,8 +240,7 @@ int aept_system(const char *argv[])
     int wstatus;
     while (waitpid(pid, &wstatus, 0) < 0) {
         if (errno != EINTR) {
-            aept_log_error("waitpid failed for '%s': %s",
-                      argv[0], strerror(errno));
+            aept_log_error("waitpid failed for '%s': %s", argv[0], strerror(errno));
             return -1;
         }
     }
@@ -248,8 +249,7 @@ int aept_system(const char *argv[])
         return WEXITSTATUS(wstatus);
 
     if (WIFSIGNALED(wstatus)) {
-        aept_log_error("'%s' terminated by signal %d",
-                  argv[0], WTERMSIG(wstatus));
+        aept_log_error("'%s' terminated by signal %d", argv[0], WTERMSIG(wstatus));
     }
 
     return -1;
@@ -310,8 +310,7 @@ static int unshare_and_map_user(const struct uid_maps *maps)
         return -1;
     }
 
-    if (write_map_file("/proc/self/uid_map", maps->uid_map,
-                       strlen(maps->uid_map)) != 0) {
+    if (write_map_file("/proc/self/uid_map", maps->uid_map, strlen(maps->uid_map)) != 0) {
         child_err("aept: failed to write uid_map\n");
         return -1;
     }
@@ -322,8 +321,7 @@ static int unshare_and_map_user(const struct uid_maps *maps)
         return -1;
     }
 
-    if (write_map_file("/proc/self/gid_map", maps->gid_map,
-                       strlen(maps->gid_map)) != 0) {
+    if (write_map_file("/proc/self/gid_map", maps->gid_map, strlen(maps->gid_map)) != 0) {
         child_err("aept: failed to write gid_map\n");
         return -1;
     }
@@ -382,8 +380,7 @@ int aept_fileset_contains(aept_fileset_t *fs, const char *path)
     if (fs->count == 0 || path[0] == '\0')
         return 0;
     aept_fileset_sort(fs);
-    return bsearch(&path, fs->paths, fs->count, sizeof(char *),
-                   path_cmp) != NULL;
+    return bsearch(&path, fs->paths, fs->count, sizeof(char *), path_cmp) != NULL;
 }
 
 void aept_fileset_free(aept_fileset_t *fs)
@@ -408,10 +405,8 @@ int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
      * snprintf() once fork() has run.  The ids are the same on both
      * sides of the fork, so there is nothing to wait for.
      */
-    snprintf(maps.uid_map, sizeof(maps.uid_map), "0 %lu 1",
-             (unsigned long)geteuid());
-    snprintf(maps.gid_map, sizeof(maps.gid_map), "0 %lu 1\n",
-             (unsigned long)getegid());
+    snprintf(maps.uid_map, sizeof(maps.uid_map), "0 %lu 1", (unsigned long)geteuid());
+    snprintf(maps.gid_map, sizeof(maps.gid_map), "0 %lu 1\n", (unsigned long)getegid());
 
     pid = fork();
 

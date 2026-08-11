@@ -26,9 +26,8 @@ static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
     return path;
 }
 
-int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
-                    const char *pkg_name, const char *script,
-                    const char *action, const char *version)
+int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
+                    const char *script, const char *action, const char *version)
 {
     char *path = NULL;
     int r;
@@ -43,10 +42,8 @@ int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
         return 0;
     }
 
-    aept_log_debug("running %s for %s %s %s", script,
-             pkg_name ? pkg_name : "(none)",
-             action ? action : "",
-             version ? version : "");
+    aept_log_debug("running %s for %s %s %s", script, pkg_name ? pkg_name : "(none)",
+                   action ? action : "", version ? version : "");
 
     const char *run_path = path;
     if (ctx->config.offline_root)
@@ -66,8 +63,8 @@ int aept_run_script(struct aept_ctx *ctx, const char *script_dir,
     free(path);
 
     if (r != 0) {
-        aept_log_error("%s script for %s failed with exit code %d",
-                  script, pkg_name ? pkg_name : "(none)", r);
+        aept_log_error("%s script for %s failed with exit code %d", script,
+                       pkg_name ? pkg_name : "(none)", r);
         /*
          * Report failure as -1, not as the script's exit code.  Callers
          * hand this value straight back to aept_op_install(), which

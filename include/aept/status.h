@@ -18,8 +18,8 @@ int aept_status_load(struct aept_ctx *ctx);
 /* Read raw control fields from control_src, append a
  * "Status: install ok <state>" line, and write the result to
  * dest_path atomically (tmp + rename). */
-int aept_status_add(struct aept_ctx *ctx, const char *control_src,
-                    const char *dest_path, const char *state);
+int aept_status_add(struct aept_ctx *ctx, const char *control_src, const char *dest_path,
+                    const char *state);
 
 /* Mark a package as auto-installed. */
 int aept_status_mark_auto(struct aept_ctx *ctx, const char *name);

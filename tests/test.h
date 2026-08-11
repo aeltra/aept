@@ -24,15 +24,13 @@ static void test_ok(int pass, const char *label)
 /* Compare a possibly-NULL string against a possibly-NULL expectation. */
 static void test_str_eq(const char *got, const char *want, const char *label)
 {
-    int pass = (got == NULL && want == NULL) ||
-               (got != NULL && want != NULL && strcmp(got, want) == 0);
+    int pass =
+        (got == NULL && want == NULL) || (got != NULL && want != NULL && strcmp(got, want) == 0);
 
     test_ok(pass, label);
 
     if (!pass)
-        printf("#   got:  %s\n#   want: %s\n",
-               got  ? got  : "(NULL)",
-               want ? want : "(NULL)");
+        printf("#   got:  %s\n#   want: %s\n", got ? got : "(NULL)", want ? want : "(NULL)");
 }
 
 static void test_int_eq(int got, int want, const char *label)

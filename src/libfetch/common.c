@@ -56,8 +56,7 @@
 
 /*** Error-reporting functions ***********************************************/
 
-void libfetch_set_client_certificate(struct libfetch_ctx *ctx,
-                                     const char *cert_file,
+void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_file,
                                      const char *key_file)
 {
     ctx->ssl_client_cert_file = cert_file;
@@ -79,8 +78,7 @@ void libfetch_info(const char *fmt, ...)
 
 /*** Network-related utility functions ***************************************/
 
-uintmax_t libfetch_parseuint(const char *str, const char **endptr, int radix,
-                             uintmax_t max)
+uintmax_t libfetch_parseuint(const char *str, const char **endptr, int radix, uintmax_t max)
 {
     uintmax_t val = 0, maxx = max / radix, d;
     const char *p;
@@ -178,16 +176,15 @@ static int compute_timeout(const struct timeval *tv)
     int timeout;
 
     gettimeofday(&cur, NULL);
-    timeout =
-        (tv->tv_sec - cur.tv_sec) * 1000 + (tv->tv_usec - cur.tv_usec) / 1000;
+    timeout = (tv->tv_sec - cur.tv_sec) * 1000 + (tv->tv_usec - cur.tv_usec) / 1000;
     return timeout;
 }
 
 /*
  * Establish a TCP connection to the specified port on the specified host.
  */
-libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url,
-                                  struct libfetch_url *url, int af, int verbose)
+libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetch_url *url, int af,
+                                  int verbose)
 {
     libfetch_conn_t *conn;
     char pbuf[10];
@@ -218,8 +215,7 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url,
 
     /* try to connect */
     for (sd = -1, res = res0; res; sd = -1, res = res->ai_next) {
-        if ((sd = socket(res->ai_family, res->ai_socktype | sock_flags,
-                         res->ai_protocol)) == -1)
+        if ((sd = socket(res->ai_family, res->ai_socktype | sock_flags, res->ai_protocol)) == -1)
             continue;
         if (bindaddr != NULL && *bindaddr != '\0' &&
             libfetch_bind(sd, res->ai_family, bindaddr) != 0) {
@@ -256,8 +252,7 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url,
 
             if (r == 1 && (pfd.revents & POLLOUT) == POLLOUT) {
                 socklen_t len = sizeof(error);
-                if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
-                    error == 0)
+                if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 && error == 0)
                     break;
                 errno = error;
             }
@@ -332,8 +327,8 @@ void libfetch_ctx_free(struct libfetch_ctx *ctx)
  * Check connection cache for an existing entry matching
  * protocol/host/port/user/password/family.
  */
-libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *ctx,
-                                    const struct libfetch_url *url, int af)
+libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *ctx, const struct libfetch_url *url,
+                                    int af)
 {
     libfetch_conn_t *conn, *last_conn = NULL;
 
@@ -343,8 +338,7 @@ libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *ctx,
             strcmp(conn->cache_url->host, url->host) == 0 &&
             strcmp(conn->cache_url->user, url->user) == 0 &&
             strcmp(conn->cache_url->pwd, url->pwd) == 0 &&
-            (conn->cache_af == AF_UNSPEC || af == AF_UNSPEC ||
-             conn->cache_af == af)) {
+            (conn->cache_af == AF_UNSPEC || af == AF_UNSPEC || conn->cache_af == af)) {
             if (last_conn != NULL)
                 last_conn->next_cached = conn->next_cached;
             else
@@ -383,8 +377,7 @@ void libfetch_cache_put(struct libfetch_ctx *ctx, libfetch_conn_t *conn,
         host_match = strcmp(conn->cache_url->host, iter->cache_url->host) == 0;
         if (host_match)
             ++host_count;
-        if (global_count < ctx->cache_global_limit &&
-            host_count < ctx->cache_per_host_limit) {
+        if (global_count < ctx->cache_global_limit && host_count < ctx->cache_per_host_limit) {
             last = iter;
             continue;
         }
@@ -426,15 +419,12 @@ static int libfetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
 #ifdef CA_CRL_FILE
         if (access(CA_CRL_FILE, R_OK) == 0) {
             X509_STORE *crl_store = SSL_CTX_get_cert_store(ctx);
-            X509_LOOKUP *crl_lookup =
-                X509_STORE_add_lookup(crl_store, X509_LOOKUP_file());
-            if (!crl_lookup || !X509_load_crl_file(crl_lookup, CA_CRL_FILE,
-                                                   X509_FILETYPE_PEM)) {
+            X509_LOOKUP *crl_lookup = X509_STORE_add_lookup(crl_store, X509_LOOKUP_file());
+            if (!crl_lookup || !X509_load_crl_file(crl_lookup, CA_CRL_FILE, X509_FILETYPE_PEM)) {
                 fprintf(stderr, "Could not load CRL file %s\n", CA_CRL_FILE);
                 return -1;
             }
-            X509_STORE_set_flags(crl_store, X509_V_FLAG_CRL_CHECK |
-                                                X509_V_FLAG_CRL_CHECK_ALL);
+            X509_STORE_set_flags(crl_store, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
         }
 #endif
     }
@@ -456,10 +446,8 @@ static int libfetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
          */
         int have_file, have_dir;
 
-        have_file = SSL_CTX_load_verify_locations(
-                        ctx, X509_get_default_cert_file(), NULL) == 1;
-        have_dir = SSL_CTX_load_verify_locations(
-                       ctx, NULL, X509_get_default_cert_dir()) == 1;
+        have_file = SSL_CTX_load_verify_locations(ctx, X509_get_default_cert_file(), NULL) == 1;
+        have_dir = SSL_CTX_load_verify_locations(ctx, NULL, X509_get_default_cert_dir()) == 1;
 
         if (!have_file && !have_dir) {
             fprintf(stderr,
@@ -496,8 +484,8 @@ static int libfetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
  * not silently start authenticating as somebody else.
  */
 /* Returns 0 on success, -1 on error, per the project convention. */
-static int libfetch_ssl_setup_client_certificate(struct libfetch_ctx *fctx,
-                                                 SSL_CTX *ctx, int verbose)
+static int libfetch_ssl_setup_client_certificate(struct libfetch_ctx *fctx, SSL_CTX *ctx,
+                                                 int verbose)
 {
     const char *cert_file = NULL, *key_file = NULL;
 
@@ -559,8 +547,8 @@ static int map_tls_error(void)
 /*
  * Enable SSL on a connection.
  */
-int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn,
-                 const struct libfetch_url *URL, int verbose)
+int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn, const struct libfetch_url *URL,
+                 int verbose)
 {
     conn->ssl_meth = TLS_client_method();
     conn->ssl_ctx = SSL_CTX_new(conn->ssl_meth);
@@ -580,9 +568,7 @@ int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn,
     conn->buf_events = 0;
     SSL_set_fd(conn->ssl, conn->sd);
     if (!SSL_set_tlsext_host_name(conn->ssl, (char *)(uintptr_t)URL->host)) {
-        fprintf(stderr,
-                "TLS server name indication extension failed for host %s\n",
-                URL->host);
+        fprintf(stderr, "TLS server name indication extension failed for host %s\n", URL->host);
         goto err;
     }
 
@@ -614,8 +600,7 @@ int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn,
         X509_NAME *name;
         char *str;
 
-        libfetch_info("SSL connection established using %s\n",
-                      SSL_get_cipher(conn->ssl));
+        libfetch_info("SSL connection established using %s\n", SSL_get_cipher(conn->ssl));
         name = X509_get_subject_name(conn->ssl_cert);
         str = X509_NAME_oneline(name, 0, 0);
         libfetch_info("Certificate subject: %s", str);
@@ -745,8 +730,7 @@ int libfetch_getln(libfetch_conn_t *conn)
          * so the buffer can be NUL-terminated below for
          * the case of len == 0.
          */
-        len = libfetch_read(conn, conn->buf + conn->buflen,
-                            conn->bufsize - conn->buflen);
+        len = libfetch_read(conn, conn->buf + conn->buflen, conn->bufsize - conn->buflen);
         if (len == -1)
             return -1;
         if (len == 0)
@@ -876,8 +860,7 @@ int libfetch_close(libfetch_conn_t *conn)
 #define MAX_ADDRESS_STRING INET6_ADDRSTRLEN
 #define MAX_CIDR_STRING (MAX_ADDRESS_STRING + 4)
 
-static size_t host_to_address(uint8_t *buf, size_t buf_len, const char *host,
-                              size_t len)
+static size_t host_to_address(uint8_t *buf, size_t buf_len, const char *host, size_t len)
 {
     char tmp[MAX_ADDRESS_STRING];
 
@@ -915,8 +898,7 @@ static int bitcmp(const uint8_t *a, const uint8_t *b, int len)
     return 0;
 }
 
-static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr,
-                      size_t cidr_len)
+static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr, size_t cidr_len)
 {
     const char *slash;
     uint8_t cidr_addr[MAX_ADDRESS_BYTES];
@@ -932,8 +914,7 @@ static int cidr_match(const uint8_t *addr, size_t addr_len, const char *cidr,
     if (!bits || bits > 128)
         return 0;
 
-    cidr_addrlen =
-        host_to_address(cidr_addr, sizeof cidr_addr, cidr, slash - cidr);
+    cidr_addrlen = host_to_address(cidr_addr, sizeof cidr_addr, cidr, slash - cidr);
     if (cidr_addrlen != addr_len || bits > addr_len * 8)
         return 0;
     return bitcmp(cidr_addr, addr, bits) == 0;
@@ -953,8 +934,7 @@ int libfetch_no_proxy_match(const char *host)
     uint8_t addr[MAX_ADDRESS_BYTES];
     size_t h_len, d_len, addr_len;
 
-    if ((no_proxy = getenv("NO_PROXY")) == NULL &&
-        (no_proxy = getenv("no_proxy")) == NULL)
+    if ((no_proxy = getenv("NO_PROXY")) == NULL && (no_proxy = getenv("no_proxy")) == NULL)
         return 0;
 
     /* asterisk matches any hostname */
@@ -975,8 +955,7 @@ int libfetch_no_proxy_match(const char *host)
                 break;
 
         d_len = q - p;
-        if (d_len > 0 && h_len >= d_len &&
-            strncasecmp(host + h_len - d_len, p, d_len) == 0) {
+        if (d_len > 0 && h_len >= d_len && strncasecmp(host + h_len - d_len, p, d_len) == 0) {
             /* domain name matches */
             return 1;
         }
@@ -1006,10 +985,9 @@ void libfetch_io_close(libfetch_io_t *f)
     free(f);
 }
 
-libfetch_io_t *
-libfetch_io_unopen(void *io_cookie, ssize_t (*io_read)(void *, void *, size_t),
-                   ssize_t (*io_write)(void *, const void *, size_t),
-                   void (*io_close)(void *))
+libfetch_io_t *libfetch_io_unopen(void *io_cookie, ssize_t (*io_read)(void *, void *, size_t),
+                                  ssize_t (*io_write)(void *, const void *, size_t),
+                                  void (*io_close)(void *))
 {
     libfetch_io_t *f;
 

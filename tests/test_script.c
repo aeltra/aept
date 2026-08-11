@@ -129,24 +129,19 @@ int main(void)
     /* Action and version reach the script as $1 and $2. */
     {
         char *body;
-        aept_asprintf(&body,
-                      "#!/bin/sh\nprintf '%%s %%s\\n' \"$1\" \"$2\" > %s/args\n",
-                      dir);
+        aept_asprintf(&body, "#!/bin/sh\nprintf '%%s %%s\\n' \"$1\" \"$2\" > %s/args\n", dir);
         write_script("args", body);
         free(body);
 
-        test_int_eq(aept_run_script(&ctx, dir, NULL, "args",
-                                    "configure", "1.2-3"), 0,
+        test_int_eq(aept_run_script(&ctx, dir, NULL, "args", "configure", "1.2-3"), 0,
                     "script with action and version succeeds");
-        test_str_eq(read_line("args"), "configure 1.2-3",
-                    "action and version passed as $1 and $2");
+        test_str_eq(read_line("args"), "configure 1.2-3", "action and version passed as $1 and $2");
         unlink_in_dir("args");
     }
 
     /* With a package name the script resolves as <dir>/<pkg>.<script>. */
     write_script("mypkg.postinst", "#!/bin/sh\nexit 3\n");
-    test_int_eq(aept_run_script(&ctx, dir, "mypkg", "postinst",
-                                "configure", NULL), -1,
+    test_int_eq(aept_run_script(&ctx, dir, "mypkg", "postinst", "configure", NULL), -1,
                 "package-prefixed script resolves and reports -1");
 
     unlink_in_dir("ok");

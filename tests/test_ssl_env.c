@@ -20,7 +20,7 @@
 #include "test.h"
 
 #define CERT_PATH "/nonexistent/aept-test/client.pem"
-#define KEY_PATH  "/nonexistent/aept-test/client.key"
+#define KEY_PATH "/nonexistent/aept-test/client.key"
 
 /*
  * A real context from aept_init(): aept_download() needs the fetch

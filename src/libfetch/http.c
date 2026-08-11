@@ -98,14 +98,13 @@
 #define HTTP_BAD_RANGE 416
 #define HTTP_PROTOCOL_ERROR 999
 
-#define HTTP_REDIRECT(xyz)                                                     \
-    ((xyz) == HTTP_MOVED_PERM || (xyz) == HTTP_MOVED_TEMP ||                   \
-     (xyz) == HTTP_TEMP_REDIRECT || (xyz) == HTTP_SEE_OTHER)
+#define HTTP_REDIRECT(xyz)                                                                         \
+    ((xyz) == HTTP_MOVED_PERM || (xyz) == HTTP_MOVED_TEMP || (xyz) == HTTP_TEMP_REDIRECT ||        \
+     (xyz) == HTTP_SEE_OTHER)
 
 #define HTTP_ERROR(xyz) ((xyz) >= 400 && (xyz) < 600)
 
-static int http_cmd(libfetch_conn_t *, const char *, ...)
-    LIBFETCH_PRINTFLIKE(2, 3);
+static int http_cmd(libfetch_conn_t *, const char *, ...) LIBFETCH_PRINTFLIKE(2, 3);
 
 /*****************************************************************************
  * I/O functions for decoding chunked streams
@@ -341,8 +340,7 @@ static void http_closefn(void *v)
 /*
  * Wrap a file descriptor up
  */
-static libfetch_io_t *http_funopen(struct libfetch_ctx *fctx,
-                                   libfetch_conn_t *conn, int chunked,
+static libfetch_io_t *http_funopen(struct libfetch_ctx *fctx, libfetch_conn_t *conn, int chunked,
                                    int keep_alive, off_t clength)
 {
     struct httpio *io;
@@ -388,12 +386,12 @@ static struct {
     hdr_t num;
     const char *name;
 } hdr_names[] = {
-    {hdr_connection, "Connection"},
-    {hdr_content_length, "Content-Length"},
-    {hdr_location, "Location"},
+    {hdr_connection,        "Connection"       },
+    {hdr_content_length,    "Content-Length"   },
+    {hdr_location,          "Location"         },
     {hdr_transfer_encoding, "Transfer-Encoding"},
-    {hdr_www_authenticate, "WWW-Authenticate"},
-    {hdr_unknown, NULL},
+    {hdr_www_authenticate,  "WWW-Authenticate" },
+    {hdr_unknown,           NULL               },
 };
 
 /*
@@ -454,8 +452,8 @@ static int http_get_reply(libfetch_conn_t *conn)
             return HTTP_PROTOCOL_ERROR;
         p += 4;
     }
-    if (*p != ' ' || !isdigit((unsigned char)p[1]) ||
-        !isdigit((unsigned char)p[2]) || !isdigit((unsigned char)p[3]))
+    if (*p != ' ' || !isdigit((unsigned char)p[1]) || !isdigit((unsigned char)p[2]) ||
+        !isdigit((unsigned char)p[3]))
         return HTTP_PROTOCOL_ERROR;
 
     conn->err = (p[1] - '0') * 100 + (p[2] - '0') * 10 + (p[3] - '0');
@@ -468,8 +466,7 @@ static int http_get_reply(libfetch_conn_t *conn)
  */
 static const char *http_match(const char *str, const char *hdr)
 {
-    while (*str && *hdr &&
-           tolower((unsigned char)*str++) == tolower((unsigned char)*hdr++))
+    while (*str && *hdr && tolower((unsigned char)*str++) == tolower((unsigned char)*hdr++))
         /* nothing */;
     if (*str || *hdr != ':')
         return NULL;
@@ -526,8 +523,7 @@ static char *http_base64(const char *src)
     dst = str;
 
     while (l >= 3) {
-        t = ((unsigned char)src[0] << 16) | ((unsigned char)src[1] << 8) |
-            (unsigned char)src[2];
+        t = ((unsigned char)src[0] << 16) | ((unsigned char)src[1] << 8) | (unsigned char)src[2];
         dst[0] = base64[(t >> 18) & 0x3f];
         dst[1] = base64[(t >> 12) & 0x3f];
         dst[2] = base64[(t >> 6) & 0x3f];
@@ -564,8 +560,7 @@ static char *http_base64(const char *src)
 /*
  * Encode username and password
  */
-static int http_basic_auth(libfetch_conn_t *conn, const char *hdr,
-                           const char *usr, const char *pwd)
+static int http_basic_auth(libfetch_conn_t *conn, const char *hdr, const char *usr, const char *pwd)
 {
     char *upw, *auth;
     int r;
@@ -590,8 +585,7 @@ static int http_basic_auth(libfetch_conn_t *conn, const char *hdr,
  * caller of.  $HTTP_PROXY carries a URL, and a URL already has a place
  * to put a user and a password.
  */
-static void http_proxy_authorize(libfetch_conn_t *conn,
-                                 struct libfetch_url *purl)
+static void http_proxy_authorize(libfetch_conn_t *conn, struct libfetch_url *purl)
 {
     if (!purl)
         return;
@@ -622,10 +616,8 @@ static void http_cork(libfetch_conn_t *conn, int val)
 /*
  * Connect to the correct HTTP server or proxy.
  */
-static libfetch_conn_t *http_connect(struct libfetch_ctx *fctx,
-                                     struct libfetch_url *URL,
-                                     struct libfetch_url *purl,
-                                     const char *flags, int *cached)
+static libfetch_conn_t *http_connect(struct libfetch_ctx *fctx, struct libfetch_url *URL,
+                                     struct libfetch_url *purl, const char *flags, int *cached)
 {
     struct libfetch_url *cache_url;
     libfetch_conn_t *conn;
@@ -655,8 +647,8 @@ static libfetch_conn_t *http_connect(struct libfetch_ctx *fctx,
 
     if (is_https && purl) {
         http_cork(conn, 1);
-        http_cmd(conn, "CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n", URL->host,
-                 URL->port, URL->host, URL->port);
+        http_cmd(conn, "CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n", URL->host, URL->port, URL->host,
+                 URL->port);
         http_proxy_authorize(conn, purl);
         http_cmd(conn, "\r\n");
         http_cork(conn, 0);
@@ -686,8 +678,7 @@ ouch:
     return NULL;
 }
 
-static struct libfetch_url *http_make_proxy_url(const char *env1,
-                                                const char *env2)
+static struct libfetch_url *http_make_proxy_url(const char *env1, const char *env2)
 {
     struct libfetch_url *purl;
     char *p;
@@ -714,8 +705,7 @@ static struct libfetch_url *http_make_proxy_url(const char *env1,
     return NULL;
 }
 
-static struct libfetch_url *http_get_proxy(struct libfetch_url *url,
-                                           const char *flags)
+static struct libfetch_url *http_get_proxy(struct libfetch_url *url, const char *flags)
 {
     if (flags != NULL && strchr(flags, 'd') != NULL)
         return NULL;
@@ -738,9 +728,8 @@ static struct libfetch_url *http_get_proxy(struct libfetch_url *url,
  * XXX This function is way too long, the do..while loop should be split
  * XXX off into a separate function.
  */
-static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
-                                   struct libfetch_url *URL, const char *op,
-                                   struct libfetch_url *purl, const char *flags)
+static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_url *URL,
+                                   const char *op, struct libfetch_url *purl, const char *flags)
 {
     libfetch_conn_t *conn;
     struct libfetch_url *url, *new;
@@ -796,8 +785,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
                 strcpy(hbuf, host);
                 host = hbuf;
             }
-            snprintf(hbuf + strlen(hbuf), sizeof(hbuf) - strlen(hbuf), ":%d",
-                     url->port);
+            snprintf(hbuf + strlen(hbuf), sizeof(hbuf) - strlen(hbuf), ":%d", url->port);
         }
 
         /* send request */
@@ -806,8 +794,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
 
         http_cork(conn, 1);
         if (purl && strcasecmp(URL->scheme, LIBFETCH_SCHEME_HTTPS) != 0) {
-            http_cmd(conn, "%s %s://%s%s HTTP/1.1\r\n", op, url->scheme, host,
-                     url->doc);
+            http_cmd(conn, "%s %s://%s%s HTTP/1.1\r\n", op, url->scheme, host, url->doc);
         } else {
             http_cmd(conn, "%s %s HTTP/1.1\r\n", op, url->doc);
         }
@@ -834,8 +821,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
         /* other headers */
         if ((p = getenv("HTTP_REFERER")) != NULL && *p != '\0') {
             if (strcasecmp(p, "auto") == 0)
-                http_cmd(conn, "Referer: %s://%s%s\r\n", url->scheme, host,
-                         url->doc);
+                http_cmd(conn, "Referer: %s://%s%s\r\n", url->scheme, host, url->doc);
             else
                 http_cmd(conn, "Referer: %s\r\n", p);
         }
@@ -943,8 +929,8 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
                     libfetch_info("%d redirect to %s", conn->err, p);
                 if (*p == '/')
                     /* absolute path */
-                    new = libfetch_make_url(url->scheme, url->host, url->port,
-                                            p, url->user, url->pwd);
+                    new = libfetch_make_url(url->scheme, url->host, url->port, p, url->user,
+                                            url->pwd);
                 else
                     new = libfetch_parse_url(p);
                 if (new == NULL) {
@@ -954,8 +940,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
                 if (!new->port)
                     new->port = libfetch_default_port(new->scheme);
                 if (!new->user[0] && !new->pwd[0] && new->port == url->port &&
-                    strcmp(new->scheme, url->scheme) == 0 &&
-                    strcmp(new->host, url->host) == 0) {
+                    strcmp(new->scheme, url->scheme) == 0 && strcmp(new->host, url->host) == 0) {
                     /* keep auth if staying on same host */
                     strcpy(new->user, url->user);
                     strcpy(new->pwd, url->pwd);
@@ -988,8 +973,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx,
         }
 
         /* we have a hit or an error */
-        if (conn->err == HTTP_OK || conn->err == HTTP_NOT_MODIFIED ||
-            HTTP_ERROR(conn->err))
+        if (conn->err == HTTP_OK || conn->err == HTTP_NOT_MODIFIED || HTTP_ERROR(conn->err))
             break;
 
         /* all other cases: we got a redirect */
@@ -1069,8 +1053,8 @@ ouch:
 /*
  * Retrieve a file by HTTP
  */
-libfetch_io_t *libfetch_get_http(struct libfetch_ctx *fctx,
-                                 struct libfetch_url *URL, const char *flags)
+libfetch_io_t *libfetch_get_http(struct libfetch_ctx *fctx, struct libfetch_url *URL,
+                                 const char *flags)
 {
     return http_request(fctx, URL, "GET", http_get_proxy(URL, flags), flags);
 }

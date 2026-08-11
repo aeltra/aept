@@ -45,12 +45,14 @@ static void mark_needed(Pool *pool, Id p, char *needed, int ninstalled)
     if (!s->requires)
         return;
 
-    reqp = s->repo->idarraydata + s->requires;
+    reqp = s->repo->idarraydata + s->
+                                      requires;
     while ((req = *reqp++) != 0) {
         if (req == SOLVABLE_PREREQMARKER)
             continue;
 
-        FOR_PROVIDES(p2, pp2, req) {
+        FOR_PROVIDES(p2, pp2, req)
+        {
             Solvable *s2 = pool_id2solvable(pool, p2);
             if (s2->repo == pool->installed)
                 mark_needed(pool, p2, needed, ninstalled);
@@ -107,14 +109,16 @@ int aept_op_autoremove(struct aept_ctx *ctx)
     needed = aept_malloc(ninstalled);
     memset(needed, 0, ninstalled);
 
-    FOR_REPO_SOLVABLES(installed, p, s) {
+    FOR_REPO_SOLVABLES(installed, p, s)
+    {
         const char *name = pool_id2str(pool, s->name);
         if (!aept_fileset_contains(&auto_set, name))
             mark_needed(pool, p, needed, ninstalled);
     }
 
     /* Collect auto-installed packages that are not needed. */
-    FOR_REPO_SOLVABLES(installed, p, s) {
+    FOR_REPO_SOLVABLES(installed, p, s)
+    {
         int idx = p - installed->start;
         if (idx < 0 || idx >= ninstalled)
             continue;
@@ -126,10 +130,8 @@ int aept_op_autoremove(struct aept_ctx *ctx)
             continue;
 
         ncandidates++;
-        candidates = aept_realloc(candidates,
-                              ncandidates * sizeof(const char *));
-        candidates_evr = aept_realloc(candidates_evr,
-                                  ncandidates * sizeof(const char *));
+        candidates = aept_realloc(candidates, ncandidates * sizeof(const char *));
+        candidates_evr = aept_realloc(candidates_evr, ncandidates * sizeof(const char *));
         candidates[ncandidates - 1] = name;
         candidates_evr[ncandidates - 1] = pool_id2str(pool, s->evr);
     }
@@ -141,7 +143,7 @@ int aept_op_autoremove(struct aept_ctx *ctx)
     }
 
     aept_transaction_t txn = {0};
-    txn.remove  = candidates;
+    txn.remove = candidates;
     txn.n_remove = ncandidates;
 
     aept_display_transaction(&txn);

@@ -25,7 +25,7 @@ static int verbose_count;
 
 /* ── signal handling ──────────────────────────────────────────────── */
 
-static aept_ctx_t *g_ctx;   /* for signal handler only */
+static aept_ctx_t *g_ctx; /* for signal handler only */
 static volatile sig_atomic_t g_signum;
 
 static void signal_handler(int sig)
@@ -81,8 +81,7 @@ static aept_ctx_t *init_aept(void)
     cf = resolve_conf();
 
     if (conf_explicit && access(cf, R_OK) < 0) {
-        aept_log_error("cannot access config file '%s': %s",
-                  cf, strerror(errno));
+        aept_log_error("cannot access config file '%s': %s", cf, strerror(errno));
         aept_cleanup(ctx);
         return NULL;
     }
@@ -116,247 +115,220 @@ static aept_ctx_t *init_aept(void)
 static void usage_main(FILE *out)
 {
     fprintf(out,
-        "Usage: aept [-c <file>] [-o <dir>] [-v] <command> [options] [args...]\n"
-        "\n"
-        "Global options:\n"
-        "  -c, --conf <file>         Configuration file (default: %s)\n"
-        "  -o, --offline-root <dir>  Use <dir> as the package root\n"
-        "  -v, --verbose             Increase verbosity\n"
-        "  -h, --help                Show this help\n"
-        "\n"
-        "Commands:\n"
-        "  update              Fetch package lists from repositories\n"
-        "  install <pkgs...>   Install packages\n"
-        "  remove <pkgs...>    Remove packages\n"
-        "  autoremove          Remove unneeded auto-installed packages\n"
-        "  upgrade             Upgrade all installed packages\n"
-        "  list [pattern]      List packages\n"
-        "  show <pkg>          Show package information\n"
-        "  mark <action>       Control auto-installed package marks\n"
-        "  pin <pkgs...>       Pin packages to a specific version\n"
-        "  unpin <pkgs...>     Remove version pins\n"
-        "  clean               Remove cached package files\n"
-        "  files <pkg>         List files of an installed package\n"
-        "  owns <path>         Find which package owns a file\n"
-        "  print-architecture  Show configured architectures\n"
-        "\n"
-        "Run 'aept <command> --help' for command-specific options.\n",
-        DEFAULT_CONF
-    );
+            "Usage: aept [-c <file>] [-o <dir>] [-v] <command> [options] [args...]\n"
+            "\n"
+            "Global options:\n"
+            "  -c, --conf <file>         Configuration file (default: %s)\n"
+            "  -o, --offline-root <dir>  Use <dir> as the package root\n"
+            "  -v, --verbose             Increase verbosity\n"
+            "  -h, --help                Show this help\n"
+            "\n"
+            "Commands:\n"
+            "  update              Fetch package lists from repositories\n"
+            "  install <pkgs...>   Install packages\n"
+            "  remove <pkgs...>    Remove packages\n"
+            "  autoremove          Remove unneeded auto-installed packages\n"
+            "  upgrade             Upgrade all installed packages\n"
+            "  list [pattern]      List packages\n"
+            "  show <pkg>          Show package information\n"
+            "  mark <action>       Control auto-installed package marks\n"
+            "  pin <pkgs...>       Pin packages to a specific version\n"
+            "  unpin <pkgs...>     Remove version pins\n"
+            "  clean               Remove cached package files\n"
+            "  files <pkg>         List files of an installed package\n"
+            "  owns <path>         Find which package owns a file\n"
+            "  print-architecture  Show configured architectures\n"
+            "\n"
+            "Run 'aept <command> --help' for command-specific options.\n",
+            DEFAULT_CONF);
 }
 
 static void usage_update(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept update [options]\n"
-        "\n"
-        "Fetch package lists from repositories.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept update [options]\n"
+                 "\n"
+                 "Fetch package lists from repositories.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_install(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept install [options] <packages|paths...>\n"
-        "\n"
-        "Install packages and their dependencies.\n"
-        "Arguments starting with ./ or / are treated as local .aep files.\n"
-        "\n"
-        "Options:\n"
-        "  -f, --force-depends   Ignore dependency errors\n"
-        "  -d, --download-only   Only download, do not install\n"
-        "  -n, --noaction        Dry run, show what would be done\n"
-        "  -h, --help            Show this help\n"
-        "\n"
-        "  --non-interactive     Do not prompt; implies --force-confold\n"
-        "  --allow-downgrade     Allow package downgrades\n"
-        "  --reinstall           Reinstall already installed packages\n"
-        "  --no-cache            Download, install, and delete each package\n"
-        "  --force-confnew       Always install new conffiles without asking\n"
-        "  --force-confold       Always keep old conffiles without asking\n"
-        "  --keep-going          Continue past per-package errors\n"
-    );
+    fprintf(out, "Usage: aept install [options] <packages|paths...>\n"
+                 "\n"
+                 "Install packages and their dependencies.\n"
+                 "Arguments starting with ./ or / are treated as local .aep files.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -f, --force-depends   Ignore dependency errors\n"
+                 "  -d, --download-only   Only download, do not install\n"
+                 "  -n, --noaction        Dry run, show what would be done\n"
+                 "  -h, --help            Show this help\n"
+                 "\n"
+                 "  --non-interactive     Do not prompt; implies --force-confold\n"
+                 "  --allow-downgrade     Allow package downgrades\n"
+                 "  --reinstall           Reinstall already installed packages\n"
+                 "  --no-cache            Download, install, and delete each package\n"
+                 "  --force-confnew       Always install new conffiles without asking\n"
+                 "  --force-confold       Always keep old conffiles without asking\n"
+                 "  --keep-going          Continue past per-package errors\n");
 }
 
 static void usage_remove(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept remove [options] <packages...>\n"
-        "\n"
-        "Remove installed packages.\n"
-        "\n"
-        "Options:\n"
-        "  -f, --force-depends   Ignore dependency errors\n"
-        "  -n, --noaction        Dry run, show what would be done\n"
-        "  -h, --help            Show this help\n"
-        "\n"
-        "  --non-interactive     Do not prompt\n"
-        "  --purge               Also remove modified conffiles\n"
-        "  --keep-going          Continue past per-package errors\n"
-    );
+    fprintf(out, "Usage: aept remove [options] <packages...>\n"
+                 "\n"
+                 "Remove installed packages.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -f, --force-depends   Ignore dependency errors\n"
+                 "  -n, --noaction        Dry run, show what would be done\n"
+                 "  -h, --help            Show this help\n"
+                 "\n"
+                 "  --non-interactive     Do not prompt\n"
+                 "  --purge               Also remove modified conffiles\n"
+                 "  --keep-going          Continue past per-package errors\n");
 }
 
 static void usage_autoremove(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept autoremove [options]\n"
-        "\n"
-        "Remove auto-installed packages that are no longer needed.\n"
-        "\n"
-        "Options:\n"
-        "  -f, --force-depends   Ignore dependency errors\n"
-        "  -n, --noaction        Dry run, show what would be done\n"
-        "  -h, --help            Show this help\n"
-        "\n"
-        "  --non-interactive     Do not prompt\n"
-        "  --purge               Also remove modified conffiles\n"
-        "  --keep-going          Continue past per-package errors\n"
-    );
+    fprintf(out, "Usage: aept autoremove [options]\n"
+                 "\n"
+                 "Remove auto-installed packages that are no longer needed.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -f, --force-depends   Ignore dependency errors\n"
+                 "  -n, --noaction        Dry run, show what would be done\n"
+                 "  -h, --help            Show this help\n"
+                 "\n"
+                 "  --non-interactive     Do not prompt\n"
+                 "  --purge               Also remove modified conffiles\n"
+                 "  --keep-going          Continue past per-package errors\n");
 }
 
 static void usage_upgrade(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept upgrade [options]\n"
-        "\n"
-        "Upgrade all installed packages.\n"
-        "\n"
-        "Options:\n"
-        "  -f, --force-depends   Ignore dependency errors\n"
-        "  -d, --download-only   Only download, do not install\n"
-        "  -n, --noaction        Dry run, show what would be done\n"
-        "  -h, --help            Show this help\n"
-        "\n"
-        "  --non-interactive     Do not prompt; implies --force-confold\n"
-        "  --allow-downgrade     Allow package downgrades\n"
-        "  --no-cache            Download, install, and delete each package\n"
-        "  --force-confnew       Always install new conffiles without asking\n"
-        "  --force-confold       Always keep old conffiles without asking\n"
-        "  --keep-going          Continue past per-package errors\n"
-    );
+    fprintf(out, "Usage: aept upgrade [options]\n"
+                 "\n"
+                 "Upgrade all installed packages.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -f, --force-depends   Ignore dependency errors\n"
+                 "  -d, --download-only   Only download, do not install\n"
+                 "  -n, --noaction        Dry run, show what would be done\n"
+                 "  -h, --help            Show this help\n"
+                 "\n"
+                 "  --non-interactive     Do not prompt; implies --force-confold\n"
+                 "  --allow-downgrade     Allow package downgrades\n"
+                 "  --no-cache            Download, install, and delete each package\n"
+                 "  --force-confnew       Always install new conffiles without asking\n"
+                 "  --force-confold       Always keep old conffiles without asking\n"
+                 "  --keep-going          Continue past per-package errors\n");
 }
 
 static void usage_clean(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept clean [options]\n"
-        "\n"
-        "Remove cached package files.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept clean [options]\n"
+                 "\n"
+                 "Remove cached package files.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_list(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept list [options] [pattern]\n"
-        "\n"
-        "List packages. With no arguments, list all available packages.\n"
-        "An optional glob pattern filters by package name.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help    Show this help\n"
-        "\n"
-        "  --installed   Only show installed packages\n"
-        "  --upgradable  Only show upgradable packages\n"
-    );
+    fprintf(out, "Usage: aept list [options] [pattern]\n"
+                 "\n"
+                 "List packages. With no arguments, list all available packages.\n"
+                 "An optional glob pattern filters by package name.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help    Show this help\n"
+                 "\n"
+                 "  --installed   Only show installed packages\n"
+                 "  --upgradable  Only show upgradable packages\n");
 }
 
 static void usage_owns(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept owns [options] <path>\n"
-        "\n"
-        "Find which installed package owns a file.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept owns [options] <path>\n"
+                 "\n"
+                 "Find which installed package owns a file.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_files(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept files [options] <package>\n"
-        "\n"
-        "List files belonging to an installed package.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept files [options] <package>\n"
+                 "\n"
+                 "List files belonging to an installed package.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_show(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept show [options] <package>\n"
-        "\n"
-        "Show package information.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept show [options] <package>\n"
+                 "\n"
+                 "Show package information.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_mark(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept mark manual [--all] <packages...>\n"
-        "       aept mark auto <packages...>\n"
-        "\n"
-        "Control auto-installed package marks.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-        "\n"
-        "  --all       Mark all packages as manually installed\n"
-    );
+    fprintf(out, "Usage: aept mark manual [--all] <packages...>\n"
+                 "       aept mark auto <packages...>\n"
+                 "\n"
+                 "Control auto-installed package marks.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n"
+                 "\n"
+                 "  --all       Mark all packages as manually installed\n");
 }
 
 static void usage_pin(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept pin <packages...>\n"
-        "       aept unpin <packages...>\n"
-        "\n"
-        "Pin packages to their currently installed version.\n"
-        "Use name=version to pin to a specific version.\n"
-        "Pinned packages are held back during upgrade.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept pin <packages...>\n"
+                 "       aept unpin <packages...>\n"
+                 "\n"
+                 "Pin packages to their currently installed version.\n"
+                 "Use name=version to pin to a specific version.\n"
+                 "Pinned packages are held back during upgrade.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 static void usage_print_architecture(FILE *out)
 {
-    fprintf(out,
-        "Usage: aept print-architecture [options]\n"
-        "\n"
-        "Show configured architectures.\n"
-        "\n"
-        "Options:\n"
-        "  -h, --help  Show this help\n"
-    );
+    fprintf(out, "Usage: aept print-architecture [options]\n"
+                 "\n"
+                 "Show configured architectures.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help  Show this help\n");
 }
 
 /* ── per-command option tables ─────────────────────────────────────── */
 
 static struct option update_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option install_options[] = {
-    {"force-depends",   no_argument, NULL, 'f'},
-    {"download-only",   no_argument, NULL, 'd'},
-    {"noaction",        no_argument, NULL, 'n'},
-    {"help",            no_argument, NULL, 'h'},
+    {"force-depends",   no_argument, NULL, 'f'  },
+    {"download-only",   no_argument, NULL, 'd'  },
+    {"noaction",        no_argument, NULL, 'n'  },
+    {"help",            no_argument, NULL, 'h'  },
     {"allow-downgrade", no_argument, NULL, 0x100},
     {"reinstall",       no_argument, NULL, 0x101},
     {"no-cache",        no_argument, NULL, 0x102},
@@ -364,82 +336,82 @@ static struct option install_options[] = {
     {"force-confold",   no_argument, NULL, 0x104},
     {"non-interactive", no_argument, NULL, 0x105},
     {"keep-going",      no_argument, NULL, 0x106},
-    {NULL, 0, NULL, 0}
+    {NULL,              0,           NULL, 0    }
 };
 
 static struct option autoremove_options[] = {
-    {"force-depends",   no_argument, NULL, 'f'},
-    {"noaction",        no_argument, NULL, 'n'},
-    {"help",            no_argument, NULL, 'h'},
+    {"force-depends",   no_argument, NULL, 'f'  },
+    {"noaction",        no_argument, NULL, 'n'  },
+    {"help",            no_argument, NULL, 'h'  },
     {"purge",           no_argument, NULL, 0x100},
     {"non-interactive", no_argument, NULL, 0x101},
     {"keep-going",      no_argument, NULL, 0x102},
-    {NULL, 0, NULL, 0}
+    {NULL,              0,           NULL, 0    }
 };
 
 static struct option remove_options[] = {
-    {"force-depends",   no_argument, NULL, 'f'},
-    {"noaction",        no_argument, NULL, 'n'},
-    {"help",            no_argument, NULL, 'h'},
+    {"force-depends",   no_argument, NULL, 'f'  },
+    {"noaction",        no_argument, NULL, 'n'  },
+    {"help",            no_argument, NULL, 'h'  },
     {"purge",           no_argument, NULL, 0x100},
     {"non-interactive", no_argument, NULL, 0x101},
     {"keep-going",      no_argument, NULL, 0x102},
-    {NULL, 0, NULL, 0}
+    {NULL,              0,           NULL, 0    }
 };
 
 /* upgrade reuses install_options */
 
 static struct option clean_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option list_options[] = {
-    {"help",       no_argument, NULL, 'h'},
+    {"help",       no_argument, NULL, 'h'  },
     {"installed",  no_argument, NULL, 0x100},
     {"upgradable", no_argument, NULL, 0x101},
-    {NULL, 0, NULL, 0}
+    {NULL,         0,           NULL, 0    }
 };
 
 static struct option show_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option files_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option owns_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option mark_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option mark_manual_options[] = {
-    {"help", no_argument, NULL, 'h'},
+    {"help", no_argument, NULL, 'h'  },
     {"all",  no_argument, NULL, 0x100},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0    }
 };
 
 static struct option mark_auto_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option pin_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 static struct option print_arch_options[] = {
     {"help", no_argument, NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,   0,           NULL, 0  }
 };
 
 /* ── command handlers ──────────────────────────────────────────────── */
@@ -451,8 +423,12 @@ static int cmd_update(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", update_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_update(stdout); return 0;
-        default:  usage_update(stderr); return 1;
+        case 'h':
+            usage_update(stdout);
+            return 0;
+        default:
+            usage_update(stderr);
+            return 1;
         }
     }
 
@@ -476,18 +452,42 @@ static int cmd_install(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
-        case 'f': force_depends = 1; break;
-        case 'd': download_only = 1; break;
-        case 'n': noaction = 1; break;
-        case 0x100: allow_downgrade = 1; break;
-        case 0x101: reinstall = 1; break;
-        case 0x102: no_cache = 1; break;
-        case 0x103: force_confnew = 1; break;
-        case 0x104: force_confold = 1; break;
-        case 0x105: non_interactive = 1; break;
-        case 0x106: keep_going = 1; break;
-        case 'h': usage_install(stdout); return 0;
-        default:  usage_install(stderr); return 1;
+        case 'f':
+            force_depends = 1;
+            break;
+        case 'd':
+            download_only = 1;
+            break;
+        case 'n':
+            noaction = 1;
+            break;
+        case 0x100:
+            allow_downgrade = 1;
+            break;
+        case 0x101:
+            reinstall = 1;
+            break;
+        case 0x102:
+            no_cache = 1;
+            break;
+        case 0x103:
+            force_confnew = 1;
+            break;
+        case 0x104:
+            force_confold = 1;
+            break;
+        case 0x105:
+            non_interactive = 1;
+            break;
+        case 0x106:
+            keep_going = 1;
+            break;
+        case 'h':
+            usage_install(stdout);
+            return 0;
+        default:
+            usage_install(stderr);
+            return 1;
         }
     }
 
@@ -503,11 +503,9 @@ static int cmd_install(int argc, char *argv[])
     int n_names = 0, n_locals = 0;
 
     for (int j = optind; j < argc; j++) {
-        if (argv[j][0] == '/' ||
-                (argv[j][0] == '.' && argv[j][1] == '/')) {
+        if (argv[j][0] == '/' || (argv[j][0] == '.' && argv[j][1] == '/')) {
             if (access(argv[j], R_OK) < 0) {
-                aept_log_error("cannot access '%s': %s",
-                          argv[j], strerror(errno));
+                aept_log_error("cannot access '%s': %s", argv[j], strerror(errno));
                 free(pkg_names);
                 free(local_paths);
                 return 1;
@@ -557,13 +555,27 @@ static int cmd_autoremove(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fnh", autoremove_options, NULL)) != -1) {
         switch (opt) {
-        case 'f': force_depends = 1; break;
-        case 'n': noaction = 1; break;
-        case 0x100: purge = 1; break;
-        case 0x101: non_interactive = 1; break;
-        case 0x102: keep_going = 1; break;
-        case 'h': usage_autoremove(stdout); return 0;
-        default:  usage_autoremove(stderr); return 1;
+        case 'f':
+            force_depends = 1;
+            break;
+        case 'n':
+            noaction = 1;
+            break;
+        case 0x100:
+            purge = 1;
+            break;
+        case 0x101:
+            non_interactive = 1;
+            break;
+        case 0x102:
+            keep_going = 1;
+            break;
+        case 'h':
+            usage_autoremove(stdout);
+            return 0;
+        default:
+            usage_autoremove(stderr);
+            return 1;
         }
     }
 
@@ -593,13 +605,27 @@ static int cmd_remove(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fnh", remove_options, NULL)) != -1) {
         switch (opt) {
-        case 'f': force_depends = 1; break;
-        case 'n': noaction = 1; break;
-        case 0x100: purge = 1; break;
-        case 0x101: non_interactive = 1; break;
-        case 0x102: keep_going = 1; break;
-        case 'h': usage_remove(stdout); return 0;
-        default:  usage_remove(stderr); return 1;
+        case 'f':
+            force_depends = 1;
+            break;
+        case 'n':
+            noaction = 1;
+            break;
+        case 0x100:
+            purge = 1;
+            break;
+        case 0x101:
+            non_interactive = 1;
+            break;
+        case 0x102:
+            keep_going = 1;
+            break;
+        case 'h':
+            usage_remove(stdout);
+            return 0;
+        default:
+            usage_remove(stderr);
+            return 1;
         }
     }
 
@@ -636,18 +662,41 @@ static int cmd_upgrade(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
         switch (opt) {
-        case 'f': force_depends = 1; break;
-        case 'd': download_only = 1; break;
-        case 'n': noaction = 1; break;
-        case 0x100: allow_downgrade = 1; break;
-        case 0x101: break; /* --reinstall: ignored for upgrade */
-        case 0x102: no_cache = 1; break;
-        case 0x103: force_confnew = 1; break;
-        case 0x104: force_confold = 1; break;
-        case 0x105: non_interactive = 1; break;
-        case 0x106: keep_going = 1; break;
-        case 'h': usage_upgrade(stdout); return 0;
-        default:  usage_upgrade(stderr); return 1;
+        case 'f':
+            force_depends = 1;
+            break;
+        case 'd':
+            download_only = 1;
+            break;
+        case 'n':
+            noaction = 1;
+            break;
+        case 0x100:
+            allow_downgrade = 1;
+            break;
+        case 0x101:
+            break; /* --reinstall: ignored for upgrade */
+        case 0x102:
+            no_cache = 1;
+            break;
+        case 0x103:
+            force_confnew = 1;
+            break;
+        case 0x104:
+            force_confold = 1;
+            break;
+        case 0x105:
+            non_interactive = 1;
+            break;
+        case 0x106:
+            keep_going = 1;
+            break;
+        case 'h':
+            usage_upgrade(stdout);
+            return 0;
+        default:
+            usage_upgrade(stderr);
+            return 1;
         }
     }
 
@@ -681,8 +730,12 @@ static int cmd_clean(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", clean_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_clean(stdout); return 0;
-        default:  usage_clean(stderr); return 1;
+        case 'h':
+            usage_clean(stdout);
+            return 0;
+        default:
+            usage_clean(stderr);
+            return 1;
         }
     }
 
@@ -705,10 +758,18 @@ static int cmd_list(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", list_options, NULL)) != -1) {
         switch (opt) {
-        case 0x100: filter_installed = 1; break;
-        case 0x101: filter_upgradable = 1; break;
-        case 'h': usage_list(stdout); return 0;
-        default:  usage_list(stderr); return 1;
+        case 0x100:
+            filter_installed = 1;
+            break;
+        case 0x101:
+            filter_upgradable = 1;
+            break;
+        case 'h':
+            usage_list(stdout);
+            return 0;
+        default:
+            usage_list(stderr);
+            return 1;
         }
     }
 
@@ -756,8 +817,12 @@ static int cmd_show(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", show_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_show(stdout); return 0;
-        default:  usage_show(stderr); return 1;
+        case 'h':
+            usage_show(stdout);
+            return 0;
+        default:
+            usage_show(stderr);
+            return 1;
         }
     }
 
@@ -840,8 +905,12 @@ static int cmd_files(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", files_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_files(stdout); return 0;
-        default:  usage_files(stderr); return 1;
+        case 'h':
+            usage_files(stdout);
+            return 0;
+        default:
+            usage_files(stderr);
+            return 1;
         }
     }
 
@@ -881,8 +950,12 @@ static int cmd_owns(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", owns_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_owns(stdout); return 0;
-        default:  usage_owns(stderr); return 1;
+        case 'h':
+            usage_owns(stdout);
+            return 0;
+        default:
+            usage_owns(stderr);
+            return 1;
         }
     }
 
@@ -919,9 +992,15 @@ static int cmd_mark_manual(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", mark_manual_options, NULL)) != -1) {
         switch (opt) {
-        case 'h':   usage_mark(stdout); return 0;
-        case 0x100: all = 1; break;
-        default:    usage_mark(stderr); return 1;
+        case 'h':
+            usage_mark(stdout);
+            return 0;
+        case 0x100:
+            all = 1;
+            break;
+        default:
+            usage_mark(stderr);
+            return 1;
         }
     }
 
@@ -951,8 +1030,12 @@ static int cmd_mark_auto(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", mark_auto_options, NULL)) != -1) {
         switch (opt) {
-        case 'h':   usage_mark(stdout); return 0;
-        default:    usage_mark(stderr); return 1;
+        case 'h':
+            usage_mark(stdout);
+            return 0;
+        default:
+            usage_mark(stderr);
+            return 1;
         }
     }
 
@@ -979,8 +1062,12 @@ static int cmd_mark(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", mark_options, NULL)) != -1) {
         switch (opt) {
-        case 'h':   usage_mark(stdout); return 0;
-        default:    usage_mark(stderr); return 1;
+        case 'h':
+            usage_mark(stdout);
+            return 0;
+        default:
+            usage_mark(stderr);
+            return 1;
         }
     }
 
@@ -1008,8 +1095,12 @@ static int cmd_pin(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_pin(stdout); return 0;
-        default:  usage_pin(stderr); return 1;
+        case 'h':
+            usage_pin(stdout);
+            return 0;
+        default:
+            usage_pin(stderr);
+            return 1;
         }
     }
 
@@ -1036,8 +1127,12 @@ static int cmd_unpin(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_pin(stdout); return 0;
-        default:  usage_pin(stderr); return 1;
+        case 'h':
+            usage_pin(stdout);
+            return 0;
+        default:
+            usage_pin(stderr);
+            return 1;
         }
     }
 
@@ -1066,8 +1161,12 @@ static int cmd_print_architecture(int argc, char *argv[])
     optind = 1;
     while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
         switch (opt) {
-        case 'h': usage_print_architecture(stdout); return 0;
-        default:  usage_print_architecture(stderr); return 1;
+        case 'h':
+            usage_print_architecture(stdout);
+            return 0;
+        default:
+            usage_print_architecture(stderr);
+            return 1;
         }
     }
 
@@ -1098,7 +1197,7 @@ static struct option global_options[] = {
     {"offline-root", required_argument, NULL, 'o'},
     {"verbose",      no_argument,       NULL, 'v'},
     {"help",         no_argument,       NULL, 'h'},
-    {NULL, 0, NULL, 0}
+    {NULL,           0,                 NULL, 0  }
 };
 
 int main(int argc, char *argv[])
@@ -1112,11 +1211,22 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt_long(argc, argv, "+c:o:vh", global_options, NULL)) != -1) {
         switch (opt) {
-        case 'c': conf_file = optarg; conf_explicit = 1; break;
-        case 'o': offline_root = optarg; break;
-        case 'v': verbose_count++; break;
-        case 'h': usage_main(stdout); return 0;
-        default:  usage_main(stderr); return 1;
+        case 'c':
+            conf_file = optarg;
+            conf_explicit = 1;
+            break;
+        case 'o':
+            offline_root = optarg;
+            break;
+        case 'v':
+            verbose_count++;
+            break;
+        case 'h':
+            usage_main(stdout);
+            return 0;
+        default:
+            usage_main(stderr);
+            return 1;
         }
     }
 

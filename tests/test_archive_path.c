@@ -33,16 +33,14 @@ static void silence_logging(void)
     aept_log_set_ctx(&quiet_ctx);
 }
 
-static void check_join(const char *prefix, const char *entry,
-                       const char *want, const char *label)
+static void check_join(const char *prefix, const char *entry, const char *want, const char *label)
 {
     char *got = safe_join(prefix, entry);
     test_str_eq(got, want, label);
     free(got);
 }
 
-static void check_normalize(const char *raw, const char *want,
-                            const char *label)
+static void check_normalize(const char *raw, const char *want, const char *label)
 {
     char *got = normalize_path(raw);
     test_str_eq(got, want, label);
@@ -55,14 +53,14 @@ int main(void)
 
     /* ── normalize_path ──────────────────────────────────────────── */
 
-    check_normalize("/",            "/",        "normalize: root");
-    check_normalize("//",           "/",        "normalize: doubled slash");
-    check_normalize("",             "",         "normalize: empty");
-    check_normalize("./a/./b",      "a/b",      "normalize: dot components");
-    check_normalize("a/../b",       "b",        "normalize: parent component");
-    check_normalize("/a/../../b",   "/b",       "normalize: parent clamped at root");
-    check_normalize("a//b///c",     "a/b/c",    "normalize: repeated slashes");
-    check_normalize("/usr/bin/",    "/usr/bin", "normalize: trailing slash");
+    check_normalize("/", "/", "normalize: root");
+    check_normalize("//", "/", "normalize: doubled slash");
+    check_normalize("", "", "normalize: empty");
+    check_normalize("./a/./b", "a/b", "normalize: dot components");
+    check_normalize("a/../b", "b", "normalize: parent component");
+    check_normalize("/a/../../b", "/b", "normalize: parent clamped at root");
+    check_normalize("a//b///c", "a/b/c", "normalize: repeated slashes");
+    check_normalize("/usr/bin/", "/usr/bin", "normalize: trailing slash");
 
     /*
      * ── safe_join with a root prefix ─────────────────────────────
@@ -72,42 +70,32 @@ int main(void)
      * entry must join cleanly; a regression here silently extracts
      * nothing while still recording the package as installed.
      */
-    check_join("/", "usr/bin/foo",   "/usr/bin/foo",
-               "join: root prefix, relative entry");
-    check_join("/", "./etc/passwd",  "/etc/passwd",
-               "join: root prefix, leading ./");
-    check_join("/", "/etc/passwd",   "/etc/passwd",
-               "join: root prefix, absolute entry");
-    check_join("/", "a//b",          "/a/b",
-               "join: root prefix, repeated slashes");
-    check_join("",  "usr/bin/foo",   "/usr/bin/foo",
-               "join: empty prefix behaves like root");
+    check_join("/", "usr/bin/foo", "/usr/bin/foo", "join: root prefix, relative entry");
+    check_join("/", "./etc/passwd", "/etc/passwd", "join: root prefix, leading ./");
+    check_join("/", "/etc/passwd", "/etc/passwd", "join: root prefix, absolute entry");
+    check_join("/", "a//b", "/a/b", "join: root prefix, repeated slashes");
+    check_join("", "usr/bin/foo", "/usr/bin/foo", "join: empty prefix behaves like root");
 
     /* ── safe_join with a real prefix ────────────────────────────── */
 
-    check_join("/opt/root",  "usr/bin/foo", "/opt/root/usr/bin/foo",
-               "join: offline root");
+    check_join("/opt/root", "usr/bin/foo", "/opt/root/usr/bin/foo", "join: offline root");
     check_join("/opt/root/", "usr/bin/foo", "/opt/root/usr/bin/foo",
                "join: offline root, trailing slash");
-    check_join("/tmp/x",     "control",     "/tmp/x/control",
-               "join: control archive into tmpdir");
-    check_join(NULL,         "./control",   "control",
-               "join: NULL prefix strips leading ./");
+    check_join("/tmp/x", "control", "/tmp/x/control", "join: control archive into tmpdir");
+    check_join(NULL, "./control", "control", "join: NULL prefix strips leading ./");
 
     /* ── entries that must be skipped ────────────────────────────── */
 
-    check_join("/",         ".",  NULL, "join: bare dot is skipped");
-    check_join("/",         "",   NULL, "join: empty entry is skipped");
+    check_join("/", ".", NULL, "join: bare dot is skipped");
+    check_join("/", "", NULL, "join: empty entry is skipped");
     check_join("/opt/root", "./", NULL, "join: dot-slash only is skipped");
 
     /* ── containment must still hold for non-root prefixes ───────── */
 
-    check_join("/opt/root", "../etc/passwd", NULL,
-               "join: single parent escape rejected");
+    check_join("/opt/root", "../etc/passwd", NULL, "join: single parent escape rejected");
     check_join("/opt/root", "a/../../../../etc/passwd", NULL,
                "join: repeated parent escape rejected");
-    check_join("/opt/root", "/../etc/passwd", NULL,
-               "join: absolute parent escape rejected");
+    check_join("/opt/root", "/../etc/passwd", NULL, "join: absolute parent escape rejected");
 
     /*
      * Under a root prefix there is nothing to escape to: normalize_path()
@@ -115,25 +103,19 @@ int main(void)
      * Such entries are rejected earlier anyway by
      * aept_archive_path_is_safe(), which is asserted below.
      */
-    check_join("/", "../../etc/passwd", "/etc/passwd",
-               "join: parent clamped at root prefix");
+    check_join("/", "../../etc/passwd", "/etc/passwd", "join: parent clamped at root prefix");
 
     /* ── aept_archive_path_is_safe ───────────────────────────────── */
 
-    test_int_eq(aept_archive_path_is_safe("usr/bin/foo"), 1,
-                "is_safe: ordinary path");
-    test_int_eq(aept_archive_path_is_safe("usr/../foo"), 0,
-                "is_safe: parent component rejected");
-    test_int_eq(aept_archive_path_is_safe("../etc/passwd"), 0,
-                "is_safe: leading parent rejected");
+    test_int_eq(aept_archive_path_is_safe("usr/bin/foo"), 1, "is_safe: ordinary path");
+    test_int_eq(aept_archive_path_is_safe("usr/../foo"), 0, "is_safe: parent component rejected");
+    test_int_eq(aept_archive_path_is_safe("../etc/passwd"), 0, "is_safe: leading parent rejected");
     test_int_eq(aept_archive_path_is_safe("a\nb"), 0,
                 "is_safe: newline rejected (.list line injection)");
     test_int_eq(aept_archive_path_is_safe("a\tb"), 0,
                 "is_safe: tab rejected (.list field injection)");
-    test_int_eq(aept_archive_path_is_safe(""), 0,
-                "is_safe: empty path rejected");
-    test_int_eq(aept_archive_path_is_safe(NULL), 0,
-                "is_safe: NULL rejected");
+    test_int_eq(aept_archive_path_is_safe(""), 0, "is_safe: empty path rejected");
+    test_int_eq(aept_archive_path_is_safe(NULL), 0, "is_safe: NULL rejected");
     /* Stricter than strictly necessary, but documented: any two adjacent
      * dots are refused, not just a whole ".." component. */
     test_int_eq(aept_archive_path_is_safe("lib/foo..bar"), 0,

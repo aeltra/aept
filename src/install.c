@@ -47,8 +47,8 @@ static int load_repos(struct aept_ctx *ctx)
         fp = fopen(list_path, "r");
         if (!fp) {
             aept_log_error("cannot open package list '%s': %s\n"
-                      "  (have you run 'aept update'?)",
-                      list_path, strerror(errno));
+                           "  (have you run 'aept update'?)",
+                           list_path, strerror(errno));
             free(list_path);
             return -1;
         }
@@ -75,7 +75,8 @@ static const char *installed_version(Pool *pool, const char *name)
     if (!installed)
         return NULL;
 
-    FOR_REPO_SOLVABLES(installed, p, s) {
+    FOR_REPO_SOLVABLES(installed, p, s)
+    {
         if (strcmp(pool_id2str(pool, s->name), name) == 0)
             return pool_id2str(pool, s->evr);
     }
@@ -91,8 +92,7 @@ static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
+                                    SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
         if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
             continue;
@@ -105,9 +105,8 @@ static int name_in_transaction(const char *name, Transaction *trans, Pool *pool)
     return 0;
 }
 
-static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
-                               Pool *pool, const char **ri_names,
-                               int ri_count, int user_count)
+static int display_transaction(struct aept_ctx *ctx, Transaction *trans, Pool *pool,
+                               const char **ri_names, int ri_count, int user_count)
 {
     int i;
     int n_install = 0;
@@ -130,23 +129,21 @@ static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
     if (trans) {
         for (i = 0; i < trans->steps.count; i++) {
             Id p = trans->steps.elements[i];
-            int type = transaction_type(trans, p,
-                SOLVER_TRANSACTION_SHOW_ACTIVE |
-                SOLVER_TRANSACTION_SHOW_ALL);
+            int type = transaction_type(
+                trans, p, SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
             Solvable *s = pool_id2solvable(pool, p);
             const char *name = pool_id2str(pool, s->name);
 
             if (type == SOLVER_TRANSACTION_REINSTALL) {
                 reinstall_names[n_reinstall++] = name;
-            } else if (type == SOLVER_TRANSACTION_UPGRADE ||
-                    type == SOLVER_TRANSACTION_DOWNGRADE) {
+            } else if (type == SOLVER_TRANSACTION_UPGRADE || type == SOLVER_TRANSACTION_DOWNGRADE) {
                 upgrade_names[n_upgrade++] = name;
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
                 install_names[n_install++] = name;
             } else if (type == SOLVER_TRANSACTION_UPGRADED ||
-                    type == SOLVER_TRANSACTION_DOWNGRADED ||
-                    type == SOLVER_TRANSACTION_REINSTALLED) {
+                       type == SOLVER_TRANSACTION_DOWNGRADED ||
+                       type == SOLVER_TRANSACTION_REINSTALLED) {
                 /* old version being replaced — skip */
             } else if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
                 erase_names[n_erase++] = name;
@@ -173,10 +170,14 @@ static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
     }
 
     aept_transaction_t txn = {
-        .install   = install_names,  .n_install   = n_install,
-        .upgrade   = upgrade_names,  .n_upgrade   = n_upgrade,
-        .reinstall = reinstall_names,.n_reinstall  = n_reinstall,
-        .remove    = erase_names,    .n_remove    = n_erase,
+        .install = install_names,
+        .n_install = n_install,
+        .upgrade = upgrade_names,
+        .n_upgrade = n_upgrade,
+        .reinstall = reinstall_names,
+        .n_reinstall = n_reinstall,
+        .remove = erase_names,
+        .n_remove = n_erase,
     };
 
     aept_display_transaction(&txn);
@@ -186,10 +187,8 @@ static int display_transaction(struct aept_ctx *ctx, Transaction *trans,
     free(erase_names);
     free(reinstall_names);
 
-    if ((n_erase > 0 ||
-                (user_count > 0 &&
-                 n_install + n_upgrade > user_count)) &&
-            !aept_confirm_continue())
+    if ((n_erase > 0 || (user_count > 0 && n_install + n_upgrade > user_count)) &&
+        !aept_confirm_continue())
         return -1;
 
     return 0;
@@ -208,20 +207,20 @@ static char *make_control_tmpdir(struct aept_ctx *ctx)
 
     if (!aept_file_is_dir(ctx->config.tmp_dir)) {
         if (aept_file_mkdir_hier(ctx->config.tmp_dir, 0755) < 0) {
-            aept_log_error("failed to create temp directory '%s': %s",
-                      ctx->config.tmp_dir, strerror(errno));
+            aept_log_error("failed to create temp directory '%s': %s", ctx->config.tmp_dir,
+                           strerror(errno));
             return NULL;
         }
         if (chmod(ctx->config.tmp_dir, 01777) < 0)
-            aept_log_debug("cannot set permissions on '%s': %s",
-                      ctx->config.tmp_dir, strerror(errno));
+            aept_log_debug("cannot set permissions on '%s': %s", ctx->config.tmp_dir,
+                           strerror(errno));
     }
 
     aept_asprintf(&tmpdir, "%s/aept-XXXXXX", ctx->config.tmp_dir);
 
     if (!mkdtemp(tmpdir)) {
-        aept_log_error("failed to create temp directory in '%s': %s",
-                  ctx->config.tmp_dir, strerror(errno));
+        aept_log_error("failed to create temp directory in '%s': %s", ctx->config.tmp_dir,
+                       strerror(errno));
         free(tmpdir);
         return NULL;
     }
@@ -229,9 +228,8 @@ static char *make_control_tmpdir(struct aept_ctx *ctx)
     return tmpdir;
 }
 
-static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
-                              Pool *pool, Id p, const char *old_version,
-                              aept_owner_index_t *owners)
+static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+                              const char *old_version, aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
@@ -269,8 +267,8 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     }
 
     /* Run preinst */
-    r = aept_run_script(ctx, tmpdir, NULL, "preinst",
-                   old_version ? "upgrade" : "install", old_version);
+    r = aept_run_script(ctx, tmpdir, NULL, "preinst", old_version ? "upgrade" : "install",
+                        old_version);
     if (r != 0)
         goto cleanup;
 
@@ -295,8 +293,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     }
 
     char *extract_root = aept_config_root_path(&ctx->config, "/");
-    r = aept_ar_extract_all(data_ar, extract_root, NULL, NULL, NULL,
-                             &extracted);
+    r = aept_ar_extract_all(data_ar, extract_root, NULL, NULL, NULL, &extracted);
     free(extract_root);
     aept_ar_close(data_ar);
     data_ar = NULL;
@@ -314,8 +311,8 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     {
         FILE *list_fp = fopen(list_path, "w");
         if (list_fp) {
-            if (aept_ar_file_list_write(&extracted, list_fp) < 0
-                    || ferror(list_fp) || fclose(list_fp) != 0)
+            if (aept_ar_file_list_write(&extracted, list_fp) < 0 || ferror(list_fp) ||
+                fclose(list_fp) != 0)
                 aept_log_warning("failed to write file list '%s'", list_path);
         } else {
             aept_log_warning("failed to write file list '%s'", list_path);
@@ -346,17 +343,14 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     }
 
     /* Copy scripts to info_dir */
-    const char *scripts[] = {
-        "preinst", "postinst", "prerm", "postrm", "trigger", NULL
-    };
+    const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", "trigger", NULL};
     for (int i = 0; scripts[i]; i++) {
         char *src = NULL, *dst = NULL;
         aept_asprintf(&src, "%s/%s", tmpdir, scripts[i]);
         if (aept_file_exists(src)) {
             aept_asprintf(&dst, "%s/%s.%s", ctx->config.info_dir, name, scripts[i]);
             if (rename(src, dst) < 0 && aept_file_copy(src, dst) < 0)
-                aept_log_warning("failed to install %s script for '%s'",
-                            scripts[i], name);
+                aept_log_warning("failed to install %s script for '%s'", scripts[i], name);
             free(dst);
         }
         free(src);
@@ -367,10 +361,8 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
         char *trig_src = NULL, *trig_dst = NULL;
         aept_asprintf(&trig_src, "%s/triggers", tmpdir);
         if (aept_file_exists(trig_src)) {
-            aept_asprintf(&trig_dst, "%s/%s.triggers",
-                          ctx->config.info_dir, name);
-            if (rename(trig_src, trig_dst) < 0
-                    && aept_file_copy(trig_src, trig_dst) < 0)
+            aept_asprintf(&trig_dst, "%s/%s.triggers", ctx->config.info_dir, name);
+            if (rename(trig_src, trig_dst) < 0 && aept_file_copy(trig_src, trig_dst) < 0)
                 aept_log_warning("failed to install triggers for '%s'", name);
             free(trig_dst);
         }
@@ -380,8 +372,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path,
     /* Run postinst */
     const char *state = "installed";
 
-    r = aept_run_script(ctx, ctx->config.info_dir, name, "postinst",
-                   "configure", old_version);
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "configure", old_version);
     if (r != 0) {
         aept_log_error("postinst failed for '%s'", name);
         state = "unpacked";
@@ -431,11 +422,8 @@ cleanup:
  */
 static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
-    const char *exts[] = {
-        "list", "control",
-        "preinst", "postinst", "prerm", "postrm",
-        "trigger", "triggers", NULL
-    };
+    const char *exts[] = {"list",   "control", "preinst",  "postinst", "prerm",
+                          "postrm", "trigger", "triggers", NULL};
 
     for (int i = 0; exts[i]; i++) {
         char *path = NULL;
@@ -445,11 +433,9 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
     }
 }
 
-static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
-                              Pool *pool, Id p, const char *old_version,
-                              const char *new_version,
-                              aept_fileset_t *installed_files,
-                              aept_owner_index_t *owners)
+static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+                              const char *old_version, const char *new_version,
+                              aept_fileset_t *installed_files, aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
@@ -460,8 +446,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     char *list_path = NULL;
     aept_conffile_set_t old_cf;
     int have_old_cf = 0;
-    int is_reinstall = old_version && new_version &&
-                       strcmp(old_version, new_version) == 0;
+    int is_reinstall = old_version && new_version && strcmp(old_version, new_version) == 0;
     int r = -1;
 
     if (!aept_pkg_name_is_safe(name)) {
@@ -579,9 +564,8 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         }
 
         char *extract_root = aept_config_root_path(&ctx->config, "/");
-        r = aept_ar_extract_all(data_ar, extract_root, NULL,
-                           cf_paths.count > 0 ? &cf_paths : NULL,
-                           ".aept-new", &extracted);
+        r = aept_ar_extract_all(data_ar, extract_root, NULL, cf_paths.count > 0 ? &cf_paths : NULL,
+                                ".aept-new", &extracted);
         free(extract_root);
         aept_ar_close(data_ar);
         data_ar = NULL;
@@ -633,25 +617,22 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
             if (aept_fileset_contains(&new_files, old_files.paths[i]))
                 continue;
 
-            if (installed_files && aept_fileset_contains(installed_files,
-                                                    old_files.paths[i]))
+            if (installed_files && aept_fileset_contains(installed_files, old_files.paths[i]))
                 continue;
 
             char *full_path = NULL;
             aept_asprintf(&full_path, "%s/%s",
-                      ctx->config.offline_root ? ctx->config.offline_root : "", path);
+                          ctx->config.offline_root ? ctx->config.offline_root : "", path);
 
             /* Skip modified conffiles from old package */
             if (old_cf.count > 0) {
                 char *abs_path = NULL;
                 aept_asprintf(&abs_path, "/%s", path);
-                const char *saved_md5 = aept_conffile_set_lookup(&old_cf,
-                                                            abs_path);
+                const char *saved_md5 = aept_conffile_set_lookup(&old_cf, abs_path);
                 if (saved_md5) {
                     char *cur_md5 = aept_conffile_md5(full_path);
                     if (cur_md5 && strcmp(saved_md5, cur_md5) != 0) {
-                        aept_log_info("not removing modified conffile '%s'",
-                                 abs_path);
+                        aept_log_info("not removing modified conffile '%s'", abs_path);
                         free(cur_md5);
                         free(abs_path);
                         free(full_path);
@@ -663,8 +644,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
             }
 
             if (unlink(full_path) < 0 && errno != ENOENT)
-                aept_log_debug("cannot remove '%s': %s",
-                          full_path, strerror(errno));
+                aept_log_debug("cannot remove '%s': %s", full_path, strerror(errno));
 
             free(full_path);
         }
@@ -687,17 +667,14 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     /* 8. Replace info files with new versions */
     remove_info_files(ctx, name);
 
-    const char *scripts[] = {
-        "preinst", "postinst", "prerm", "postrm", "trigger", NULL
-    };
+    const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", "trigger", NULL};
     for (int i = 0; scripts[i]; i++) {
         char *src = NULL, *dst = NULL;
         aept_asprintf(&src, "%s/%s", tmpdir, scripts[i]);
         if (aept_file_exists(src)) {
             aept_asprintf(&dst, "%s/%s.%s", ctx->config.info_dir, name, scripts[i]);
             if (rename(src, dst) < 0 && aept_file_copy(src, dst) < 0)
-                aept_log_warning("failed to install %s script for '%s'",
-                            scripts[i], name);
+                aept_log_warning("failed to install %s script for '%s'", scripts[i], name);
             free(dst);
         }
         free(src);
@@ -708,10 +685,8 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
         char *trig_src = NULL, *trig_dst = NULL;
         aept_asprintf(&trig_src, "%s/triggers", tmpdir);
         if (aept_file_exists(trig_src)) {
-            aept_asprintf(&trig_dst, "%s/%s.triggers",
-                          ctx->config.info_dir, name);
-            if (rename(trig_src, trig_dst) < 0
-                    && aept_file_copy(trig_src, trig_dst) < 0)
+            aept_asprintf(&trig_dst, "%s/%s.triggers", ctx->config.info_dir, name);
+            if (rename(trig_src, trig_dst) < 0 && aept_file_copy(trig_src, trig_dst) < 0)
                 aept_log_warning("failed to install triggers for '%s'", name);
             free(trig_dst);
         }
@@ -723,8 +698,8 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path,
     {
         FILE *list_fp = fopen(list_path, "w");
         if (list_fp) {
-            if (aept_ar_file_list_write(&extracted, list_fp) < 0
-                    || ferror(list_fp) || fclose(list_fp) != 0)
+            if (aept_ar_file_list_write(&extracted, list_fp) < 0 || ferror(list_fp) ||
+                fclose(list_fp) != 0)
                 aept_log_warning("failed to write file list '%s'", list_path);
         } else {
             aept_log_warning("failed to write file list '%s'", list_path);
@@ -778,9 +753,8 @@ cleanup:
     return r;
 }
 
-static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
-                        Transaction *trans, Pool *pool,
-                        aept_owner_index_t *owners)
+static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Transaction *trans,
+                        Pool *pool, aept_owner_index_t *owners)
 {
     int i, r;
     int had_error = 0;
@@ -789,7 +763,8 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
         Id avail = aept_solver_find_available(ctx->solver, names[i]);
         if (!avail) {
             aept_log_warning("'%s' not found in any repository, "
-                        "skipping reinstall", names[i]);
+                             "skipping reinstall",
+                             names[i]);
             continue;
         }
 
@@ -801,8 +776,7 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
 
         const char *old_ver = installed_version(pool, pkg_name);
         if (!old_ver) {
-            aept_log_warning("'%s' is not installed, skipping reinstall",
-                        names[i]);
+            aept_log_warning("'%s' is not installed, skipping reinstall", names[i]);
             continue;
         }
 
@@ -821,8 +795,7 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
             }
         }
 
-        r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver,
-                                NULL, owners);
+        r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver, NULL, owners);
         if (ctx->config.no_cache && !is_local)
             unlink(ipk_path);
         free(ipk_path);
@@ -837,7 +810,7 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count,
 }
 
 int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
-                 const char **local_paths, int local_count)
+                    const char **local_paths, int local_count)
 {
     Transaction *trans;
     Pool *pool;
@@ -879,10 +852,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             const char *pkg_ver = pool_id2str(pool, s->evr);
             const char *inst_ver = installed_version(pool, pkg_name);
 
-            if (inst_ver && strcmp(inst_ver, pkg_ver) == 0 &&
-                    !ctx->config.reinstall) {
-                aept_log_info("%s is already installed at version %s",
-                         pkg_name, pkg_ver);
+            if (inst_ver && strcmp(inst_ver, pkg_ver) == 0 && !ctx->config.reinstall) {
+                aept_log_info("%s is already installed at version %s", pkg_name, pkg_ver);
                 continue;
             }
 
@@ -921,7 +892,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             Id nameid = pool_str2id(pool, names[i], 0);
             if (nameid) {
                 Id p2, pp2;
-                FOR_PROVIDES(p2, pp2, nameid) {
+                FOR_PROVIDES(p2, pp2, nameid)
+                {
                     Solvable *s2 = pool_id2solvable(pool, p2);
                     if (s2->repo == pool->installed)
                         aept_status_unmark_auto(ctx, pool_id2str(pool, s2->name));
@@ -938,18 +910,16 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
         }
     }
 
-    if (display_transaction(ctx, trans, pool,
-                           ctx->config.reinstall ? names : NULL,
-                           ctx->config.reinstall ? name_count : 0,
-                           (names ? name_count : 0) + n_local_ids)) {
+    if (display_transaction(ctx, trans, pool, ctx->config.reinstall ? names : NULL,
+                            ctx->config.reinstall ? name_count : 0,
+                            (names ? name_count : 0) + n_local_ids)) {
         r = 0;
         goto out;
     }
 
     for (i = 0; i < ctx->config.nsources; i++) {
         if (strncmp(ctx->config.sources[i].url, "https://", 8) != 0)
-            aept_log_warning("source '%s' uses insecure transport",
-                        ctx->config.sources[i].name);
+            aept_log_warning("source '%s' uses insecure transport", ctx->config.sources[i].name);
     }
 
     if (ctx->config.noaction) {
@@ -977,9 +947,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             }
 
             Id p = trans->steps.elements[i];
-            int type = transaction_type(trans, p,
-                SOLVER_TRANSACTION_SHOW_ACTIVE |
-                SOLVER_TRANSACTION_SHOW_ALL);
+            int type = transaction_type(
+                trans, p, SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
             if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
                 continue;
@@ -1031,8 +1000,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
+                                    SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
@@ -1040,9 +1008,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
             /* Skip upgrades/downgrades/reinstalls — handled by
              * do_upgrade_package() on the INSTALL side. */
-            if (type == SOLVER_TRANSACTION_UPGRADED ||
-                    type == SOLVER_TRANSACTION_DOWNGRADED ||
-                    type == SOLVER_TRANSACTION_REINSTALLED)
+            if (type == SOLVER_TRANSACTION_UPGRADED || type == SOLVER_TRANSACTION_DOWNGRADED ||
+                type == SOLVER_TRANSACTION_REINSTALLED)
                 continue;
 
             if (!fileset_sorted) {
@@ -1051,8 +1018,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             }
 
             aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-            r = aept_do_remove(ctx, pkg_name, NULL, &installed_files,
-                                &owner_idx);
+            r = aept_do_remove(ctx, pkg_name, NULL, &installed_files, &owner_idx);
             if (r < 0) {
                 had_error = 1;
                 if (!ctx->config.force_depends && !ctx->config.keep_going)
@@ -1072,9 +1038,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             if (!ipk_paths[i])
                 continue;
 
-            if (type == SOLVER_TRANSACTION_UPGRADE ||
-                    type == SOLVER_TRANSACTION_DOWNGRADE ||
-                    type == SOLVER_TRANSACTION_REINSTALL) {
+            if (type == SOLVER_TRANSACTION_UPGRADE || type == SOLVER_TRANSACTION_DOWNGRADE ||
+                type == SOLVER_TRANSACTION_REINSTALL) {
                 const char *old_ver = NULL;
                 const char *new_ver = pool_id2str(pool, s->evr);
                 Id op = transaction_obs_pkg(trans, p);
@@ -1089,8 +1054,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 }
 
                 aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-                r = do_upgrade_package(ctx, ipk_paths[i], pool, p,
-                                       old_ver, new_ver,
+                r = do_upgrade_package(ctx, ipk_paths[i], pool, p, old_ver, new_ver,
                                        &installed_files, &owner_idx);
                 fileset_sorted = 0;
 
@@ -1099,8 +1063,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     aept_trigger_ctx_add_fresh(&tctx, pkg_name);
                 }
             } else {
-                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL,
-                                        &owner_idx);
+                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL, &owner_idx);
 
                 if (r == 0) {
                     aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
@@ -1118,10 +1081,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
              * of a dependency (not explicitly requested).
              * Also check provides so that e.g. installing "python"
              * does not auto-mark the providing "python3.9". */
-            if ((names || local_ids) &&
-                    type != SOLVER_TRANSACTION_UPGRADE &&
-                    type != SOLVER_TRANSACTION_DOWNGRADE &&
-                    type != SOLVER_TRANSACTION_REINSTALL) {
+            if ((names || local_ids) && type != SOLVER_TRANSACTION_UPGRADE &&
+                type != SOLVER_TRANSACTION_DOWNGRADE && type != SOLVER_TRANSACTION_REINSTALL) {
                 int is_explicit = aept_solver_is_commandline(ctx->solver, p);
                 int j;
                 for (j = 0; !is_explicit && j < name_count; j++) {
@@ -1132,7 +1093,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     Id nameid = pool_str2id(pool, names[j], 0);
                     if (nameid) {
                         Id p2, pp2;
-                        FOR_PROVIDES(p2, pp2, nameid) {
+                        FOR_PROVIDES(p2, pp2, nameid)
+                        {
                             if (p2 == p) {
                                 is_explicit = 1;
                                 break;
@@ -1149,9 +1111,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             /* Record installed files for removal protection.
              * Upgrades/reinstalls already update installed_files
              * in do_upgrade_package(). */
-            if (type != SOLVER_TRANSACTION_UPGRADE &&
-                    type != SOLVER_TRANSACTION_DOWNGRADE &&
-                    type != SOLVER_TRANSACTION_REINSTALL) {
+            if (type != SOLVER_TRANSACTION_UPGRADE && type != SOLVER_TRANSACTION_DOWNGRADE &&
+                type != SOLVER_TRANSACTION_REINSTALL) {
                 char *list_path = NULL;
                 FILE *lfp;
                 char lbuf[4096];

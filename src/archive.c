@@ -30,8 +30,7 @@ struct pipe_ctx {
     char buf[BLOCK_SIZE];
 };
 
-static ssize_t pipe_read_cb(struct archive *a, void *opaque,
-                            const void **out)
+static ssize_t pipe_read_cb(struct archive *a, void *opaque, const void **out)
 {
     (void)a;
     struct pipe_ctx *ctx = opaque;
@@ -62,8 +61,7 @@ static char *normalize_path(const char *raw)
     size_t nparts = 0, cap = 16;
     char **parts = aept_malloc(cap * sizeof(*parts));
 
-    for (char *tok = strtok_r(work, "/", &save); tok;
-         tok = strtok_r(NULL, "/", &save)) {
+    for (char *tok = strtok_r(work, "/", &save); tok; tok = strtok_r(NULL, "/", &save)) {
         if (tok[0] == '.' && tok[1] == '\0')
             continue;
         if (tok[0] == '.' && tok[1] == '.' && tok[2] == '\0') {
@@ -151,7 +149,7 @@ static char *safe_join(const char *prefix, const char *entry_path)
         nplen = 0;
 
     if (strncmp(resolved, norm_pfx, nplen) != 0 ||
-            (nplen > 0 && resolved[nplen] != '/' && resolved[nplen] != '\0')) {
+        (nplen > 0 && resolved[nplen] != '/' && resolved[nplen] != '\0')) {
         aept_log_error("path '%s' escapes extraction directory", entry_path);
         free(resolved);
         free(norm_pfx);
@@ -199,7 +197,7 @@ static int rewrite_all_paths(struct archive_entry *entry, const char *dest)
         char *p = safe_join(dest, hl);
         if (!p) {
             aept_log_error("not extracting '%s': hardlink to nowhere",
-                      archive_entry_pathname(entry));
+                           archive_entry_pathname(entry));
             return 1;
         }
         archive_entry_set_hardlink(entry, p);
@@ -225,20 +223,17 @@ static struct archive_entry *next_header(struct archive *ar, int *eof)
         case ARCHIVE_OK:
             return entry;
         case ARCHIVE_WARN:
-            aept_log_debug("archive header warning: %s",
-                      archive_error_string(ar));
+            aept_log_debug("archive header warning: %s", archive_error_string(ar));
             return entry;
         case ARCHIVE_EOF:
             if (eof)
                 *eof = 1;
             return NULL;
         case ARCHIVE_RETRY:
-            aept_log_error("archive header error (retry): %s",
-                      archive_error_string(ar));
+            aept_log_error("archive header error (retry): %s", archive_error_string(ar));
             continue;
         default:
-            aept_log_error("archive header error: %s",
-                      archive_error_string(ar));
+            aept_log_error("archive header error: %s", archive_error_string(ar));
             return NULL;
         }
     }
@@ -270,19 +265,17 @@ static int stream_entry(struct archive *ar, FILE *fp, uint64_t max_bytes)
         if (n == 0)
             return 0;
         if (n < 0) {
-            aept_log_error("failed to read archive data: %s",
-                      archive_error_string(ar));
+            aept_log_error("failed to read archive data: %s", archive_error_string(ar));
             return -1;
         }
         if (max_bytes && (uint64_t)n > max_bytes - total) {
             aept_log_error("decompressed data exceeds the %llu byte limit",
-                      (unsigned long long)max_bytes);
+                           (unsigned long long)max_bytes);
             return -1;
         }
         total += (uint64_t)n;
         if (fwrite(buf, 1, (size_t)n, fp) != (size_t)n) {
-            aept_log_error("failed to write to stream: %s",
-                      strerror(errno));
+            aept_log_error("failed to write to stream: %s", strerror(errno));
             return -1;
         }
     }
@@ -304,8 +297,7 @@ static struct archive *open_outer(const char *path)
     archive_read_support_filter_gzip(ar);
 
     if (archive_read_open_filename(ar, path, BLOCK_SIZE) != ARCHIVE_OK) {
-        aept_log_error("failed to open '%s': %s",
-                  path, archive_error_string(ar));
+        aept_log_error("failed to open '%s': %s", path, archive_error_string(ar));
         archive_read_free(ar);
         return NULL;
     }
@@ -371,10 +363,8 @@ static struct archive *open_inner(struct archive *outer)
      * would be a double free, reachable from any package whose
      * control.tar or data.tar member is not a recognised archive.
      */
-    if (archive_read_open(inner, ctx, NULL, pipe_read_cb,
-                          pipe_close_cb) != ARCHIVE_OK) {
-        aept_log_error("failed to open inner archive: %s",
-                  archive_error_string(inner));
+    if (archive_read_open(inner, ctx, NULL, pipe_read_cb, pipe_close_cb) != ARCHIVE_OK) {
+        aept_log_error("failed to open inner archive: %s", archive_error_string(inner));
         archive_read_free(inner);
         return NULL;
     }
@@ -414,8 +404,7 @@ static struct archive *new_disk_writer(int flags)
 
     int r = archive_write_disk_set_options(disk, flags);
     if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-        aept_log_error("failed to set disk options: %s",
-                  archive_error_string(disk));
+        aept_log_error("failed to set disk options: %s", archive_error_string(disk));
         archive_write_free(disk);
         return NULL;
     }
@@ -430,9 +419,8 @@ static struct archive *new_disk_writer(int flags)
  * `cf_suffix` appended to the destination (e.g. ".aept-new") and
  * without the NO_OVERWRITE flag.
  */
-static int do_extract_all(struct archive *ar, const char *dest, int flags,
-                          unsigned long *size, aept_fileset_t *conffiles,
-                          const char *cf_suffix,
+static int do_extract_all(struct archive *ar, const char *dest, int flags, unsigned long *size,
+                          aept_fileset_t *conffiles, const char *cf_suffix,
                           aept_ar_file_list_t *recorded)
 {
     int ret = -1;
@@ -494,8 +482,7 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
             }
         }
 
-        int is_cf = have_cf &&
-            fileset_contains_entry(conffiles, raw_path);
+        int is_cf = have_cf && fileset_contains_entry(conffiles, raw_path);
 
         int skip = rewrite_all_paths(entry, dest);
         if (skip != 0) {
@@ -520,15 +507,13 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
 
         int r = archive_read_extract2(ar, entry, is_cf ? cf_disk : disk);
         if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            aept_log_error("failed to extract '%s': %s",
-                      archive_entry_pathname(entry),
-                      archive_error_string(ar));
+            aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
+                           archive_error_string(ar));
             goto cleanup;
         }
         if (r == ARCHIVE_WARN)
-            aept_log_debug("warning extracting '%s': %s",
-                      archive_entry_pathname(entry),
-                      archive_error_string(ar));
+            aept_log_debug("warning extracting '%s': %s", archive_entry_pathname(entry),
+                           archive_error_string(ar));
 
         if (size)
             *size += archive_entry_size(entry);
@@ -536,8 +521,8 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags,
         if (recorded && keep_path) {
             if (recorded->count >= recorded->alloc) {
                 recorded->alloc = recorded->alloc ? recorded->alloc * 2 : 256;
-                recorded->entries = aept_realloc(recorded->entries,
-                        recorded->alloc * sizeof(*recorded->entries));
+                recorded->entries =
+                    aept_realloc(recorded->entries, recorded->alloc * sizeof(*recorded->entries));
             }
             recorded->entries[recorded->count].path = keep_path;
             recorded->entries[recorded->count].link_target = keep_link;
@@ -570,14 +555,12 @@ struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
 
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = inner;
-    ar->extract_flags = ARCHIVE_EXTRACT_SECURE_SYMLINKS |
-        ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+    ar->extract_flags = ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
     return ar;
 }
 
-struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename,
-                                              int ignore_uid)
+struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid)
 {
     struct archive *inner = open_ipk_tar(filename, "data.tar");
     if (!inner)
@@ -585,10 +568,9 @@ struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename,
 
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = inner;
-    ar->extract_flags = ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_PERM |
-        ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_UNLINK |
-        ARCHIVE_EXTRACT_NO_OVERWRITE | ARCHIVE_EXTRACT_SECURE_SYMLINKS |
-        ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+    ar->extract_flags = ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_TIME |
+                        ARCHIVE_EXTRACT_UNLINK | ARCHIVE_EXTRACT_NO_OVERWRITE |
+                        ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
     if (ignore_uid)
         ar->extract_flags &= ~ARCHIVE_EXTRACT_OWNER;
@@ -608,10 +590,8 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename)
     archive_read_support_format_raw(reader);
     archive_read_support_format_empty(reader);
 
-    if (archive_read_open_filename(reader, filename,
-                                   BLOCK_SIZE) != ARCHIVE_OK) {
-        aept_log_error("failed to open '%s': %s",
-                  filename, archive_error_string(reader));
+    if (archive_read_open_filename(reader, filename, BLOCK_SIZE) != ARCHIVE_OK) {
+        aept_log_error("failed to open '%s': %s", filename, archive_error_string(reader));
         archive_read_free(reader);
         return NULL;
     }
@@ -630,14 +610,12 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename)
     return ar;
 }
 
-int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream,
-                           uint64_t max_bytes)
+int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes)
 {
     return stream_entry(ar->ar, stream, max_bytes);
 }
 
-int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename,
-                              FILE *stream)
+int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename, FILE *stream)
 {
     for (;;) {
         struct archive_entry *entry = next_header(ar->ar, NULL);
@@ -668,8 +646,7 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl)
     aept_ar_file_list_init(fl);
 }
 
-int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
-                            aept_ar_file_list_t *out)
+int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid, aept_ar_file_list_t *out)
 {
     struct aept_ar *ar = aept_ar_open_pkg_data_archive(ipk_path, ignore_uid);
     if (!ar)
@@ -704,13 +681,11 @@ int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid,
         /* Grow the list if needed */
         if (out->count >= out->alloc) {
             out->alloc = out->alloc ? out->alloc * 2 : 64;
-            out->entries = aept_realloc(out->entries,
-                                    out->alloc * sizeof(aept_ar_file_entry_t));
+            out->entries = aept_realloc(out->entries, out->alloc * sizeof(aept_ar_file_entry_t));
         }
 
         out->entries[out->count].path = aept_strdup(path);
-        out->entries[out->count].link_target =
-            target ? aept_strdup(target) : NULL;
+        out->entries[out->count].link_target = target ? aept_strdup(target) : NULL;
         out->entries[out->count].mode = (unsigned int)st->st_mode;
         out->count++;
     }
@@ -726,8 +701,7 @@ int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream)
         int r;
 
         if (e->link_target)
-            r = fprintf(stream, "%s\t%#03o\t%s\n", e->path, e->mode,
-                        e->link_target);
+            r = fprintf(stream, "%s\t%#03o\t%s\n", e->path, e->mode, e->link_target);
         else
             r = fprintf(stream, "%s\t%#03o\n", e->path, e->mode);
 
@@ -737,16 +711,14 @@ int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream)
     return 0;
 }
 
-int aept_ar_extract_all(struct aept_ar *ar, const char *prefix,
-                   unsigned long *size, aept_fileset_t *conffiles,
-                   const char *cf_suffix, aept_ar_file_list_t *recorded)
+int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size,
+                        aept_fileset_t *conffiles, const char *cf_suffix,
+                        aept_ar_file_list_t *recorded)
 {
-    return do_extract_all(ar->ar, prefix, ar->extract_flags, size,
-                          conffiles, cf_suffix, recorded);
+    return do_extract_all(ar->ar, prefix, ar->extract_flags, size, conffiles, cf_suffix, recorded);
 }
 
-int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,
-                        const char *prefix)
+int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected, const char *prefix)
 {
     int flags = ar->extract_flags & ~ARCHIVE_EXTRACT_NO_OVERWRITE;
     int ret = -1;
@@ -772,20 +744,17 @@ int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected,
         if (skip < 0)
             goto cleanup;
 
-        aept_log_debug("extracting conffile '%s'",
-                  archive_entry_pathname(entry));
+        aept_log_debug("extracting conffile '%s'", archive_entry_pathname(entry));
 
         int r = archive_read_extract2(ar->ar, entry, disk);
         if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            aept_log_error("failed to extract '%s': %s",
-                      archive_entry_pathname(entry),
-                      archive_error_string(ar->ar));
+            aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
+                           archive_error_string(ar->ar));
             goto cleanup;
         }
         if (r == ARCHIVE_WARN)
-            aept_log_debug("warning extracting '%s': %s",
-                      archive_entry_pathname(entry),
-                      archive_error_string(ar->ar));
+            aept_log_debug("warning extracting '%s': %s", archive_entry_pathname(entry),
+                           archive_error_string(ar->ar));
     }
 
     ret = 0;

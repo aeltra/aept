@@ -33,14 +33,12 @@ int main(void)
     cfg.offline_root = aept_strdup(ROOT);
     aept_config_apply_offline_root(&cfg);
 
-    test_str_eq(cfg.info_dir,  ROOT "/var/lib/aept/info",  "info_dir prefixed");
+    test_str_eq(cfg.info_dir, ROOT "/var/lib/aept/info", "info_dir prefixed");
     test_str_eq(cfg.lists_dir, ROOT "/var/lib/aept/lists", "lists_dir prefixed");
-    test_str_eq(cfg.cache_dir, ROOT "/var/cache/aept",     "cache_dir prefixed");
-    test_str_eq(cfg.lock_file, ROOT "/var/lib/aept/lock",  "lock_file prefixed");
-    test_str_eq(cfg.auto_file, ROOT "/var/lib/aept/auto-installed",
-                "auto_file prefixed");
-    test_str_eq(cfg.pin_file,  ROOT "/var/lib/aept/pinned-packages",
-                "pin_file prefixed");
+    test_str_eq(cfg.cache_dir, ROOT "/var/cache/aept", "cache_dir prefixed");
+    test_str_eq(cfg.lock_file, ROOT "/var/lib/aept/lock", "lock_file prefixed");
+    test_str_eq(cfg.auto_file, ROOT "/var/lib/aept/auto-installed", "auto_file prefixed");
+    test_str_eq(cfg.pin_file, ROOT "/var/lib/aept/pinned-packages", "pin_file prefixed");
 
     /*
      * tmp_dir must be prefixed as well.  Control archives are unpacked
@@ -51,8 +49,7 @@ int main(void)
     test_str_eq(cfg.tmp_dir, ROOT "/tmp", "tmp_dir prefixed");
 
     /* The trust store deliberately stays on the host. */
-    test_str_eq(cfg.usign_keydir, "/etc/aept/usign/trustdb",
-                "usign_keydir not prefixed");
+    test_str_eq(cfg.usign_keydir, "/etc/aept/usign/trustdb", "usign_keydir not prefixed");
 
     aept_config_free(&cfg);
 
@@ -63,8 +60,7 @@ int main(void)
     set_path(&cfg.tmp_dir, "/var/tmp/aept");
     aept_config_apply_offline_root(&cfg);
 
-    test_str_eq(cfg.tmp_dir, ROOT "/var/tmp/aept",
-                "configured tmp_dir prefixed");
+    test_str_eq(cfg.tmp_dir, ROOT "/var/tmp/aept", "configured tmp_dir prefixed");
 
     aept_config_free(&cfg);
 
@@ -73,9 +69,9 @@ int main(void)
     aept_config_set_defaults(&cfg);
     aept_config_apply_offline_root(&cfg);
 
-    test_str_eq(cfg.tmp_dir,   "/tmp",                 "tmp_dir untouched");
-    test_str_eq(cfg.info_dir,  "/var/lib/aept/info",   "info_dir untouched");
-    test_str_eq(cfg.cache_dir, "/var/cache/aept",      "cache_dir untouched");
+    test_str_eq(cfg.tmp_dir, "/tmp", "tmp_dir untouched");
+    test_str_eq(cfg.info_dir, "/var/lib/aept/info", "info_dir untouched");
+    test_str_eq(cfg.cache_dir, "/var/cache/aept", "cache_dir untouched");
 
     aept_config_free(&cfg);
 

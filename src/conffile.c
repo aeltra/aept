@@ -27,13 +27,11 @@ void aept_conffile_set_init(aept_conffile_set_t *cs)
     cs->alloc = 0;
 }
 
-void aept_conffile_set_add(aept_conffile_set_t *cs, const char *path,
-                      const char *md5)
+void aept_conffile_set_add(aept_conffile_set_t *cs, const char *path, const char *md5)
 {
     if (cs->count >= cs->alloc) {
         cs->alloc = cs->alloc ? cs->alloc * 2 : 8;
-        cs->entries = aept_realloc(cs->entries,
-                               cs->alloc * sizeof(aept_conffile_t));
+        cs->entries = aept_realloc(cs->entries, cs->alloc * sizeof(aept_conffile_t));
     }
 
     cs->entries[cs->count].path = aept_strdup(path);
@@ -41,8 +39,7 @@ void aept_conffile_set_add(aept_conffile_set_t *cs, const char *path,
     cs->count++;
 }
 
-const char *aept_conffile_set_lookup(const aept_conffile_set_t *cs,
-                                const char *path)
+const char *aept_conffile_set_lookup(const aept_conffile_set_t *cs, const char *path)
 {
     for (int i = 0; i < cs->count; i++) {
         if (strcmp(cs->entries[i].path, path) == 0)
@@ -129,8 +126,7 @@ int aept_conffile_parse_list(const char *control_dir, aept_conffile_set_t *cs)
     return 0;
 }
 
-int aept_conffile_load(struct aept_ctx *ctx, const char *name,
-                       aept_conffile_set_t *cs)
+int aept_conffile_load(struct aept_ctx *ctx, const char *name, aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
@@ -170,8 +166,7 @@ int aept_conffile_load(struct aept_ctx *ctx, const char *name,
     return 0;
 }
 
-int aept_conffile_save(struct aept_ctx *ctx, const char *name,
-                       const aept_conffile_set_t *cs)
+int aept_conffile_save(struct aept_ctx *ctx, const char *name, const aept_conffile_set_t *cs)
 {
     char *path = NULL;
     FILE *fp;
@@ -186,8 +181,7 @@ int aept_conffile_save(struct aept_ctx *ctx, const char *name,
 
     for (int i = 0; i < cs->count; i++) {
         if (cs->entries[i].md5)
-            fprintf(fp, "%s  %s\n", cs->entries[i].md5,
-                    cs->entries[i].path);
+            fprintf(fp, "%s  %s\n", cs->entries[i].md5, cs->entries[i].path);
     }
 
     if (ferror(fp) || fclose(fp) != 0) {
@@ -214,8 +208,7 @@ void aept_conffile_remove(struct aept_ctx *ctx, const char *name)
 
 /* Prompt the user to decide what to do with a modified conffile.
  * Returns 1 to install the new version, 0 to keep the old one. */
-static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
-                           const char *disk_path,
+static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path, const char *disk_path,
                            const char *new_path)
 {
     if (ctx->config.force_confnew)
@@ -225,7 +218,8 @@ static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
 
     if (!isatty(STDIN_FILENO)) {
         aept_log_warning("'%s' has been modified; "
-                    "keeping old version (non-interactive)", cf_path);
+                         "keeping old version (non-interactive)",
+                         cf_path);
         return -1;
     }
 
@@ -256,8 +250,7 @@ static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
         ch = getchar();
         tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
 
-        if (ch == EOF || ch == '\n' || ch == 'n' || ch == 'N' ||
-            ch == 'o' || ch == 'O') {
+        if (ch == EOF || ch == '\n' || ch == 'n' || ch == 'N' || ch == 'o' || ch == 'O') {
             putchar('\n');
             return 0;
         }
@@ -269,8 +262,7 @@ static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
 
         if (ch == 'd' || ch == 'D') {
             putchar('\n');
-            const char *argv[] = {AEPT_DIFF_BIN, "-u", disk_path,
-                                  new_path, NULL};
+            const char *argv[] = {AEPT_DIFF_BIN, "-u", disk_path, new_path, NULL};
             aept_system(argv);
             continue;
         }
@@ -291,8 +283,8 @@ static int conffile_prompt(struct aept_ctx *ctx, const char *cf_path,
 }
 
 int aept_conffile_resolve_upgrade(struct aept_ctx *ctx, const char *name,
-                             const aept_conffile_set_t *old_conffiles,
-                             const aept_conffile_set_t *new_conffiles)
+                                  const aept_conffile_set_t *old_conffiles,
+                                  const aept_conffile_set_t *new_conffiles)
 {
     aept_conffile_set_t result;
 
@@ -309,8 +301,7 @@ int aept_conffile_resolve_upgrade(struct aept_ctx *ctx, const char *name,
 
         aept_asprintf(&new_path, "%s.aept-new", disk_path);
 
-        old_md5 = old_conffiles ?
-            aept_conffile_set_lookup(old_conffiles, cf_path) : NULL;
+        old_md5 = old_conffiles ? aept_conffile_set_lookup(old_conffiles, cf_path) : NULL;
         current_md5 = aept_conffile_md5(disk_path);
         new_md5 = aept_conffile_md5(new_path);
 

@@ -55,8 +55,7 @@ void aept_trigger_ctx_add_dir(aept_trigger_ctx_t *ctx, const char *dir)
 
     if (ctx->n_dirs >= ctx->dirs_alloc) {
         ctx->dirs_alloc = ctx->dirs_alloc ? ctx->dirs_alloc * 2 : 32;
-        ctx->dirs = aept_realloc(ctx->dirs,
-                                 ctx->dirs_alloc * sizeof(char *));
+        ctx->dirs = aept_realloc(ctx->dirs, ctx->dirs_alloc * sizeof(char *));
     }
 
     ctx->dirs[ctx->n_dirs++] = aept_strdup(dir);
@@ -67,8 +66,7 @@ void aept_trigger_ctx_add_fresh(aept_trigger_ctx_t *ctx, const char *name)
 {
     if (ctx->n_fresh >= ctx->fresh_alloc) {
         ctx->fresh_alloc = ctx->fresh_alloc ? ctx->fresh_alloc * 2 : 8;
-        ctx->fresh_pkgs = aept_realloc(ctx->fresh_pkgs,
-                                       ctx->fresh_alloc * sizeof(char *));
+        ctx->fresh_pkgs = aept_realloc(ctx->fresh_pkgs, ctx->fresh_alloc * sizeof(char *));
     }
 
     ctx->fresh_pkgs[ctx->n_fresh++] = aept_strdup(name);
@@ -85,8 +83,7 @@ static char *parent_dir(const char *path)
     return strndup(path, slash - path);
 }
 
-int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx,
-                                  aept_trigger_ctx_t *tctx, const char *name)
+int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx, const char *name)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -201,8 +198,8 @@ static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
     return path;
 }
 
-static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name,
-                              const char **dirs, int n_dirs)
+static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name, const char **dirs,
+                              int n_dirs)
 {
     char *path = NULL;
     int r;
@@ -233,8 +230,7 @@ static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name,
     free(path);
 
     if (r != 0) {
-        aept_log_error("trigger script for %s failed with exit code %d",
-                       pkg_name, r);
+        aept_log_error("trigger script for %s failed with exit code %d", pkg_name, r);
         return r;
     }
 
@@ -245,13 +241,12 @@ static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name,
 typedef struct {
     char *pattern;
     char *pkg_name;
-    int modify_only;    /* pattern had '+' prefix */
+    int modify_only; /* pattern had '+' prefix */
 } trigger_entry_t;
 
 /* Scan info_dir for *.triggers files and build the entry list on the
  * fly, without an intermediate index file on disk. */
-static void load_trigger_entries(struct aept_ctx *ctx,
-                                 trigger_entry_t **out_entries,
+static void load_trigger_entries(struct aept_ctx *ctx, trigger_entry_t **out_entries,
                                  int *out_count)
 {
     DIR *dp;
@@ -299,7 +294,8 @@ static void load_trigger_entries(struct aept_ctx *ctx,
              * the package never declared. */
             if (aept_fgets_is_truncated(line, sizeof(line))) {
                 aept_log_warning("ignoring over-long trigger pattern in "
-                            "'%s.triggers'", pkg_name);
+                                 "'%s.triggers'",
+                                 pkg_name);
                 aept_fgets_drain_line(tfp);
                 continue;
             }
@@ -314,8 +310,7 @@ static void load_trigger_entries(struct aept_ctx *ctx,
 
             if (n_entries >= entries_alloc) {
                 entries_alloc = entries_alloc ? entries_alloc * 2 : 16;
-                entries = aept_realloc(entries,
-                                       entries_alloc * sizeof(*entries));
+                entries = aept_realloc(entries, entries_alloc * sizeof(*entries));
             }
 
             int modify_only = 0;
@@ -361,7 +356,7 @@ int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
      * collect matching directories across all its patterns. */
     for (int i = 0; i < n_entries; i++) {
         if (!entries[i].pkg_name)
-            continue;   /* already processed */
+            continue; /* already processed */
 
         const char *pkg = entries[i].pkg_name;
         int pkg_is_fresh = is_fresh(tctx, pkg);
@@ -396,13 +391,11 @@ int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
                     }
                     if (!dup) {
                         if (n_matched >= matched_alloc) {
-                            matched_alloc = matched_alloc
-                                ? matched_alloc * 2 : 8;
-                            matched = aept_realloc(matched,
-                                matched_alloc * sizeof(char *));
+                            matched_alloc = matched_alloc ? matched_alloc * 2 : 8;
+                            matched = aept_realloc(matched, matched_alloc * sizeof(char *));
                         }
                         matched[n_matched++] = abs_dir;
-                        abs_dir = NULL;  /* ownership transferred */
+                        abs_dir = NULL; /* ownership transferred */
                     }
                 }
 
@@ -412,12 +405,10 @@ int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
             /* For fresh packages with non-modify-only patterns:
              * if the pattern is a concrete path and exists on disk,
              * add it even if it wasn't in tctx->dirs. */
-            if (pkg_is_fresh && !entries[e].modify_only
-                    && !has_glob_chars(pat)) {
+            if (pkg_is_fresh && !entries[e].modify_only && !has_glob_chars(pat)) {
                 char *full_path = NULL;
                 if (ctx->config.offline_root)
-                    aept_asprintf(&full_path, "%s%s",
-                                  ctx->config.offline_root, pat);
+                    aept_asprintf(&full_path, "%s%s", ctx->config.offline_root, pat);
                 else
                     full_path = aept_strdup(pat);
 
@@ -432,10 +423,8 @@ int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx)
                     }
                     if (!dup) {
                         if (n_matched >= matched_alloc) {
-                            matched_alloc = matched_alloc
-                                ? matched_alloc * 2 : 8;
-                            matched = aept_realloc(matched,
-                                matched_alloc * sizeof(char *));
+                            matched_alloc = matched_alloc ? matched_alloc * 2 : 8;
+                            matched = aept_realloc(matched, matched_alloc * sizeof(char *));
                         }
                         matched[n_matched++] = aept_strdup(pat);
                     }

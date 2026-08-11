@@ -21,23 +21,23 @@ typedef struct aept_config {
     aept_source_t *sources;
     int nsources;
 
-    char *offline_root;     /* NULL or path */
-    char *info_dir;         /* default "/var/lib/aept/info" */
-    char *lists_dir;        /* default "/var/lib/aept/lists" */
-    char *cache_dir;        /* default "/var/cache/aept" */
-    char *tmp_dir;          /* default "/tmp" */
-    char *lock_file;        /* default "/var/lib/aept/lock" */
-    char *usign_keydir;     /* default "/etc/aept/usign/trustdb" */
-    char *auto_file;        /* default "/var/lib/aept/auto-installed" */
-    char *pin_file;         /* default "/var/lib/aept/pinned-packages" */
-    char *ssl_client_cert;  /* NULL or path to client certificate */
-    char *ssl_client_key;   /* NULL or path to client private key */
+    char *offline_root;    /* NULL or path */
+    char *info_dir;        /* default "/var/lib/aept/info" */
+    char *lists_dir;       /* default "/var/lib/aept/lists" */
+    char *cache_dir;       /* default "/var/cache/aept" */
+    char *tmp_dir;         /* default "/tmp" */
+    char *lock_file;       /* default "/var/lib/aept/lock" */
+    char *usign_keydir;    /* default "/etc/aept/usign/trustdb" */
+    char *auto_file;       /* default "/var/lib/aept/auto-installed" */
+    char *pin_file;        /* default "/var/lib/aept/pinned-packages" */
+    char *ssl_client_cert; /* NULL or path to client certificate */
+    char *ssl_client_key;  /* NULL or path to client private key */
 
     char **archs;
     int narchs;
 
-    int check_signature;    /* default 1 */
-    int ignore_uid;         /* default 0 */
+    int check_signature; /* default 1 */
+    int ignore_uid;      /* default 0 */
     int allow_downgrade;
     int force_depends;
     int noaction;
@@ -59,17 +59,17 @@ struct libfetch_ctx;
 /* Full definition of the opaque context handle (aept_ctx_t). */
 struct aept_ctx {
     aept_config_t config;
-    struct aept_solver *solver;   /* NULL until aept_solver_init() */
-    struct libfetch_ctx *http;    /* connection cache + TLS config */
+    struct aept_solver *solver; /* NULL until aept_solver_init() */
+    struct libfetch_ctx *http;  /* connection cache + TLS config */
     int lock_fd;
 
     /* Callbacks — set once, read-only after init */
-    aept_log_fn     log_fn;
-    void           *log_userdata;
+    aept_log_fn log_fn;
+    void *log_userdata;
     aept_display_fn display_fn;
-    void           *display_userdata;
+    void *display_userdata;
     aept_confirm_fn confirm_fn;
-    void           *confirm_userdata;
+    void *confirm_userdata;
 
     _Atomic int cancelled;
     int use_color;
@@ -91,12 +91,12 @@ struct aept_ctx {
  * the build machine would bake in paths that need not hold there.
  */
 #define AEPT_USIGN_BIN "/usr/bin/usign"
-#define AEPT_RM_BIN    "/bin/rm"
-#define AEPT_DIFF_BIN  "/usr/bin/diff"
-#define AEPT_SH_BIN    "/bin/sh"
+#define AEPT_RM_BIN "/bin/rm"
+#define AEPT_DIFF_BIN "/usr/bin/diff"
+#define AEPT_SH_BIN "/bin/sh"
 
 /* Child process exit codes */
-#define AEPT_EXIT_EXEC_FAILED  255
+#define AEPT_EXIT_EXEC_FAILED 255
 #define AEPT_EXIT_SETUP_FAILED 254
 
 #endif

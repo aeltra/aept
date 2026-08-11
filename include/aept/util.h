@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#include "aept/aept.h"   /* AEPT_API */
+#include "aept/aept.h" /* AEPT_API */
 
 struct aept_ctx;
 
@@ -28,8 +28,7 @@ typedef struct {
 AEPT_API void *aept_malloc(size_t size);
 void *aept_realloc(void *ptr, size_t size);
 char *aept_strdup(const char *s);
-AEPT_API int aept_asprintf(char **strp, const char *fmt, ...)
-	__attribute__((format(printf, 2, 3)));
+AEPT_API int aept_asprintf(char **strp, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
 int aept_pkg_name_is_safe(const char *name);
 int aept_symlink_target_is_recordable(const char *target);

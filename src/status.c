@@ -97,8 +97,7 @@ int aept_status_load(struct aept_ctx *ctx)
             size_t llen = eol ? (size_t)(eol - p) : strlen(p);
 
             if (llen == sizeof(unpacked_status) - 1 &&
-                    strncmp(p, unpacked_status,
-                            sizeof(unpacked_status) - 1) == 0) {
+                strncmp(p, unpacked_status, sizeof(unpacked_status) - 1) == 0) {
                 fputs(installed_status, mem);
                 found_status = 1;
             } else {
@@ -146,23 +145,21 @@ int aept_status_load(struct aept_ctx *ctx)
     return r;
 }
 
-int aept_status_add(struct aept_ctx *ctx, const char *control_src,
-                    const char *dest_path, const char *state)
+int aept_status_add(struct aept_ctx *ctx, const char *control_src, const char *dest_path,
+                    const char *state)
 {
     (void)ctx;
 
     size_t ctrl_len = 0;
     char *ctrl = slurp_file(control_src, &ctrl_len);
     if (!ctrl) {
-        aept_log_error("cannot read control file '%s': %s",
-                  control_src, strerror(errno));
+        aept_log_error("cannot read control file '%s': %s", control_src, strerror(errno));
         return -1;
     }
 
     /* Trim trailing whitespace so the Status line lands cleanly. */
-    while (ctrl_len > 0 &&
-           (ctrl[ctrl_len - 1] == '\n' || ctrl[ctrl_len - 1] == '\r' ||
-            ctrl[ctrl_len - 1] == ' '  || ctrl[ctrl_len - 1] == '\t'))
+    while (ctrl_len > 0 && (ctrl[ctrl_len - 1] == '\n' || ctrl[ctrl_len - 1] == '\r' ||
+                            ctrl[ctrl_len - 1] == ' ' || ctrl[ctrl_len - 1] == '\t'))
         ctrl_len--;
     ctrl[ctrl_len] = '\0';
 
@@ -204,8 +201,8 @@ int aept_status_mark_auto(struct aept_ctx *ctx, const char *name)
 
     FILE *fp = fopen(ctx->config.auto_file, "a");
     if (!fp) {
-        aept_log_error("cannot open auto-installed file '%s': %s",
-                  ctx->config.auto_file, strerror(errno));
+        aept_log_error("cannot open auto-installed file '%s': %s", ctx->config.auto_file,
+                       strerror(errno));
         return -1;
     }
 
@@ -213,8 +210,7 @@ int aept_status_mark_auto(struct aept_ctx *ctx, const char *name)
 
     int err = ferror(fp);
     if (fclose(fp) != 0 || err) {
-        aept_log_error("failed to write auto-installed file '%s'",
-                  ctx->config.auto_file);
+        aept_log_error("failed to write auto-installed file '%s'", ctx->config.auto_file);
         return -1;
     }
 
@@ -313,8 +309,8 @@ int aept_status_clear_auto(struct aept_ctx *ctx)
 {
     FILE *fp = fopen(ctx->config.auto_file, "w");
     if (!fp) {
-        aept_log_error("cannot open auto-installed file '%s': %s",
-                  ctx->config.auto_file, strerror(errno));
+        aept_log_error("cannot open auto-installed file '%s': %s", ctx->config.auto_file,
+                       strerror(errno));
         return -1;
     }
     fclose(fp);

@@ -10,7 +10,6 @@
 struct aept_ctx;
 
 /* Verify file signature using usign. Returns 0 on success, -1 on failure. */
-int aept_verify_signature(struct aept_ctx *ctx, const char *file,
-                          const char *sigfile);
+int aept_verify_signature(struct aept_ctx *ctx, const char *file, const char *sigfile);
 
 #endif

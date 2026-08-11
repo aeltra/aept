@@ -34,14 +34,14 @@
 #include "aept/download.h"
 
 struct job {
-    const char *root;       /* offline root */
-    const char *url;        /* downloading job */
-    const char *pkg;        /* install/remove job: local .aep path */
-    const char *pkg_name;   /* ... and the name to remove again */
+    const char *root;     /* offline root */
+    const char *url;      /* downloading job */
+    const char *pkg;      /* install/remove job: local .aep path */
+    const char *pkg_name; /* ... and the name to remove again */
     int iterations;
-    int failures;           /* written by the thread, read after join */
-    int listed;             /* packages seen, to prove work happened */
-    int cycled;             /* install/remove round trips completed */
+    int failures; /* written by the thread, read after join */
+    int listed;   /* packages seen, to prove work happened */
+    int cycled;   /* install/remove round trips completed */
 };
 
 /* Transactions are displayed through a callback, which verbosity does
@@ -108,8 +108,7 @@ static void *list_thread(void *arg)
              * the right pool, so the order is the observable symptom.
              */
             for (int n = 1; n < list.count; n++) {
-                if (strcmp(list.entries[n - 1].name,
-                           list.entries[n].name) > 0)
+                if (strcmp(list.entries[n - 1].name, list.entries[n].name) > 0)
                     job->failures++;
             }
             job->listed += list.count;
@@ -202,8 +201,10 @@ int main(int argc, char **argv)
     int iterations;
 
     if (argc != 7) {
-        fprintf(stderr, "usage: %s <iterations> <root-a> <root-b> <url> "
-                "<pkg-a.aep> <pkg-b.aep>\n", argv[0]);
+        fprintf(stderr,
+                "usage: %s <iterations> <root-a> <root-b> <url> "
+                "<pkg-a.aep> <pkg-b.aep>\n",
+                argv[0]);
         return 2;
     }
 
@@ -215,14 +216,22 @@ int main(int argc, char **argv)
     memset(&jd, 0, sizeof(jd));
     memset(&je, 0, sizeof(je));
 
-    ja.root = argv[2];  ja.iterations = iterations;
-    jb.root = argv[3];  jb.iterations = iterations;
-    jc.root = argv[2];  jc.iterations = iterations;  jc.url = argv[4];
+    ja.root = argv[2];
+    ja.iterations = iterations;
+    jb.root = argv[3];
+    jb.iterations = iterations;
+    jc.root = argv[2];
+    jc.iterations = iterations;
+    jc.url = argv[4];
 
-    jd.root = argv[2];  jd.iterations = iterations;
-    jd.pkg = argv[5];   jd.pkg_name = "cycle-a";
-    je.root = argv[3];  je.iterations = iterations;
-    je.pkg = argv[6];   je.pkg_name = "cycle-b";
+    jd.root = argv[2];
+    jd.iterations = iterations;
+    jd.pkg = argv[5];
+    jd.pkg_name = "cycle-a";
+    je.root = argv[3];
+    je.iterations = iterations;
+    je.pkg = argv[6];
+    je.pkg_name = "cycle-b";
 
     if (pthread_create(&ta, NULL, list_thread, &ja) != 0 ||
         pthread_create(&tb, NULL, list_thread, &jb) != 0 ||
@@ -254,6 +263,5 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    return (ja.failures || jb.failures || jc.failures ||
-            jd.failures || je.failures) ? 1 : 0;
+    return (ja.failures || jb.failures || jc.failures || jd.failures || je.failures) ? 1 : 0;
 }

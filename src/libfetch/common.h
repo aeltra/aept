@@ -68,15 +68,15 @@ struct libfetch_ctx {
 };
 
 #if defined(__GNUC__) && __GNUC__ >= 3
-#define LIBFETCH_PRINTFLIKE(fmtarg, firstvararg)                               \
+#define LIBFETCH_PRINTFLIKE(fmtarg, firstvararg)                                                   \
     __attribute__((__format__(__printf__, fmtarg, firstvararg)))
 #else
 #define LIBFETCH_PRINTFLIKE(fmtarg, firstvararg)
 #endif
 
-#if !defined(__sun) && !defined(__hpux) && !defined(__INTERIX) &&              \
-    !defined(__digital__) && !defined(__linux) && !defined(__MINT__) &&        \
-    !defined(__sgi) && !defined(__minix) && !defined(__CYGWIN__)
+#if !defined(__sun) && !defined(__hpux) && !defined(__INTERIX) && !defined(__digital__) &&         \
+    !defined(__linux) && !defined(__MINT__) && !defined(__sgi) && !defined(__minix) &&             \
+    !defined(__CYGWIN__)
 #define HAVE_SA_LEN
 #endif
 
@@ -111,20 +111,15 @@ struct libfetch_conn {
 };
 
 void libfetch_info(const char *, ...) LIBFETCH_PRINTFLIKE(1, 2);
-uintmax_t libfetch_parseuint(const char *p, const char **endptr, int radix,
-                             uintmax_t max);
+uintmax_t libfetch_parseuint(const char *p, const char **endptr, int radix, uintmax_t max);
 int libfetch_default_port(const char *);
 int libfetch_default_proxy_port(const char *);
 int libfetch_bind(int, int, const char *);
-libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *,
-                                    const struct libfetch_url *, int);
-void libfetch_cache_put(struct libfetch_ctx *, libfetch_conn_t *,
-                        int (*)(libfetch_conn_t *));
-libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *,
-                                  int, int);
+libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *, const struct libfetch_url *, int);
+void libfetch_cache_put(struct libfetch_ctx *, libfetch_conn_t *, int (*)(libfetch_conn_t *));
+libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *, int, int);
 libfetch_conn_t *libfetch_reopen(int);
-int libfetch_ssl(struct libfetch_ctx *, libfetch_conn_t *,
-                 const struct libfetch_url *, int);
+int libfetch_ssl(struct libfetch_ctx *, libfetch_conn_t *, const struct libfetch_url *, int);
 ssize_t libfetch_read(libfetch_conn_t *, char *, size_t);
 int libfetch_getln(libfetch_conn_t *);
 ssize_t libfetch_write(libfetch_conn_t *, const void *, size_t);
@@ -134,8 +129,7 @@ int libfetch_urlpath_safe(char);
 
 static inline void libfetch_set_error(unsigned int category, int code)
 {
-    libfetch_last_error =
-        (struct libfetch_error){.category = category, .code = code};
+    libfetch_last_error = (struct libfetch_error){.category = category, .code = code};
 }
 static inline void libfetch_syserr(void)
 {
@@ -149,8 +143,7 @@ static inline void libfetch_syserr(void)
 #define tls_seterr(n) libfetch_set_error(LIBFETCH_ERRCAT_TLS, n)
 
 libfetch_io_t *libfetch_io_unopen(void *, ssize_t (*)(void *, void *, size_t),
-                                  ssize_t (*)(void *, const void *, size_t),
-                                  void (*)(void *));
+                                  ssize_t (*)(void *, const void *, size_t), void (*)(void *));
 
 /*
  * Check whether a particular flag is set

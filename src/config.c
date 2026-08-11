@@ -36,8 +36,7 @@ void aept_config_set_defaults(struct aept_config *cfg)
     cfg->verbosity = AEPT_INFO;
 }
 
-static void add_source(struct aept_config *cfg, const char *name,
-                        const char *url, int gzip)
+static void add_source(struct aept_config *cfg, const char *name, const char *url, int gzip)
 {
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_warning("ignoring source with unsafe name '%s'", name);
@@ -45,8 +44,7 @@ static void add_source(struct aept_config *cfg, const char *name,
     }
 
     cfg->nsources++;
-    cfg->sources = aept_realloc(cfg->sources,
-                            cfg->nsources * sizeof(aept_source_t));
+    cfg->sources = aept_realloc(cfg->sources, cfg->nsources * sizeof(aept_source_t));
 
     aept_source_t *src = &cfg->sources[cfg->nsources - 1];
     src->name = aept_strdup(name);
@@ -70,20 +68,20 @@ static void add_arch(struct aept_config *cfg, const char *arch)
  */
 static int parse_bool(const char *key, const char *value, int safe_default)
 {
-    if (strcmp(value, "1") == 0 || strcmp(value, "true") == 0 ||
-            strcmp(value, "yes") == 0 || strcmp(value, "on") == 0)
+    if (strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "yes") == 0 ||
+        strcmp(value, "on") == 0)
         return 1;
-    if (strcmp(value, "0") == 0 || strcmp(value, "false") == 0 ||
-            strcmp(value, "no") == 0 || strcmp(value, "off") == 0)
+    if (strcmp(value, "0") == 0 || strcmp(value, "false") == 0 || strcmp(value, "no") == 0 ||
+        strcmp(value, "off") == 0)
         return 0;
 
     aept_log_warning("invalid boolean value '%s' for option '%s', "
-                "using default '%d'", value, key, safe_default);
+                     "using default '%d'",
+                     value, key, safe_default);
     return safe_default;
 }
 
-static void set_option(struct aept_config *cfg, const char *key,
-                        const char *value)
+static void set_option(struct aept_config *cfg, const char *key, const char *value)
 {
     char **strp = NULL;
 
@@ -179,8 +177,7 @@ int aept_config_load(struct aept_config *cfg, const char *filename)
 
     fp = fopen(filename, "r");
     if (!fp) {
-        aept_log_error("cannot open config file '%s': %s",
-                  filename, strerror(errno));
+        aept_log_error("cannot open config file '%s': %s", filename, strerror(errno));
         return -1;
     }
 
@@ -251,13 +248,11 @@ int aept_config_validate(const struct aept_config *cfg)
 
     if (cfg->offline_root) {
         if (!aept_file_exists(cfg->offline_root)) {
-            aept_log_error("offline_root '%s' does not exist",
-                      cfg->offline_root);
+            aept_log_error("offline_root '%s' does not exist", cfg->offline_root);
             return -1;
         }
         if (!aept_file_is_dir(cfg->offline_root)) {
-            aept_log_error("offline_root '%s' is not a directory",
-                      cfg->offline_root);
+            aept_log_error("offline_root '%s' is not a directory", cfg->offline_root);
             return -1;
         }
     }
@@ -308,8 +303,7 @@ void aept_config_free(struct aept_config *cfg)
 char *aept_config_root_path(const struct aept_config *cfg, const char *path)
 {
     char *result;
-    aept_asprintf(&result, "%s%s",
-              cfg->offline_root ? cfg->offline_root : "", path);
+    aept_asprintf(&result, "%s%s", cfg->offline_root ? cfg->offline_root : "", path);
     return result;
 }
 
@@ -321,8 +315,7 @@ int aept_config_lock(struct aept_ctx *ctx)
 
     ctx->lock_fd = open(ctx->config.lock_file, O_CREAT | O_RDWR, 0644);
     if (ctx->lock_fd < 0) {
-        aept_log_error("cannot open lock file '%s': %s",
-                  ctx->config.lock_file, strerror(errno));
+        aept_log_error("cannot open lock file '%s': %s", ctx->config.lock_file, strerror(errno));
         return -1;
     }
 
@@ -330,8 +323,7 @@ int aept_config_lock(struct aept_ctx *ctx)
         if (errno == EWOULDBLOCK)
             aept_log_error("another aept instance is running");
         else
-            aept_log_error("cannot lock '%s': %s",
-                      ctx->config.lock_file, strerror(errno));
+            aept_log_error("cannot lock '%s': %s", ctx->config.lock_file, strerror(errno));
         close(ctx->lock_fd);
         ctx->lock_fd = -1;
         return -1;

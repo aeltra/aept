@@ -63,8 +63,7 @@ int aept_solver_init(struct aept_ctx *ctx)
     return 0;
 }
 
-int aept_solver_load_repo(struct aept_ctx *ctx, const char *name,
-                           FILE *fp, int source_index)
+int aept_solver_load_repo(struct aept_ctx *ctx, const char *name, FILE *fp, int source_index)
 {
     aept_solver_t *s = ctx->solver;
     Repo *repo;
@@ -222,8 +221,7 @@ static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
     }
 
     s->trans = solver_create_transaction(s->solv);
-    transaction_order(s->trans,
-        keep_orderdata ? SOLVER_TRANSACTION_KEEP_ORDERDATA : 0);
+    transaction_order(s->trans, keep_orderdata ? SOLVER_TRANSACTION_KEEP_ORDERDATA : 0);
 
     return 0;
 }
@@ -247,8 +245,7 @@ static const char *find_pin_version(aept_solver_t *s, const char *name)
  * ordering API (transaction_order_add_choices) which returns the set
  * of packages whose dependencies are already satisfied at each step.
  */
-static void reorder_transaction(Transaction *trans, Pool *pool,
-                                const char **names, int name_count,
+static void reorder_transaction(Transaction *trans, Pool *pool, const char **names, int name_count,
                                 const Id *local_ids, int local_count)
 {
     Queue choices, ordered;
@@ -279,7 +276,8 @@ static void reorder_transaction(Transaction *trans, Pool *pool,
             Id nameid = pool_str2id(pool, names[i], 0);
             if (nameid) {
                 Id p, pp;
-                FOR_PROVIDES(p, pp, nameid) {
+                FOR_PROVIDES(p, pp, nameid)
+                {
                     for (j = 0; j < total; j++) {
                         if (trans->steps.elements[j] == p) {
                             user_ids[i] = p;
@@ -366,9 +364,8 @@ static void reorder_transaction(Transaction *trans, Pool *pool,
     transaction_free_orderdata(trans);
 }
 
-int aept_solver_resolve_install(struct aept_ctx *ctx,
-                           const char **names, int count,
-                           const Id *local_ids, int local_count)
+int aept_solver_resolve_install(struct aept_ctx *ctx, const char **names, int count,
+                                const Id *local_ids, int local_count)
 {
     aept_solver_t *s = ctx->solver;
     Pool *pool = s->pool;
@@ -383,8 +380,7 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
      * user-supplied list down to nothing must therefore not reach this
      * function; aept_op_install() stops short of it in that case.
      */
-    if ((names == NULL || count == 0) &&
-            (local_ids == NULL || local_count == 0)) {
+    if ((names == NULL || count == 0) && (local_ids == NULL || local_count == 0)) {
         /* upgrade all */
         queue_push2(&job, SOLVER_UPDATE | SOLVER_SOLVABLE_ALL, 0);
 
@@ -392,8 +388,7 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
         for (i = 0; i < s->npins; i++) {
             Id nameid = pool_str2id(s->pool, s->pins[i].name, 0);
             if (nameid)
-                queue_push2(&job,
-                            SOLVER_LOCK | SOLVER_SOLVABLE_NAME, nameid);
+                queue_push2(&job, SOLVER_LOCK | SOLVER_SOLVABLE_NAME, nameid);
         }
     } else {
         for (i = 0; i < count; i++) {
@@ -405,13 +400,13 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
 
                 if (nameid) {
                     Id p, pp;
-                    FOR_PROVIDES(p, pp, nameid) {
+                    FOR_PROVIDES(p, pp, nameid)
+                    {
                         Solvable *sv = pool_id2solvable(s->pool, p);
                         if (sv->repo == s->pool->installed)
                             continue;
-                        if (pool_evrcmp_str(s->pool,
-                                pool_id2str(s->pool, sv->evr),
-                                pin_ver, EVRCMP_COMPARE) == 0) {
+                        if (pool_evrcmp_str(s->pool, pool_id2str(s->pool, sv->evr), pin_ver,
+                                            EVRCMP_COMPARE) == 0) {
                             target = p;
                             break;
                         }
@@ -419,41 +414,35 @@ int aept_solver_resolve_install(struct aept_ctx *ctx,
                 }
 
                 if (target) {
-                    queue_push2(&job,
-                                SOLVER_INSTALL | SOLVER_SOLVABLE, target);
+                    queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE, target);
                 } else {
                     aept_log_warning("pinned version '%s' of '%s' not found "
-                                "in any repository, installing best "
-                                "available", pin_ver, names[i]);
+                                     "in any repository, installing best "
+                                     "available",
+                                     pin_ver, names[i]);
                     Id id = pool_str2id(s->pool, names[i], 1);
-                    queue_push2(&job,
-                                SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES,
-                                id);
+                    queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
                 }
             } else {
                 Id id = pool_str2id(s->pool, names[i], 1);
-                queue_push2(&job,
-                            SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
+                queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES, id);
             }
         }
 
         for (i = 0; i < local_count; i++)
-            queue_push2(&job,
-                        SOLVER_INSTALL | SOLVER_SOLVABLE, local_ids[i]);
+            queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE, local_ids[i]);
     }
 
     r = do_solve(ctx, &job, count > 0 || local_count > 0);
     if (r == 0 && (count > 0 || local_count > 0))
-        reorder_transaction(s->trans, s->pool, names, count,
-                            local_ids, local_count);
+        reorder_transaction(s->trans, s->pool, names, count, local_ids, local_count);
 
     queue_free(&job);
 
     return r;
 }
 
-int aept_solver_resolve_remove(struct aept_ctx *ctx,
-                                const char **names, int count)
+int aept_solver_resolve_remove(struct aept_ctx *ctx, const char **names, int count)
 {
     aept_solver_t *s = ctx->solver;
     Queue job;
@@ -505,16 +494,15 @@ Id aept_solver_find_available(aept_solver_t *s, const char *name)
     if (!nameid)
         return 0;
 
-    FOR_PROVIDES(p, pp, nameid) {
+    FOR_PROVIDES(p, pp, nameid)
+    {
         Solvable *sv = pool_id2solvable(pool, p);
 
         if (sv->repo == pool->installed)
             continue;
 
         if (!best ||
-                pool_evrcmp(pool,
-                    pool_id2solvable(pool, best)->evr,
-                    sv->evr, EVRCMP_COMPARE) < 0) {
+            pool_evrcmp(pool, pool_id2solvable(pool, best)->evr, sv->evr, EVRCMP_COMPARE) < 0) {
             best = p;
         }
     }
@@ -522,8 +510,7 @@ Id aept_solver_find_available(aept_solver_t *s, const char *name)
     return best;
 }
 
-void aept_solver_add_pin(aept_solver_t *s, const char *name,
-                          const char *version)
+void aept_solver_add_pin(aept_solver_t *s, const char *name, const char *version)
 {
     s->npins++;
     s->pins = aept_realloc(s->pins, s->npins * sizeof(aept_pin_entry_t));
@@ -552,7 +539,8 @@ const char *aept_solver_installed_version(aept_solver_t *s, const char *name)
     Id p;
     Solvable *sv;
 
-    FOR_REPO_SOLVABLES(s->pool->installed, p, sv) {
+    FOR_REPO_SOLVABLES(s->pool->installed, p, sv)
+    {
         if (strcmp(pool_id2str(s->pool, sv->name), name) == 0)
             return pool_id2str(s->pool, sv->evr);
     }

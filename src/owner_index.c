@@ -66,8 +66,7 @@ static const char *intern_owner(aept_owner_index_t *idx, const char *name)
 
     if (idx->n_owners >= idx->owners_alloc) {
         idx->owners_alloc = idx->owners_alloc ? idx->owners_alloc * 2 : 64;
-        idx->owners = aept_realloc(idx->owners,
-                                   idx->owners_alloc * sizeof(char *));
+        idx->owners = aept_realloc(idx->owners, idx->owners_alloc * sizeof(char *));
     }
 
     idx->owners[idx->n_owners] = aept_strdup(name);
@@ -92,8 +91,8 @@ static int is_dead(aept_owner_index_t *idx, const char *owner)
     return 0;
 }
 
-static void array_append(aept_owner_entry_t **arr, int *count, int *alloc,
-                         const char *path, const char *owner)
+static void array_append(aept_owner_entry_t **arr, int *count, int *alloc, const char *path,
+                         const char *owner)
 {
     if (*count >= *alloc) {
         *alloc = *alloc ? *alloc * 2 : 256;
@@ -105,8 +104,8 @@ static void array_append(aept_owner_entry_t **arr, int *count, int *alloc,
 }
 
 /* Read list_path and append its normalized entries into arr. */
-static void read_list_into(const char *list_path, const char *owner,
-                           aept_owner_entry_t **arr, int *count, int *alloc)
+static void read_list_into(const char *list_path, const char *owner, aept_owner_entry_t **arr,
+                           int *count, int *alloc)
 {
     FILE *fp = fopen(list_path, "r");
     if (!fp)
@@ -139,7 +138,7 @@ int aept_owner_index_build(struct aept_ctx *ctx, aept_owner_index_t *idx)
 {
     DIR *dir = opendir(ctx->config.info_dir);
     if (!dir)
-        return 0;     /* empty or missing info dir is fine */
+        return 0; /* empty or missing info dir is fine */
 
     struct dirent *ent;
     while ((ent = readdir(dir)) != NULL) {
@@ -158,8 +157,7 @@ int aept_owner_index_build(struct aept_ctx *ctx, aept_owner_index_t *idx)
         char *list_path = NULL;
         aept_asprintf(&list_path, "%s/%s", ctx->config.info_dir, ent->d_name);
 
-        read_list_into(list_path, owner,
-                       &idx->entries, &idx->count, &idx->alloc);
+        read_list_into(list_path, owner, &idx->entries, &idx->count, &idx->alloc);
         free(list_path);
     }
     closedir(dir);
@@ -181,15 +179,15 @@ const char *aept_owner_index_find(aept_owner_index_t *idx, const char *path)
     /* Recent additions reflect the current transaction state, so they
      * take precedence over the original build-time snapshot. */
     if (idx->n_recent > 0) {
-        aept_owner_entry_t *hit = bsearch(&key, idx->recent, idx->n_recent,
-                                          sizeof(*idx->recent), entry_cmp);
+        aept_owner_entry_t *hit =
+            bsearch(&key, idx->recent, idx->n_recent, sizeof(*idx->recent), entry_cmp);
         if (hit && !is_dead(idx, hit->owner))
             return hit->owner;
     }
 
     if (idx->count > 0) {
-        aept_owner_entry_t *hit = bsearch(&key, idx->entries, idx->count,
-                                          sizeof(*idx->entries), entry_cmp);
+        aept_owner_entry_t *hit =
+            bsearch(&key, idx->entries, idx->count, sizeof(*idx->entries), entry_cmp);
         if (hit && !is_dead(idx, hit->owner))
             return hit->owner;
     }
@@ -197,21 +195,18 @@ const char *aept_owner_index_find(aept_owner_index_t *idx, const char *path)
     return NULL;
 }
 
-int aept_owner_index_add_owner_files(aept_owner_index_t *idx,
-                                     const char *owner_name,
+int aept_owner_index_add_owner_files(aept_owner_index_t *idx, const char *owner_name,
                                      const char *list_path)
 {
     const char *owner = intern_owner(idx, owner_name);
 
-    read_list_into(list_path, owner,
-                   &idx->recent, &idx->n_recent, &idx->recent_alloc);
+    read_list_into(list_path, owner, &idx->recent, &idx->n_recent, &idx->recent_alloc);
 
     qsort(idx->recent, idx->n_recent, sizeof(*idx->recent), entry_cmp);
     return 0;
 }
 
-void aept_owner_index_drop_owner(aept_owner_index_t *idx,
-                                 const char *owner_name)
+void aept_owner_index_drop_owner(aept_owner_index_t *idx, const char *owner_name)
 {
     int i = 0;
 
@@ -223,8 +218,7 @@ void aept_owner_index_drop_owner(aept_owner_index_t *idx,
 
         if (idx->n_dead >= idx->dead_alloc) {
             idx->dead_alloc = idx->dead_alloc ? idx->dead_alloc * 2 : 16;
-            idx->dead = aept_realloc(idx->dead,
-                                     idx->dead_alloc * sizeof(*idx->dead));
+            idx->dead = aept_realloc(idx->dead, idx->dead_alloc * sizeof(*idx->dead));
         }
         idx->dead[idx->n_dead++] = idx->owners[i];
 

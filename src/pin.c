@@ -26,8 +26,7 @@ int aept_pin_add(struct aept_ctx *ctx, const char *name, const char *version)
     aept_asprintf(&tmp_path, "%s.tmp", ctx->config.pin_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
-        aept_log_error("cannot open pin file '%s': %s",
-                  tmp_path, strerror(errno));
+        aept_log_error("cannot open pin file '%s': %s", tmp_path, strerror(errno));
         free(tmp_path);
         return -1;
     }
@@ -40,8 +39,7 @@ int aept_pin_add(struct aept_ctx *ctx, const char *name, const char *version)
                 continue;
             }
             char pkg_name[256];
-            if (sscanf(buf, "%255s", pkg_name) == 1 &&
-                    strcmp(pkg_name, name) == 0) {
+            if (sscanf(buf, "%255s", pkg_name) == 1 && strcmp(pkg_name, name) == 0) {
                 fprintf(tmp, "%s %s\n", name, version);
                 replaced = 1;
                 continue;
@@ -97,8 +95,7 @@ int aept_pin_remove(struct aept_ctx *ctx, const char *name)
             continue;
         }
         char pkg_name[256];
-        if (sscanf(buf, "%255s", pkg_name) == 1 &&
-                strcmp(pkg_name, name) == 0) {
+        if (sscanf(buf, "%255s", pkg_name) == 1 && strcmp(pkg_name, name) == 0) {
             found = 1;
             continue;
         }
@@ -147,8 +144,7 @@ char *aept_pin_lookup(struct aept_ctx *ctx, const char *name)
             continue;
         }
         char pkg_name[256], pkg_version[256];
-        if (sscanf(buf, "%255s %255s", pkg_name, pkg_version) == 2 &&
-                strcmp(pkg_name, name) == 0) {
+        if (sscanf(buf, "%255s %255s", pkg_name, pkg_version) == 2 && strcmp(pkg_name, name) == 0) {
             fclose(fp);
             return aept_strdup(pkg_version);
         }

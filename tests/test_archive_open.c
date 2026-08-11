@@ -56,8 +56,8 @@ static void write_ar(const char *path, const struct ar_member *m, int n)
     for (i = 0; i < n; i++) {
         char hdr[61];
 
-        snprintf(hdr, sizeof(hdr), "%-16s%-12u%-6u%-6u%-8o%-10zu`\n",
-                 m[i].name, 0u, 0u, 0u, 0644u, m[i].len);
+        snprintf(hdr, sizeof(hdr), "%-16s%-12u%-6u%-6u%-8o%-10zu`\n", m[i].name, 0u, 0u, 0u, 0644u,
+                 m[i].len);
         fwrite(hdr, 1, 60, fp);
         fwrite(m[i].data, 1, m[i].len, fp);
         if (m[i].len & 1)
@@ -106,8 +106,7 @@ static char *fixture_path(const char *name)
 int main(void)
 {
     static const char deb_bin[] = "2.0\n";
-    static const char garbage[] =
-        "this is not a tar, not gzip, not anything libarchive knows";
+    static const char garbage[] = "this is not a tar, not gzip, not anything libarchive knows";
 
     size_t ctrl_len, data_len;
     void *ctrl = make_targz("control", "Package: t\n", &ctrl_len);
@@ -131,8 +130,8 @@ int main(void)
     {
         struct ar_member m[] = {
             {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
-            {"control.tar.gz", ctrl,    ctrl_len},
-            {"data.tar.gz",    data,    data_len},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    data,    data_len           },
         };
 
         path = fixture_path("good.aep");
@@ -166,7 +165,7 @@ int main(void)
         struct ar_member m[] = {
             {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
             {"control.tar.gz", garbage, sizeof(garbage) - 1},
-            {"data.tar.gz",    data,    data_len},
+            {"data.tar.gz",    data,    data_len           },
         };
 
         path = fixture_path("badctrl.aep");
@@ -184,7 +183,7 @@ int main(void)
     {
         struct ar_member m[] = {
             {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
-            {"control.tar.gz", ctrl,    ctrl_len},
+            {"control.tar.gz", ctrl,    ctrl_len           },
             {"data.tar.gz",    garbage, sizeof(garbage) - 1},
         };
 
@@ -214,7 +213,7 @@ int main(void)
     {
         struct ar_member m[] = {
             {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
-            {"control.tar.gz", ctrl,    ctrl_len},
+            {"control.tar.gz", ctrl,    ctrl_len           },
         };
 
         path = fixture_path("nodata.aep");

@@ -29,7 +29,7 @@
  */
 #define MSG_BEGIN "-----BEGIN SIGNIFY SIGNED MESSAGE-----\n"
 #define SIG_BEGIN "-----BEGIN SIGNIFY SIGNATURE-----\n"
-#define SIG_END   "-----END SIGNIFY SIGNATURE-----\n"
+#define SIG_END "-----END SIGNIFY SIGNATURE-----\n"
 
 /*
  * Find the last line-aligned occurrence of a marker.
@@ -39,8 +39,7 @@
  * real signature block is always the last one, so taking the last match
  * makes such content harmless instead of truncating the index.
  */
-static const char *find_last_marker(const char *start, size_t len,
-                                    const char *marker)
+static const char *find_last_marker(const char *start, size_t len, const char *marker)
 {
     size_t mlen = strlen(marker);
     const char *found = NULL;
@@ -90,9 +89,9 @@ int aept_clearsign_parse(const char *buf, size_t len, aept_clearsign_t *out)
         return -1;
     }
 
-    out->msg     = msg;
+    out->msg = msg;
     out->msg_len = (size_t)(sig_begin - msg);
-    out->sig     = sig;
+    out->sig = sig;
     out->sig_len = (size_t)(sig_end - sig);
 
     return 0;
@@ -121,8 +120,7 @@ static int write_region(const char *path, const char *data, size_t len)
     return 0;
 }
 
-int aept_clearsign_write(const aept_clearsign_t *cs, const char *msg_path,
-                         const char *sig_path)
+int aept_clearsign_write(const aept_clearsign_t *cs, const char *msg_path, const char *sig_path)
 {
     if (write_region(msg_path, cs->msg, cs->msg_len) < 0)
         return -1;

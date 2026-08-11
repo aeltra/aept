@@ -25,11 +25,11 @@
  * Tests reaching internals link the static archive (-static in
  * tests/Makefile.am), where hidden visibility does not apply. */
 #ifndef AEPT_API
-#  if defined(__GNUC__) || defined(__clang__)
-#    define AEPT_API __attribute__((visibility("default")))
-#  else
-#    define AEPT_API
-#  endif
+#if defined(__GNUC__) || defined(__clang__)
+#define AEPT_API __attribute__((visibility("default")))
+#else
+#define AEPT_API
+#endif
 #endif
 
 /* --- Opaque context handle ----------------------------------------------- */
@@ -47,7 +47,7 @@ AEPT_API void aept_cleanup(aept_ctx_t *ctx);
 
 /* --- Configuration ------------------------------------------------------- */
 
-AEPT_API int  aept_load_config(aept_ctx_t *ctx, const char *path);
+AEPT_API int aept_load_config(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
@@ -70,25 +70,29 @@ enum {
 };
 
 AEPT_API void aept_set_flag(aept_ctx_t *ctx, int flag, int value);
-AEPT_API int  aept_get_flag(aept_ctx_t *ctx, int flag);
+AEPT_API int aept_get_flag(aept_ctx_t *ctx, int flag);
 
 /* --- Callbacks ----------------------------------------------------------- */
 
 enum {
-    AEPT_LOG_ERROR   = 0,
+    AEPT_LOG_ERROR = 0,
     AEPT_LOG_WARNING = 1,
-    AEPT_LOG_INFO    = 2,
-    AEPT_LOG_DEBUG   = 3,
+    AEPT_LOG_INFO = 2,
+    AEPT_LOG_DEBUG = 3,
 };
 
 typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
 AEPT_API void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
 
 typedef struct aept_transaction {
-    const char **install;   int n_install;
-    const char **upgrade;   int n_upgrade;
-    const char **reinstall; int n_reinstall;
-    const char **remove;    int n_remove;
+    const char **install;
+    int n_install;
+    const char **upgrade;
+    int n_upgrade;
+    const char **reinstall;
+    int n_reinstall;
+    const char **remove;
+    int n_remove;
 } aept_transaction_t;
 
 typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
@@ -106,7 +110,7 @@ AEPT_API void aept_cancel(aept_ctx_t *ctx);
 
 AEPT_API int aept_update(aept_ctx_t *ctx);
 AEPT_API int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
-                 const char **local_paths, int local_count);
+                          const char **local_paths, int local_count);
 AEPT_API int aept_upgrade(aept_ctx_t *ctx);
 AEPT_API int aept_remove(aept_ctx_t *ctx, const char **names, int count);
 AEPT_API int aept_autoremove(aept_ctx_t *ctx);
@@ -124,8 +128,8 @@ typedef struct {
     char *name;
     char *version;
     char *summary;
-    int   installed;
-    int   upgradable;
+    int installed;
+    int upgradable;
 } aept_pkg_entry_t;
 
 typedef struct {
@@ -133,9 +137,8 @@ typedef struct {
     int count;
 } aept_pkg_list_t;
 
-AEPT_API int  aept_list(aept_ctx_t *ctx, const char *pattern,
-               int filter_installed, int filter_upgradable,
-               aept_pkg_list_t *out);
+AEPT_API int aept_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
+                       int filter_upgradable, aept_pkg_list_t *out);
 AEPT_API void aept_pkg_list_free(aept_pkg_list_t *list);
 
 /* --- Query: show --------------------------------------------------------- */
@@ -156,22 +159,20 @@ typedef struct {
     char *filename;
     char *summary;
     char *description;
-    int   is_installed;
+    int is_installed;
 } aept_pkg_info_t;
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-AEPT_API int  aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
+AEPT_API int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
 AEPT_API void aept_pkg_info_free(aept_pkg_info_t *info);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-AEPT_API int aept_files(aept_ctx_t *ctx, const char *name,
-               char ***paths_out, int *count_out);
+AEPT_API int aept_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out);
 
 /* Returns 0 on success, 1 if not found, -1 on error. */
-AEPT_API int aept_owns(aept_ctx_t *ctx, const char *path,
-              char ***owners_out, int *count_out);
+AEPT_API int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out);
 
 AEPT_API int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
 

@@ -14,8 +14,7 @@ struct aept_owner_index;
 
 /* Remove package files listed in {info_dir}/{name}.list.
  * Files present in protected are skipped. */
-int aept_remove_files(struct aept_ctx *ctx, const char *name,
-                      aept_fileset_t *protected);
+int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *protected);
 
 /* Remove packages by name. Resolves reverse dependencies via solver. */
 int aept_op_remove(struct aept_ctx *ctx, const char **names, int count);
@@ -27,8 +26,7 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count);
  * during removal). May be NULL.
  * owners: in-transaction file→owner index to invalidate on success.
  * May be NULL. */
-int aept_do_remove(struct aept_ctx *ctx, const char *name,
-                   const char *new_version, aept_fileset_t *protected,
-                   struct aept_owner_index *owners);
+int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_version,
+                   aept_fileset_t *protected, struct aept_owner_index *owners);
 
 #endif

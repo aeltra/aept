@@ -23,8 +23,7 @@
 #include "aept/solver.h"
 #include "aept/util.h"
 
-int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
-                  const char *name)
+int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name)
 {
     libfetch_io_t *fio = NULL;
     FILE *fp = NULL;
@@ -43,7 +42,7 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest,
      * unconditionally: passing NULL clears any earlier selection.
      */
     libfetch_set_client_certificate(ctx->http, ctx->config.ssl_client_cert,
-                                 ctx->config.ssl_client_key);
+                                    ctx->config.ssl_client_key);
 
     fio = libfetch_get_url(ctx->http, url, "");
     if (!fio) {
@@ -117,8 +116,7 @@ static int verify_checksum(const char *path, Pool *pool, Solvable *s)
     int len;
     const char *name = pool_id2str(pool, s->name);
 
-    expected = solvable_lookup_bin_checksum(s, SOLVABLE_CHECKSUM,
-                                            &checksum_type);
+    expected = solvable_lookup_bin_checksum(s, SOLVABLE_CHECKSUM, &checksum_type);
     if (!expected) {
         aept_log_error("no checksum for '%s'", name);
         return -1;
@@ -132,8 +130,7 @@ static int verify_checksum(const char *path, Pool *pool, Solvable *s)
 
     fp = fopen(path, "rb");
     if (!fp) {
-        aept_log_error("cannot open '%s' for checksum verification: %s",
-                  path, strerror(errno));
+        aept_log_error("cannot open '%s' for checksum verification: %s", path, strerror(errno));
         solv_chksum_free(chk, NULL);
         return -1;
     }
@@ -145,10 +142,8 @@ static int verify_checksum(const char *path, Pool *pool, Solvable *s)
 
     computed = solv_chksum_get(chk, &len);
 
-    if (len != solv_chksum_len(checksum_type) ||
-            memcmp(computed, expected, len) != 0) {
-        aept_log_error("%s checksum mismatch for '%s'",
-                  solv_chksum_type2str(checksum_type), name);
+    if (len != solv_chksum_len(checksum_type) || memcmp(computed, expected, len) != 0) {
+        aept_log_error("%s checksum mismatch for '%s'", solv_chksum_type2str(checksum_type), name);
         solv_chksum_free(chk, NULL);
         unlink(path);
         return -1;
@@ -158,8 +153,7 @@ static int verify_checksum(const char *path, Pool *pool, Solvable *s)
     return 0;
 }
 
-int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool,
-                          char **dest_out)
+int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool, char **dest_out)
 {
     Solvable *s = pool_id2solvable(pool, p);
     unsigned int medianr;
@@ -172,15 +166,13 @@ int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool,
     int r;
 
     if (!location) {
-        aept_log_error("no download location for '%s'",
-                  pool_id2str(pool, s->name));
+        aept_log_error("no download location for '%s'", pool_id2str(pool, s->name));
         return -1;
     }
 
     src_idx = aept_solver_solvable_source_index(ctx->solver, p);
     if (src_idx < 0 || src_idx >= ctx->config.nsources) {
-        aept_log_error("unknown source for '%s'",
-                  pool_id2str(pool, s->name));
+        aept_log_error("unknown source for '%s'", pool_id2str(pool, s->name));
         return -1;
     }
 
@@ -195,8 +187,7 @@ int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool,
     /* Try cached copy first */
     if (access(dest, F_OK) == 0) {
         if (verify_checksum(dest, pool, s) == 0) {
-            aept_log_debug("using cached %s",
-                     pool_id2str(pool, s->name));
+            aept_log_debug("using cached %s", pool_id2str(pool, s->name));
             free(url);
             free(location_copy);
             *dest_out = dest;

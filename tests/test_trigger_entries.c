@@ -69,8 +69,8 @@ static void free_entries(trigger_entry_t *entries, int count)
 }
 
 /* Load the entries currently in info_dir and check the whole set. */
-static void check_entries(const char *label, int want_count,
-                          const char *want_pattern, int want_modify_only)
+static void check_entries(const char *label, int want_count, const char *want_pattern,
+                          int want_modify_only)
 {
     trigger_entry_t *entries = NULL;
     int count = 0;
@@ -143,8 +143,7 @@ int main(void)
 
         aept_asprintf(&content, "%s/etc/declared\n", bomb);
         write_triggers("pkga", content);
-        check_entries("over-long line yields no bogus patterns", 1,
-                      "/etc/declared", 0);
+        check_entries("over-long line yields no bogus patterns", 1, "/etc/declared", 0);
 
         free(content);
         free(bomb);
@@ -158,7 +157,7 @@ int main(void)
         char *line = long_line(1500, "/gizmo");
         char *want = aept_strdup(line);
 
-        want[strlen(want) - 1] = '\0';   /* drop the newline */
+        want[strlen(want) - 1] = '\0'; /* drop the newline */
         write_triggers("pkga", line);
         check_entries("a 1500-byte pattern is read whole", 1, want, 0);
 

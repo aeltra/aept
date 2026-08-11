@@ -20,11 +20,11 @@
 
 #define MSG_BEGIN "-----BEGIN SIGNIFY SIGNED MESSAGE-----\n"
 #define SIG_BEGIN "-----BEGIN SIGNIFY SIGNATURE-----\n"
-#define SIG_END   "-----END SIGNIFY SIGNATURE-----\n"
+#define SIG_END "-----END SIGNIFY SIGNATURE-----\n"
 
 /* A representative usign signature: comment line plus base64 payload. */
-#define SIGNATURE \
-    "untrusted comment: signed by key abcdef0123456789\n" \
+#define SIGNATURE                                                                                  \
+    "untrusted comment: signed by key abcdef0123456789\n"                                          \
     "RWSabcdef0123456789ABCDEFabcdefghijklmnopqrstuvwxyz0123456789==\n"
 
 static struct aept_ctx ctx;
@@ -37,17 +37,15 @@ static void silence_logging(void)
 }
 
 /* Compare a parsed region against an expected NUL-terminated string. */
-static void check_region(const char *got, size_t got_len, const char *want,
-                         const char *label)
+static void check_region(const char *got, size_t got_len, const char *want, const char *label)
 {
-    int pass = (got_len == strlen(want)) &&
-               memcmp(got, want, got_len) == 0;
+    int pass = (got_len == strlen(want)) && memcmp(got, want, got_len) == 0;
 
     test_ok(pass, label);
 
     if (!pass)
-        printf("#   got  (%zu bytes): %.*s\n#   want (%zu bytes): %s\n",
-               got_len, (int)got_len, got, strlen(want), want);
+        printf("#   got  (%zu bytes): %.*s\n#   want (%zu bytes): %s\n", got_len, (int)got_len, got,
+               strlen(want), want);
 }
 
 static void check_malformed(const char *doc, const char *label)
@@ -65,21 +63,16 @@ int main(void)
     /* ── the ordinary case ───────────────────────────────────────── */
     {
         static const char doc[] =
-            MSG_BEGIN
-            "Package: foo\nVersion: 1.0\n"
-            "\n"
-            "Package: bar\nVersion: 2.0\n"
-            SIG_BEGIN
-            SIGNATURE
-            SIG_END;
+            MSG_BEGIN "Package: foo\nVersion: 1.0\n"
+                      "\n"
+                      "Package: bar\nVersion: 2.0\n" SIG_BEGIN SIGNATURE SIG_END;
 
         test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
                     "well-formed document parses");
         check_region(cs.msg, cs.msg_len,
                      "Package: foo\nVersion: 1.0\n\nPackage: bar\nVersion: 2.0\n",
                      "message is byte-exact, trailing newline included");
-        check_region(cs.sig, cs.sig_len, SIGNATURE,
-                     "signature is byte-exact");
+        check_region(cs.sig, cs.sig_len, SIGNATURE, "signature is byte-exact");
     }
 
     /*
@@ -92,46 +85,29 @@ int main(void)
      */
     {
         static const char doc[] =
-            MSG_BEGIN
-            "Package: evil\nVersion: 1.0\nDescription: nasty\n"
-            SIG_BEGIN
-            "not the real signature\n"
-            SIG_END
-            "\n"
-            "Package: good\nVersion: 1.0\n"
-            SIG_BEGIN
-            SIGNATURE
-            SIG_END;
+            MSG_BEGIN "Package: evil\nVersion: 1.0\nDescription: nasty\n" SIG_BEGIN
+                      "not the real signature\n" SIG_END "\n"
+                      "Package: good\nVersion: 1.0\n" SIG_BEGIN SIGNATURE SIG_END;
 
         test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
                     "document with an injected marker parses");
         check_region(cs.msg, cs.msg_len,
-                     "Package: evil\nVersion: 1.0\nDescription: nasty\n"
-                     SIG_BEGIN
-                     "not the real signature\n"
-                     SIG_END
-                     "\n"
+                     "Package: evil\nVersion: 1.0\nDescription: nasty\n" SIG_BEGIN
+                     "not the real signature\n" SIG_END "\n"
                      "Package: good\nVersion: 1.0\n",
                      "split takes the last marker, injected one stays in body");
-        check_region(cs.sig, cs.sig_len, SIGNATURE,
-                     "real signature recovered despite injection");
+        check_region(cs.sig, cs.sig_len, SIGNATURE, "real signature recovered despite injection");
     }
 
     /* ── a marker that does not begin a line is not a marker ─────── */
     {
-        static const char doc[] =
-            MSG_BEGIN
-            "Package: foo\nDescription: see x" SIG_BEGIN
-            "Package: bar\n"
-            SIG_BEGIN
-            SIGNATURE
-            SIG_END;
+        static const char doc[] = MSG_BEGIN "Package: foo\nDescription: see x" SIG_BEGIN
+                                            "Package: bar\n" SIG_BEGIN SIGNATURE SIG_END;
 
         test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
                     "document with a mid-line marker parses");
         check_region(cs.msg, cs.msg_len,
-                     "Package: foo\nDescription: see x" SIG_BEGIN
-                     "Package: bar\n",
+                     "Package: foo\nDescription: see x" SIG_BEGIN "Package: bar\n",
                      "mid-line marker is not treated as a delimiter");
     }
 
@@ -139,8 +115,7 @@ int main(void)
     {
         static const char doc[] = MSG_BEGIN SIG_BEGIN SIGNATURE SIG_END;
 
-        test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
-                    "empty message parses");
+        test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0, "empty message parses");
         test_int_eq((int)cs.msg_len, 0, "empty message has zero length");
         check_region(cs.sig, cs.sig_len, SIGNATURE,
                      "signature recovered from empty-message document");
@@ -148,26 +123,21 @@ int main(void)
 
     /* ── trailing bytes after the closing marker are ignored ─────── */
     {
-        static const char doc[] =
-            MSG_BEGIN "Package: foo\n" SIG_BEGIN SIGNATURE SIG_END "junk\n";
+        static const char doc[] = MSG_BEGIN "Package: foo\n" SIG_BEGIN SIGNATURE SIG_END "junk\n";
 
         test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
                     "trailing bytes after the closing marker parse");
         check_region(cs.msg, cs.msg_len, "Package: foo\n",
                      "trailing bytes do not disturb the message");
-        check_region(cs.sig, cs.sig_len, SIGNATURE,
-                     "trailing bytes do not disturb the signature");
+        check_region(cs.sig, cs.sig_len, SIGNATURE, "trailing bytes do not disturb the signature");
     }
 
     /* ── malformed documents are rejected ────────────────────────── */
 
     check_malformed("", "empty input rejected");
-    check_malformed("Package: foo\nVersion: 1.0\n",
-                    "plain index without a header rejected");
-    check_malformed("-----BEGIN SIGNIFY SIGNED MESSAGE-----",
-                    "truncated header rejected");
-    check_malformed(MSG_BEGIN "Package: foo\n",
-                    "document with no signature block rejected");
+    check_malformed("Package: foo\nVersion: 1.0\n", "plain index without a header rejected");
+    check_malformed("-----BEGIN SIGNIFY SIGNED MESSAGE-----", "truncated header rejected");
+    check_malformed(MSG_BEGIN "Package: foo\n", "document with no signature block rejected");
     check_malformed(MSG_BEGIN "Package: foo\n" SIG_BEGIN SIGNATURE,
                     "unterminated signature block rejected");
     check_malformed(" " MSG_BEGIN "Package: foo\n" SIG_BEGIN SIGNATURE SIG_END,
@@ -194,8 +164,7 @@ int main(void)
 
         test_int_eq(aept_clearsign_parse(doc, sizeof(doc) - 1, &cs), 0,
                     "document for write test parses");
-        test_int_eq(aept_clearsign_write(&cs, msg_path, sig_path), 0,
-                    "regions are written out");
+        test_int_eq(aept_clearsign_write(&cs, msg_path, sig_path), 0, "regions are written out");
 
         fp = fopen(msg_path, "rb");
         n = fp ? fread(readback, 1, sizeof(readback), fp) : 0;
@@ -208,8 +177,7 @@ int main(void)
         n = fp ? fread(readback, 1, sizeof(readback), fp) : 0;
         if (fp)
             fclose(fp);
-        check_region(readback, n, SIGNATURE,
-                     "signature file matches the parsed region");
+        check_region(readback, n, SIGNATURE, "signature file matches the parsed region");
 
         unlink(msg_path);
         unlink(sig_path);

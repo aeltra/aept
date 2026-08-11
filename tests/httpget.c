@@ -57,9 +57,7 @@ int main(int argc, char **argv)
     }
 
     if (argc - first < 2 || (argc - first) % 2 != 0) {
-        fprintf(stderr,
-                "usage: %s [-s] <url> <outfile> [<url> <outfile> ...]\n",
-                argv[0]);
+        fprintf(stderr, "usage: %s [-s] <url> <outfile> [<url> <outfile> ...]\n", argv[0]);
         return 2;
     }
 

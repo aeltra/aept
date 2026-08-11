@@ -86,10 +86,8 @@ static int same_dir_symlink(const char *disk_path, const char *archive_target)
     return is_dir;
 }
 
-int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path,
-                     Pool *pool, Id p,
-                     aept_fileset_t *old_files,
-                     aept_owner_index_t *owners)
+int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+                     aept_fileset_t *old_files, aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *pkg_name = pool_id2str(pool, s->name);
@@ -119,8 +117,8 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path,
         if (stripped[0] == '\0')
             continue;
 
-        aept_asprintf(&disk_path, "%s/%s",
-                  ctx->config.offline_root ? ctx->config.offline_root : "", stripped);
+        aept_asprintf(&disk_path, "%s/%s", ctx->config.offline_root ? ctx->config.offline_root : "",
+                      stripped);
 
         if (lstat(disk_path, &st) < 0) {
             free(disk_path);
@@ -128,8 +126,7 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path,
         }
 
         /* Both are symlinks to the same directory — shared like dirs */
-        if (S_ISLNK(st.st_mode) && link_target &&
-                same_dir_symlink(disk_path, link_target)) {
+        if (S_ISLNK(st.st_mode) && link_target && same_dir_symlink(disk_path, link_target)) {
             free(disk_path);
             continue;
         }
@@ -153,8 +150,8 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path,
             continue;
 
         aept_log_error("package '%s' wants to install '%s'\n"
-                  "  but that file is already provided by package '%s'",
-                  pkg_name, stripped, owner);
+                       "  but that file is already provided by package '%s'",
+                       pkg_name, stripped, owner);
         clashes++;
     }
 

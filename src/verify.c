@@ -15,8 +15,7 @@
 #include "aept/util.h"
 #include "aept/verify.h"
 
-int aept_verify_signature(struct aept_ctx *ctx, const char *file,
-                          const char *sigfile)
+int aept_verify_signature(struct aept_ctx *ctx, const char *file, const char *sigfile)
 {
     int r;
     pid_t pid;
@@ -30,11 +29,8 @@ int aept_verify_signature(struct aept_ctx *ctx, const char *file,
     }
 
     if (pid == 0) {
-        execl(AEPT_USIGN_BIN, "usign", "-q", "-V",
-              "-P", ctx->config.usign_keydir,
-              "-m", file,
-              "-x", sigfile,
-              NULL);
+        execl(AEPT_USIGN_BIN, "usign", "-q", "-V", "-P", ctx->config.usign_keydir, "-m", file, "-x",
+              sigfile, NULL);
         _exit(AEPT_EXIT_EXEC_FAILED);
     }
 

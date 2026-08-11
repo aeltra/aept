@@ -35,13 +35,14 @@ static int dir_depth_cmp(const void *a, const void *b)
     size_t la = strlen(*(const char **)a);
     size_t lb = strlen(*(const char **)b);
 
-    if (lb > la) return 1;
-    if (lb < la) return -1;
+    if (lb > la)
+        return 1;
+    if (lb < la)
+        return -1;
     return 0;
 }
 
-int aept_remove_files(struct aept_ctx *ctx, const char *name,
-                      aept_fileset_t *protected)
+int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *protected)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -104,8 +105,8 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name,
             continue;
 
         char *full_path = NULL;
-        aept_asprintf(&full_path, "%s/%s",
-                  ctx->config.offline_root ? ctx->config.offline_root : "", path);
+        aept_asprintf(&full_path, "%s/%s", ctx->config.offline_root ? ctx->config.offline_root : "",
+                      path);
 
         /* Collect directories for removal after files */
         if (S_ISDIR(mode)) {
@@ -121,13 +122,11 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name,
         if (conffiles.count > 0) {
             char *abs_path = NULL;
             aept_asprintf(&abs_path, "/%s", path);
-            const char *saved_md5 = aept_conffile_set_lookup(&conffiles,
-                                                        abs_path);
+            const char *saved_md5 = aept_conffile_set_lookup(&conffiles, abs_path);
             if (saved_md5) {
                 char *cur_md5 = aept_conffile_md5(full_path);
                 if (cur_md5 && strcmp(saved_md5, cur_md5) != 0) {
-                    aept_log_info("not removing modified conffile '%s'",
-                             abs_path);
+                    aept_log_info("not removing modified conffile '%s'", abs_path);
                     free(cur_md5);
                     free(abs_path);
                     free(full_path);
@@ -139,8 +138,7 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name,
         }
 
         if (unlink(full_path) < 0 && errno != ENOENT)
-            aept_log_debug("cannot remove '%s': %s",
-                      full_path, strerror(errno));
+            aept_log_debug("cannot remove '%s': %s", full_path, strerror(errno));
 
         free(full_path);
     }
@@ -154,8 +152,7 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name,
 
         for (int i = 0; i < n_dirs; i++) {
             if (rmdir(dirs[i]) < 0 && errno != ENOTEMPTY && errno != ENOENT)
-                aept_log_debug("cannot rmdir '%s': %s",
-                          dirs[i], strerror(errno));
+                aept_log_debug("cannot rmdir '%s': %s", dirs[i], strerror(errno));
             free(dirs[i]);
         }
         free(dirs);
@@ -166,11 +163,8 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name,
 
 static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
-    const char *exts[] = {
-        "list", "control", "conffiles",
-        "preinst", "postinst", "prerm", "postrm",
-        "trigger", "triggers", NULL
-    };
+    const char *exts[] = {"list",  "control", "conffiles", "preinst",  "postinst",
+                          "prerm", "postrm",  "trigger",   "triggers", NULL};
 
     for (int i = 0; exts[i]; i++) {
         char *path = NULL;
@@ -180,9 +174,8 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
     }
 }
 
-int aept_do_remove(struct aept_ctx *ctx, const char *name,
-                   const char *new_version, aept_fileset_t *protected,
-                   aept_owner_index_t *owners)
+int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_version,
+                   aept_fileset_t *protected, aept_owner_index_t *owners)
 {
     int r;
 
@@ -195,7 +188,7 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name,
 
     /* Run prerm */
     r = aept_run_script(ctx, ctx->config.info_dir, name, "prerm",
-                   new_version ? "upgrade" : "remove", new_version);
+                        new_version ? "upgrade" : "remove", new_version);
     if (r != 0) {
         aept_log_error("prerm failed for '%s', aborting removal", name);
         return -1;
@@ -206,7 +199,7 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name,
 
     /* Run postrm */
     r = aept_run_script(ctx, ctx->config.info_dir, name, "postrm",
-                   new_version ? "upgrade" : "remove", new_version);
+                        new_version ? "upgrade" : "remove", new_version);
     if (r != 0)
         aept_log_warning("postrm failed for '%s', continuing", name);
 
@@ -258,8 +251,7 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
     for (i = 0; i < trans->steps.count; i++) {
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
+                                    SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
         if ((type & 0xf0) != SOLVER_TRANSACTION_ERASE)
             continue;
@@ -269,7 +261,7 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
     }
 
     aept_transaction_t txn = {0};
-    txn.remove  = erase_names;
+    txn.remove = erase_names;
     txn.n_remove = n_erase;
 
     aept_display_transaction(&txn);
@@ -301,8 +293,7 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
 
         Id p = trans->steps.elements[i];
         int type = transaction_type(trans, p,
-            SOLVER_TRANSACTION_SHOW_ACTIVE |
-            SOLVER_TRANSACTION_SHOW_ALL);
+                                    SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
 
         if ((type & 0xf0) != SOLVER_TRANSACTION_ERASE)
             continue;

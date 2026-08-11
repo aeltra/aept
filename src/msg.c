@@ -21,19 +21,15 @@
  * roots in different threads. */
 static _Thread_local struct aept_ctx *aept_log_ctx;
 
-static const char *level_name[] = {
-    [AEPT_ERROR]   = "error",
-    [AEPT_WARNING] = "warning",
-    [AEPT_INFO]    = "info",
-    [AEPT_DEBUG]   = "debug"
-};
+static const char *level_name[] = {[AEPT_ERROR] = "error",
+                                   [AEPT_WARNING] = "warning",
+                                   [AEPT_INFO] = "info",
+                                   [AEPT_DEBUG] = "debug"};
 
-static const char *level_color[] = {
-    [AEPT_ERROR]   = "\033[31m",
-    [AEPT_WARNING] = "\033[33m",
-    [AEPT_INFO]    = "\033[32m",
-    [AEPT_DEBUG]   = "\033[34m"
-};
+static const char *level_color[] = {[AEPT_ERROR] = "\033[31m",
+                                    [AEPT_WARNING] = "\033[33m",
+                                    [AEPT_INFO] = "\033[32m",
+                                    [AEPT_DEBUG] = "\033[34m"};
 
 void aept_log_set_ctx(struct aept_ctx *ctx)
 {
@@ -60,8 +56,7 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
         n = vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
 
-        if (level == AEPT_DEBUG && file && n >= 0
-                && (size_t)n < sizeof(buf) - 1) {
+        if (level == AEPT_DEBUG && file && n >= 0 && (size_t)n < sizeof(buf) - 1) {
             snprintf(buf + n, sizeof(buf) - n, " (%s:%d)", file, line);
         }
 
@@ -73,8 +68,8 @@ void aept_log(int level, const char *file, int line, const char *fmt, ...)
     out = (level <= AEPT_WARNING) ? stderr : stdout;
 
     if (use_color) {
-        fprintf(out, "\033[1maept\033[0m: %s\033[1m%s\033[0m: ",
-                level_color[level], level_name[level]);
+        fprintf(out, "\033[1maept\033[0m: %s\033[1m%s\033[0m: ", level_color[level],
+                level_name[level]);
     } else {
         fprintf(out, "aept: %s: ", level_name[level]);
     }
@@ -115,12 +110,11 @@ void aept_display_transaction(const struct aept_transaction *txn)
 
     if (txn->n_reinstall > 0)
         aept_print_heading("%d to install, %d to upgrade, "
-                      "%d to remove, %d to reinstall.",
-                      txn->n_install, txn->n_upgrade,
-                      txn->n_remove, txn->n_reinstall);
+                           "%d to remove, %d to reinstall.",
+                           txn->n_install, txn->n_upgrade, txn->n_remove, txn->n_reinstall);
     else
-        aept_print_heading("%d to install, %d to upgrade, %d to remove.",
-                      txn->n_install, txn->n_upgrade, txn->n_remove);
+        aept_print_heading("%d to install, %d to upgrade, %d to remove.", txn->n_install,
+                           txn->n_upgrade, txn->n_remove);
 }
 
 int aept_confirm_continue(void)
@@ -177,8 +171,7 @@ static int terminal_width(void)
 {
     struct winsize ws;
 
-    if (isatty(STDOUT_FILENO) && ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0
-            && ws.ws_col > 0)
+    if (isatty(STDOUT_FILENO) && ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
         return ws.ws_col;
 
     return 80;

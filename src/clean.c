@@ -26,8 +26,8 @@ int aept_op_clean(struct aept_ctx *ctx)
     if (!d) {
         if (errno == ENOENT)
             return 0;
-        aept_log_error("cannot open cache directory '%s': %s",
-                  ctx->config.cache_dir, strerror(errno));
+        aept_log_error("cannot open cache directory '%s': %s", ctx->config.cache_dir,
+                       strerror(errno));
         return -1;
     }
 

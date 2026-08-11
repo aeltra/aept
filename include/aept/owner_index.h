@@ -21,8 +21,8 @@ struct aept_ctx;
  */
 
 typedef struct {
-    char *path;            /* normalized: no leading "./" or "/" */
-    const char *owner;     /* shared pointer into owners[] */
+    char *path;        /* normalized: no leading "./" or "/" */
+    const char *owner; /* shared pointer into owners[] */
 } aept_owner_entry_t;
 
 typedef struct aept_owner_index {
@@ -62,13 +62,11 @@ const char *aept_owner_index_find(aept_owner_index_t *idx, const char *path);
 
 /* Notify the index that owner_name has been (re)installed.  Reads
  * list_path (a freshly written .list file) and appends its entries. */
-int aept_owner_index_add_owner_files(aept_owner_index_t *idx,
-                                     const char *owner_name,
+int aept_owner_index_add_owner_files(aept_owner_index_t *idx, const char *owner_name,
                                      const char *list_path);
 
 /* Notify the index that owner_name has been removed.  All entries
  * referencing the owner's current live pointer are invalidated. */
-void aept_owner_index_drop_owner(aept_owner_index_t *idx,
-                                 const char *owner_name);
+void aept_owner_index_drop_owner(aept_owner_index_t *idx, const char *owner_name);
 
 #endif

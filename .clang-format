@@ -1,26 +1,36 @@
-# Formatting for aept.  Derived from what src/*.c already does, not from a
-# preset: 4-space indent, function braces on their own line, control-statement
-# braces attached.
+# Formatting for aept.  Applies to the WHOLE tree, src/libfetch/ included --
+# one profile, no per-directory exceptions, so a rename never leaves ragged
+# alignment on the far side of a boundary.
 #
-# SCOPE: src/libfetch/ ONLY.  That directory is a vendored fork we want
-# normalised to our conventions.  The rest of the tree is hand-formatted and
-# should stay that way -- running clang-format over it changes 2082 lines and
-# some of that is a regression: it splits an 81-column log call into two worse
-# lines, collapses deliberate comment spacing, and reflows main.c's hand-aligned
-# usage strings and option tables (711 lines by itself).
+# Two of these settings are chosen for stability under editing rather than
+# looks, because a formatter that reflows lines you did not touch breaks
+# string-matching edits (and did, twice, before this was measured):
 #
-# The cost of that split: a rename crossing the boundary leaves ragged trailing
-# comments in hand-formatted headers, which have to be re-aligned by hand.
+#   ColumnLimit: 100      Renaming a widely-used identifier reflowed 77
+#                         unrelated lines at 80 columns, and 19 at 100 -- a 4x
+#                         reduction.  Fewer lines sit near the limit, so fewer
+#                         get rewrapped by an edit somewhere else.  It also
+#                         matches a tree that already had 95-column lines.
+#   ReflowComments: false Comment prose is wrapped by hand and stays that way.
 #
-# Written against clang-format 19; older versions differ slightly, so a
-# reformat with another version may churn lines it should not.
+# BreakStringLiterals: false keeps a log or usage message on one line, so it
+# can still be grepped for.
+#
+# AlignArrayOfStructures aligns main.c's getopt tables better than the hand
+# alignment it replaced, and AlignTrailingComments (LLVM default) is left on
+# because the formatter then maintains comment columns -- doing that by hand is
+# what left include/aept/internal.h ragged after a rename.
+#
+# Written against clang-format 19.  Other versions differ slightly and will
+# churn lines they should not; check `clang-format --version` before a
+# tree-wide run.
 ---
 Language: Cpp
 BasedOnStyle: LLVM
 
 IndentWidth: 4
 UseTab: Never
-ColumnLimit: 80
+ColumnLimit: 100
 
 # int aept_foo(...) on one line, not the BSD split declaration
 AlwaysBreakAfterReturnType: None
@@ -32,6 +42,10 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 SpaceAfterCStyleCast: false
+
+AlignArrayOfStructures: Left
+BreakStringLiterals: false
+ReflowComments: false
 
 # The include groups here are deliberate (system, then <solv/...>, then
 # "aept/..."), and re-sorting them would scramble that.

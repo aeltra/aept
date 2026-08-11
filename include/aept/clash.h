@@ -18,9 +18,7 @@ struct aept_ctx;
  * old_files: fileset of old version (for upgrades), or NULL.
  * owners: file->owner index covering the current transaction state.
  * Returns the number of clashes (0 = OK), -1 on error. */
-int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path,
-                     Pool *pool, Id p,
-                     aept_fileset_t *old_files,
-                     aept_owner_index_t *owners);
+int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+                     aept_fileset_t *old_files, aept_owner_index_t *owners);
 
 #endif

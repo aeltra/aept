@@ -108,8 +108,8 @@ static char *slurp_gz(const char *path, size_t *out_len)
  *
  * Returns 0 on success, -1 on error.
  */
-static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src,
-                              const char *list_path, const char *sig_path)
+static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src, const char *list_path,
+                              const char *sig_path)
 {
     char *url = NULL;
     char *tmp_path = NULL;
@@ -126,7 +126,8 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src,
 
     if (r < 0) {
         aept_log_error("failed to download InPackages.gz for '%s'; a signed "
-                  "repository must publish one", src->name);
+                       "repository must publish one",
+                       src->name);
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -137,8 +138,7 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src,
     free(tmp_path);
 
     if (!buf) {
-        aept_log_error("failed to decompress InPackages.gz for '%s'",
-                  src->name);
+        aept_log_error("failed to decompress InPackages.gz for '%s'", src->name);
         return -1;
     }
 
@@ -155,8 +155,7 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src,
 }
 
 /* Fetch the plain index, decompressing it when the source is gzipped. */
-static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src,
-                             const char *list_path)
+static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const char *list_path)
 {
     char *url = NULL;
     int r;
@@ -173,8 +172,7 @@ static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src,
         if (r == 0) {
             r = decompress_gz(gz_path, list_path);
             if (r < 0)
-                aept_log_error("failed to decompress Packages.gz for '%s'",
-                          src->name);
+                aept_log_error("failed to decompress Packages.gz for '%s'", src->name);
         }
 
         unlink(gz_path);
@@ -248,8 +246,7 @@ int aept_op_update(struct aept_ctx *ctx)
 
     for (i = 0; i < ctx->config.nsources; i++) {
         if (strncmp(ctx->config.sources[i].url, "https://", 8) != 0)
-            aept_log_warning("source '%s' uses insecure transport",
-                        ctx->config.sources[i].name);
+            aept_log_warning("source '%s' uses insecure transport", ctx->config.sources[i].name);
     }
 
     for (i = 0; i < ctx->config.nsources; i++) {

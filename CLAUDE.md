@@ -59,15 +59,20 @@ reports the old surface.
 
 ## Coding Conventions
 
-`.clang-format` at the top level encodes these, derived from what `src/*.c`
-already did rather than from a preset. **It governs `src/libfetch/` only** —
-that is a vendored fork we want normalised. Do not run it over the rest of the
-tree: measured, that changes 2082 lines and some of it is a regression (an
-81-column log call split into two worse lines, deliberate comment spacing
-collapsed, `main.c`'s hand-aligned usage strings and option tables reflowed —
-711 lines there alone). The price of the split is that a rename crossing the
-boundary leaves ragged trailing comments in hand-formatted headers, to be
-re-aligned by hand. Written against **clang-format 19**.
+`.clang-format` at the top level encodes these and governs the **whole tree**,
+`src/libfetch/` included. Run `clang-format -i` freely; the config is written
+against **clang-format 19**, so check `clang-format --version` before a
+tree-wide run.
+
+Two settings are chosen for stability under editing rather than looks, because
+a formatter that reflows lines you did not touch breaks string-matching edits:
+`ColumnLimit: 100` (renaming a widely-used identifier reflowed 77 unrelated
+lines at 80 columns, 19 at 100) and `ReflowComments: false`. Comment prose is
+wrapped by hand. `BreakStringLiterals: false` keeps a log or usage message on
+one line so it can still be grepped for.
+
+The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 - **4 spaces** indentation, no tabs
 - Header guards: `{NAME}_H_7BF97F` suffix (e.g. `ARCHIVE_H_7BF97F`)

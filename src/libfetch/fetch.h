@@ -116,26 +116,22 @@ void libfetch_ctx_free(struct libfetch_ctx *);
  * cache: a connection opened while presenting one certificate is never
  * reused by a context configured with another.
  */
-void libfetch_set_client_certificate(struct libfetch_ctx *ctx,
-                                     const char *cert_file,
+void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_file,
                                      const char *key_file);
 
 void libfetch_io_close(libfetch_io_t *);
 ssize_t libfetch_io_read(libfetch_io_t *, void *, size_t);
 
 /* HTTP */
-libfetch_io_t *libfetch_get_http(struct libfetch_ctx *, struct libfetch_url *,
-                                 const char *);
+libfetch_io_t *libfetch_get_http(struct libfetch_ctx *, struct libfetch_url *, const char *);
 
 /* Generic */
-libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *,
-                                const char *);
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *, const char *);
 
 /* URL parsing.  Internal to the library: nothing outside it needs to
  * build or inspect a struct libfetch_url, but redirects and the connection
  * cache do. */
-struct libfetch_url *libfetch_make_url(const char *, const char *, int,
-                                       const char *, const char *,
+struct libfetch_url *libfetch_make_url(const char *, const char *, int, const char *, const char *,
                                        const char *);
 struct libfetch_url *libfetch_parse_url(const char *);
 struct libfetch_url *libfetch_copy_url(const struct libfetch_url *);

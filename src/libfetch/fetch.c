@@ -59,8 +59,7 @@ volatile int libfetch_restart_calls = 0;
  * Parse the given URL and return a read-only stream connected to the
  * document it references.  HTTP and HTTPS are the only schemes.
  */
-libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL,
-                                const char *flags)
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL, const char *flags)
 {
     struct libfetch_url *u;
     libfetch_io_t *f;
@@ -83,9 +82,8 @@ libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL,
 /*
  * Make a URL
  */
-struct libfetch_url *libfetch_make_url(const char *scheme, const char *host,
-                                       int port, const char *doc,
-                                       const char *user, const char *pwd)
+struct libfetch_url *libfetch_make_url(const char *scheme, const char *host, int port,
+                                       const char *doc, const char *user, const char *pwd)
 {
     struct libfetch_url *u;
 
@@ -124,8 +122,7 @@ struct libfetch_url *libfetch_make_url(const char *scheme, const char *host,
 
 int libfetch_urlpath_safe(char x)
 {
-    if ((x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') ||
-        (x >= 'a' && x <= 'z'))
+    if ((x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z'))
         return 1;
 
     switch (x) {
@@ -201,16 +198,15 @@ static int libfetch_hexval(char ch)
  * character).  No terminator is written to dst (it is the caller's
  * responsibility).
  */
-static const char *libfetch_pctdecode(char *dst, const char *src,
-                                      const char *brk, size_t dlen)
+static const char *libfetch_pctdecode(char *dst, const char *src, const char *brk, size_t dlen)
 {
     int d1, d2;
     char c;
     const char *s;
 
     for (s = src; *s != '\0' && !strchr(brk, *s); s++) {
-        if (s[0] == '%' && (d1 = libfetch_hexval(s[1])) >= 0 &&
-            (d2 = libfetch_hexval(s[2])) >= 0 && (d1 > 0 || d2 > 0)) {
+        if (s[0] == '%' && (d1 = libfetch_hexval(s[1])) >= 0 && (d2 = libfetch_hexval(s[2])) >= 0 &&
+            (d1 > 0 || d2 > 0)) {
             c = d1 << 4 | d2;
             s += 2;
         } else if (s[0] == '%') {
@@ -300,8 +296,7 @@ find_user:
     }
 
     /* hostname */
-    if (*p == '[' && (q = strchr(p + 1, ']')) != NULL &&
-        (*++q == '\0' || *q == '/' || *q == ':')) {
+    if (*p == '[' && (q = strchr(p + 1, ']')) != NULL && (*++q == '\0' || *q == '/' || *q == ':')) {
         if ((i = q - p - 2) >= LIBFETCH_URL_HOSTLEN) {
             url_seterr(URL_BAD_HOST);
             goto ouch;

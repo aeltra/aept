@@ -123,20 +123,34 @@ void aept_set_verbosity(aept_ctx_t *ctx, int level)
 static int *flag_ptr(aept_config_t *cfg, int flag)
 {
     switch (flag) {
-    case AEPT_FLAG_FORCE_DEPENDS:    return &cfg->force_depends;
-    case AEPT_FLAG_DOWNLOAD_ONLY:    return &cfg->download_only;
-    case AEPT_FLAG_NOACTION:         return &cfg->noaction;
-    case AEPT_FLAG_ALLOW_DOWNGRADE:  return &cfg->allow_downgrade;
-    case AEPT_FLAG_REINSTALL:        return &cfg->reinstall;
-    case AEPT_FLAG_NO_CACHE:         return &cfg->no_cache;
-    case AEPT_FLAG_FORCE_CONFNEW:    return &cfg->force_confnew;
-    case AEPT_FLAG_FORCE_CONFOLD:    return &cfg->force_confold;
-    case AEPT_FLAG_PURGE:            return &cfg->purge;
-    case AEPT_FLAG_NON_INTERACTIVE:  return &cfg->non_interactive;
-    case AEPT_FLAG_CHECK_SIGNATURE:  return &cfg->check_signature;
-    case AEPT_FLAG_IGNORE_UID:       return &cfg->ignore_uid;
-    case AEPT_FLAG_KEEP_GOING:       return &cfg->keep_going;
-    default:                         return NULL;
+    case AEPT_FLAG_FORCE_DEPENDS:
+        return &cfg->force_depends;
+    case AEPT_FLAG_DOWNLOAD_ONLY:
+        return &cfg->download_only;
+    case AEPT_FLAG_NOACTION:
+        return &cfg->noaction;
+    case AEPT_FLAG_ALLOW_DOWNGRADE:
+        return &cfg->allow_downgrade;
+    case AEPT_FLAG_REINSTALL:
+        return &cfg->reinstall;
+    case AEPT_FLAG_NO_CACHE:
+        return &cfg->no_cache;
+    case AEPT_FLAG_FORCE_CONFNEW:
+        return &cfg->force_confnew;
+    case AEPT_FLAG_FORCE_CONFOLD:
+        return &cfg->force_confold;
+    case AEPT_FLAG_PURGE:
+        return &cfg->purge;
+    case AEPT_FLAG_NON_INTERACTIVE:
+        return &cfg->non_interactive;
+    case AEPT_FLAG_CHECK_SIGNATURE:
+        return &cfg->check_signature;
+    case AEPT_FLAG_IGNORE_UID:
+        return &cfg->ignore_uid;
+    case AEPT_FLAG_KEEP_GOING:
+        return &cfg->keep_going;
+    default:
+        return NULL;
     }
 }
 
@@ -186,8 +200,10 @@ int aept_update(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_update(ctx);
 
@@ -195,13 +211,15 @@ int aept_update(aept_ctx_t *ctx)
     return r;
 }
 
-int aept_install(aept_ctx_t *ctx, const char **names, int name_count,
-                 const char **local_paths, int local_count)
+int aept_install(aept_ctx_t *ctx, const char **names, int name_count, const char **local_paths,
+                 int local_count)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_install(ctx, names, name_count, local_paths, local_count);
 
@@ -213,8 +231,10 @@ int aept_upgrade(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_install(ctx, NULL, 0, NULL, 0);
 
@@ -226,8 +246,10 @@ int aept_remove(aept_ctx_t *ctx, const char **names, int count)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_remove(ctx, names, count);
 
@@ -239,8 +261,10 @@ int aept_autoremove(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_autoremove(ctx);
 
@@ -252,8 +276,10 @@ int aept_clean(aept_ctx_t *ctx)
 {
     int r;
 
-    if (aept_config_validate(&ctx->config) < 0) return -1;
-    if (aept_config_lock(ctx) < 0)               return -1;
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
 
     r = aept_op_clean(ctx);
 
@@ -280,8 +306,7 @@ int aept_pin(aept_ctx_t *ctx, const char **specs, int count)
             name = copy;
 
             if (!solver_ready) {
-                if (aept_solver_init(ctx) < 0 ||
-                        aept_status_load(ctx) < 0) {
+                if (aept_solver_init(ctx) < 0 || aept_status_load(ctx) < 0) {
                     aept_solver_fini(ctx);
                     free(copy);
                     return -1;
@@ -326,8 +351,7 @@ int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
 
     for (i = 0; i < count; i++) {
         char *list_path = NULL;
-        aept_asprintf(&list_path, "%s/%s.list",
-                  ctx->config.info_dir, names[i]);
+        aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, names[i]);
         if (!aept_file_exists(list_path)) {
             free(list_path);
             continue;
@@ -346,8 +370,7 @@ int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
 
     for (i = 0; i < count; i++) {
         char *list_path = NULL;
-        aept_asprintf(&list_path, "%s/%s.list",
-                  ctx->config.info_dir, names[i]);
+        aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, names[i]);
         if (!aept_file_exists(list_path)) {
             free(list_path);
             continue;
@@ -375,8 +398,7 @@ static int query_load_repos(aept_ctx_t *ctx)
         char *list_path = NULL;
         FILE *fp;
 
-        aept_asprintf(&list_path, "%s/%s",
-                  ctx->config.lists_dir, ctx->config.sources[i].name);
+        aept_asprintf(&list_path, "%s/%s", ctx->config.lists_dir, ctx->config.sources[i].name);
 
         fp = fopen(list_path, "r");
         if (!fp) {
@@ -409,7 +431,8 @@ static char *deparray_to_str(Pool *pool, Solvable *s, Id keyname, Id marker)
 
     len = 0;
     for (i = 0; i < q.count; i++) {
-        if (i > 0) len += 2;
+        if (i > 0)
+            len += 2;
         len += strlen(pool_dep2str(pool, q.elements[i]));
     }
 
@@ -440,13 +463,12 @@ static char *deparray_to_str(Pool *pool, Solvable *s, Id keyname, Id marker)
 
 struct api_list_entry {
     Id name_id;
-    const char *name;       /* pool string, stable while the pool lives */
+    const char *name; /* pool string, stable while the pool lives */
     Solvable *avail;
     Solvable *installed;
 };
 
-static struct api_list_entry *find_list_entry(struct api_list_entry *entries,
-                                              int n, Id name_id)
+static struct api_list_entry *find_list_entry(struct api_list_entry *entries, int n, Id name_id)
 {
     int i;
     for (i = 0; i < n; i++) {
@@ -470,8 +492,7 @@ static int cmp_api_list_entry(const void *a, const void *b)
     return strcmp(ea->name, eb->name);
 }
 
-int aept_list(aept_ctx_t *ctx, const char *pattern,
-              int filter_installed, int filter_upgradable,
+int aept_list(aept_ctx_t *ctx, const char *pattern, int filter_installed, int filter_upgradable,
               aept_pkg_list_t *out)
 {
     Pool *pool;
@@ -491,7 +512,8 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
 
     pool = aept_solver_pool(ctx->solver);
 
-    FOR_POOL_SOLVABLES(p) {
+    FOR_POOL_SOLVABLES(p)
+    {
         struct api_list_entry *e;
 
         s = pool_id2solvable(pool, p);
@@ -512,9 +534,8 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
         if (s->repo == pool->installed) {
             e->installed = s;
         } else {
-            if (!e->avail || pool_evrcmp_str(pool,
-                    pool_id2str(pool, s->evr),
-                    pool_id2str(pool, e->avail->evr), EVRCMP_COMPARE) > 0)
+            if (!e->avail || pool_evrcmp_str(pool, pool_id2str(pool, s->evr),
+                                             pool_id2str(pool, e->avail->evr), EVRCMP_COMPARE) > 0)
                 e->avail = s;
         }
     }
@@ -539,15 +560,13 @@ int aept_list(aept_ctx_t *ctx, const char *pattern,
             continue;
 
         upgradable = e->installed && e->avail &&
-            pool_evrcmp_str(pool,
-                pool_id2str(pool, e->avail->evr),
-                pool_id2str(pool, e->installed->evr), EVRCMP_COMPARE) > 0;
+                     pool_evrcmp_str(pool, pool_id2str(pool, e->avail->evr),
+                                     pool_id2str(pool, e->installed->evr), EVRCMP_COMPARE) > 0;
 
         if (filter_upgradable && !upgradable)
             continue;
 
-        show = filter_installed ? e->installed :
-               (e->avail ? e->avail : e->installed);
+        show = filter_installed ? e->installed : (e->avail ? e->avail : e->installed);
 
         aept_pkg_entry_t *pe = &out->entries[out->count++];
         pe->name = strdup(e->name);
@@ -607,7 +626,8 @@ int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
     if (!name_id)
         goto not_found;
 
-    FOR_POOL_SOLVABLES(p) {
+    FOR_POOL_SOLVABLES(p)
+    {
         s = pool_id2solvable(pool, p);
         if (s->name != name_id)
             continue;
@@ -615,9 +635,8 @@ int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
         if (s->repo == pool->installed) {
             installed = s;
         } else {
-            if (!best || pool_evrcmp_str(pool,
-                    pool_id2str(pool, s->evr),
-                    pool_id2str(pool, best->evr), EVRCMP_COMPARE) > 0)
+            if (!best || pool_evrcmp_str(pool, pool_id2str(pool, s->evr),
+                                         pool_id2str(pool, best->evr), EVRCMP_COMPARE) > 0)
                 best = s;
         }
     }
@@ -631,14 +650,11 @@ int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
     out->architecture = strdup(pool_id2str(pool, s->arch));
     out->installed_size = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
 
-    out->depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES,
-                                   -SOLVABLE_PREREQMARKER);
-    out->pre_depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES,
-                                       SOLVABLE_PREREQMARKER);
+    out->depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, -SOLVABLE_PREREQMARKER);
+    out->pre_depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, SOLVABLE_PREREQMARKER);
     out->recommends = deparray_to_str(pool, s, SOLVABLE_RECOMMENDS, 0);
     out->suggests = deparray_to_str(pool, s, SOLVABLE_SUGGESTS, 0);
-    out->provides = deparray_to_str(pool, s, SOLVABLE_PROVIDES,
-                                    -SOLVABLE_FILEMARKER);
+    out->provides = deparray_to_str(pool, s, SOLVABLE_PROVIDES, -SOLVABLE_FILEMARKER);
     out->conflicts = deparray_to_str(pool, s, SOLVABLE_CONFLICTS, 0);
     out->replaces = deparray_to_str(pool, s, SOLVABLE_OBSOLETES, 0);
 
@@ -690,8 +706,7 @@ void aept_pkg_info_free(aept_pkg_info_t *info)
 
 /* ── Query: files ────────────────────────────────────────────────── */
 
-int aept_files(aept_ctx_t *ctx, const char *name,
-               char ***paths_out, int *count_out)
+int aept_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -766,8 +781,7 @@ static size_t owns_path_len(const char *p)
     return len;
 }
 
-int aept_owns(aept_ctx_t *ctx, const char *path,
-              char ***owners_out, int *count_out)
+int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out)
 {
     DIR *dir;
     struct dirent *ent;
@@ -829,8 +843,7 @@ int aept_owns(aept_ctx_t *ctx, const char *path,
             if (*entry == '\0')
                 entry = ".";
 
-            if (owns_path_len(entry) == needle_len &&
-                strncmp(entry, needle, needle_len) == 0) {
+            if (owns_path_len(entry) == needle_len && strncmp(entry, needle, needle_len) == 0) {
                 size_t name_len = (size_t)(dot - ent->d_name);
 
                 if (count >= alloc) {
