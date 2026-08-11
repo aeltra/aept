@@ -2,7 +2,16 @@
 # preset: 4-space indent, function braces on their own line, control-statement
 # braces attached.
 #
-# Applied to src/libfetch/ to bring the fork in line with the rest of the tree.
+# SCOPE: src/libfetch/ ONLY.  That directory is a vendored fork we want
+# normalised to our conventions.  The rest of the tree is hand-formatted and
+# should stay that way -- running clang-format over it changes 2082 lines and
+# some of that is a regression: it splits an 81-column log call into two worse
+# lines, collapses deliberate comment spacing, and reflows main.c's hand-aligned
+# usage strings and option tables (711 lines by itself).
+#
+# The cost of that split: a rename crossing the boundary leaves ragged trailing
+# comments in hand-formatted headers, which have to be re-aligned by hand.
+#
 # Written against clang-format 19; older versions differ slightly, so a
 # reformat with another version may churn lines it should not.
 ---
