@@ -36,7 +36,12 @@ libaept_la_CFLAGS = -D_GNU_SOURCE -fvisibility=hidden \
     $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
-libaept_la_LDFLAGS = -version-info 0:0:0
+# current:revision:age.  aept_set_network_timeout() and aept_last_error()
+# were added and nothing was removed or changed, so this is a
+# backwards-compatible growth: current and age both up, revision back to 0.
+# The soname is current - age, so it stays libaept.so.0 and the binary
+# package stays libaept0 -- old callers keep working without a rebuild.
+libaept_la_LDFLAGS = -version-info 1:0:1
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include

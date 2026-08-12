@@ -1,7 +1,28 @@
 #!/usr/bin/make -f
 
+# The upstream version lives in two places that must agree: AC_INIT in
+# configure.ac, which becomes PACKAGE_VERSION and so the User-Agent the
+# binary reports, and debian/changelog, which is what the .deb claims to
+# be.  Bump only the changelog and the package installs a binary that
+# tells repository operators it is the older version -- silently, since
+# nothing else notices.  Compared here so that drift is a build failure
+# rather than a puzzle in somebody's access log.
+# The regex deliberately avoids a literal parenthesis: make counts parens
+# to find the end of $(shell ...), so an unbalanced one in the script
+# breaks the parse of this file.  [^,]* skips over AC_INIT's first
+# argument instead.
+UPSTREAM_VERSION := $(shell sed -n 's/^AC_INIT[^,]*, *\[\([^]]*\)\].*/\1/p' configure.ac)
+CHANGELOG_VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://' -e 's/-[^-]*$$//')
+
 %:
 	dh $@ --with python3
+
+override_dh_auto_configure:
+	@test -n "$(UPSTREAM_VERSION)" \
+	    || { echo "debian/rules: could not read AC_INIT from configure.ac" >&2; exit 1; }
+	@test "$(UPSTREAM_VERSION)" = "$(CHANGELOG_VERSION)" \
+	    || { echo "debian/rules: version mismatch -- configure.ac says $(UPSTREAM_VERSION), debian/changelog says $(CHANGELOG_VERSION)" >&2; exit 1; }
+	dh_auto_configure
 
 override_dh_auto_build:
 	dh_auto_build
