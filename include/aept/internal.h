@@ -36,6 +36,7 @@ typedef struct aept_config {
     char **archs;
     int narchs;
 
+    int network_timeout; /* seconds per network wait; 0 = wait forever */
     int check_signature; /* default 1 */
     int ignore_uid;      /* default 0 */
     int allow_downgrade;
@@ -51,6 +52,13 @@ typedef struct aept_config {
     int keep_going;
     int verbosity;
 } aept_config_t;
+
+/*
+ * Seconds a single network wait may take by default.  Generous because
+ * it is an idle timeout: nothing received at all for two minutes means
+ * the peer is gone, not that the link is slow.
+ */
+#define AEPT_DEFAULT_NETWORK_TIMEOUT 120
 
 /* Forward declarations */
 struct aept_solver;
@@ -74,6 +82,7 @@ struct aept_ctx {
     _Atomic int cancelled;
     int use_color;
     int config_loaded;
+    int last_error; /* AEPT_ERR_*, meaningful right after a failed call */
 };
 
 /*

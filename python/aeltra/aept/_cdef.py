@@ -18,6 +18,17 @@ void aept_cleanup(aept_ctx_t *ctx);
 int  aept_load_config(aept_ctx_t *ctx, const char *path);
 void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 void aept_set_verbosity(aept_ctx_t *ctx, int level);
+void aept_set_network_timeout(aept_ctx_t *ctx, int seconds);
+
+/* --- Error reporting ------------------------------------------------------ */
+
+enum {
+    AEPT_ERR_NONE,
+    AEPT_ERR_GENERAL,
+    AEPT_ERR_TIMEOUT,
+};
+
+int  aept_last_error(aept_ctx_t *ctx);
 
 /* --- Flags --------------------------------------------------------------- */
 

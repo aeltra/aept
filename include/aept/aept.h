@@ -51,6 +51,36 @@ AEPT_API int aept_load_config(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
+/*
+ * Seconds a single network wait may take before the transfer is
+ * abandoned; 0 waits indefinitely.  Defaults to 120, and to whatever
+ * `option network_timeout` says once a config file is loaded.
+ *
+ * This is an idle timeout: the clock restarts whenever the peer sends
+ * something, so a slow transfer runs to completion and only a silent
+ * one is cut off.  It exists so that an embedding application gets
+ * control back from a peer that stops responding without having to
+ * arrange a signal, which would act on the whole process rather than on
+ * this call.  A cut-off call reports AEPT_ERR_TIMEOUT.
+ *
+ * Name resolution is not covered: getaddrinfo(3) cannot be interrupted
+ * or bounded from here, and is limited only by the resolver's own
+ * configuration.
+ */
+AEPT_API void aept_set_network_timeout(aept_ctx_t *ctx, int seconds);
+
+/* --- Error reporting ----------------------------------------------------- */
+
+enum {
+    AEPT_ERR_NONE = 0,
+    AEPT_ERR_GENERAL,
+    AEPT_ERR_TIMEOUT,
+};
+
+/* Why the most recent call on this context failed.  Meaningful
+ * immediately after a call that returned non-zero. */
+AEPT_API int aept_last_error(aept_ctx_t *ctx);
+
 /* --- Flags --------------------------------------------------------------- */
 
 enum {

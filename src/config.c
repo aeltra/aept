@@ -34,6 +34,15 @@ void aept_config_set_defaults(struct aept_config *cfg)
 
     cfg->check_signature = 1;
     cfg->verbosity = AEPT_INFO;
+
+    /*
+     * Generous on purpose.  This is an idle timeout -- nothing at all
+     * received for two minutes -- so it never shortens a slow transfer,
+     * only a dead one.  It is on by default because the caller most
+     * likely to be hurt by a hang is an embedding application that does
+     * not know the option exists; 0 disables it.
+     */
+    cfg->network_timeout = AEPT_DEFAULT_NETWORK_TIMEOUT;
 }
 
 static void add_source(struct aept_config *cfg, const char *name, const char *url, int gzip)
@@ -81,6 +90,27 @@ static int parse_bool(const char *key, const char *value, int safe_default)
     return safe_default;
 }
 
+/*
+ * Parse a non-negative count of seconds.  Like parse_bool(), a value
+ * that does not parse falls back to the default with a warning rather
+ * than being silently taken as zero -- which for a timeout would mean
+ * "wait forever", the opposite of what a typo intends.
+ */
+static int parse_seconds(const char *key, const char *value, int safe_default)
+{
+    char *end;
+    long v;
+
+    errno = 0;
+    v = strtol(value, &end, 10);
+    if (end == value || *end != '\0' || errno != 0 || v < 0 || v > 86400) {
+        aept_log_warning("invalid value '%s' for option '%s', using default '%d'", value, key,
+                         safe_default);
+        return safe_default;
+    }
+    return (int)v;
+}
+
 static void set_option(struct aept_config *cfg, const char *key, const char *value)
 {
     char **strp = NULL;
@@ -115,6 +145,9 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
         return;
     } else if (strcmp(key, "allow_downgrade") == 0) {
         cfg->allow_downgrade = parse_bool(key, value, 0);
+        return;
+    } else if (strcmp(key, "network_timeout") == 0) {
+        cfg->network_timeout = parse_seconds(key, value, AEPT_DEFAULT_NETWORK_TIMEOUT);
         return;
     } else {
         aept_log_warning("unknown option '%s'", key);

@@ -641,7 +641,7 @@ static libfetch_conn_t *http_connect(struct libfetch_ctx *fctx, struct libfetch_
         return conn;
     }
 
-    if ((conn = libfetch_connect(cache_url, purl ?: URL, af, verbose)) == NULL)
+    if ((conn = libfetch_connect(cache_url, purl ?: URL, af, verbose, fctx->timeout)) == NULL)
         /* libfetch_connect() has already set an error code */
         return NULL;
 
@@ -889,12 +889,21 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             http_seterr(conn->err);
             goto ouch;
         case HTTP_PROTOCOL_ERROR:
-            /* fall through */
-        case -1:
             --i;
             if (cached)
                 continue;
             libfetch_syserr();
+            goto ouch;
+        case -1:
+            /*
+             * The read failed rather than the reply being malformed,
+             * and libfetch_read() has already recorded why -- a
+             * timeout, a signal, or a socket error.  Overwriting that
+             * with errno would lose the distinction the caller needs.
+             */
+            --i;
+            if (cached)
+                continue;
             goto ouch;
         default:
             http_seterr(conn->err);

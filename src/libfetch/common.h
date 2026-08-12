@@ -63,6 +63,7 @@ struct libfetch_ctx {
     struct libfetch_conn *connection_cache;
     int cache_global_limit;
     int cache_per_host_limit;
+    int timeout; /* seconds per wait; 0 waits indefinitely */
     const char *ssl_client_cert_file;
     const char *ssl_client_key_file;
 };
@@ -97,6 +98,7 @@ struct libfetch_conn {
     size_t bufsize;             /* buffer size */
     size_t buflen;              /* length of buffer contents */
     int buf_events;             /* poll flags for the next cycle */
+    int timeout;                /* copied from the context that opened it */
     char *next_buf;             /* pending buffer, e.g. after getln */
     size_t next_len;            /* size of pending buffer */
     int err;                    /* last protocol reply code */
@@ -117,7 +119,8 @@ int libfetch_default_proxy_port(const char *);
 int libfetch_bind(int, int, const char *);
 libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *, const struct libfetch_url *, int);
 void libfetch_cache_put(struct libfetch_ctx *, libfetch_conn_t *, int (*)(libfetch_conn_t *));
-libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *, int, int);
+libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *, int, int, int);
+int libfetch_wait(int sd, short events, int timeout);
 libfetch_conn_t *libfetch_reopen(int);
 int libfetch_ssl(struct libfetch_ctx *, libfetch_conn_t *, const struct libfetch_url *, int);
 ssize_t libfetch_read(libfetch_conn_t *, char *, size_t);

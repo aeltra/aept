@@ -13,6 +13,18 @@ class AeptError(Exception):
     """Raised when a libaept function returns an error."""
 
 
+class AeptTimeout(AeptError):
+    """Raised when a transfer was abandoned because the peer went quiet.
+
+    A subclass of AeptError, so code that does not care about the
+    distinction keeps working.  Worth catching separately because it is
+    the one failure that says nothing about the request itself: retrying
+    it later is reasonable, where retrying a 404 is not.
+
+    See Aept.set_network_timeout() for what counts as "quiet".
+    """
+
+
 # --- Enums ----------------------------------------------------------------
 
 class Flag(IntEnum):
@@ -143,6 +155,8 @@ class Aept:
             self._pending_exc = None
             raise exc_info[1].with_traceback(exc_info[2])
         if rc == -1:
+            if lib.aept_last_error(self._ctx) == lib.AEPT_ERR_TIMEOUT:
+                raise AeptTimeout(msg + ": timed out")
             raise AeptError(msg)
         return rc
 
@@ -157,6 +171,25 @@ class Aept:
 
     def set_verbosity(self, level: int):
         lib.aept_set_verbosity(self._ctx, int(level))
+
+    def set_network_timeout(self, seconds: int):
+        """Seconds a single network wait may take; 0 waits indefinitely.
+
+        Defaults to 120, and to whatever `option network_timeout` says
+        once a config file is loaded.
+
+        This is an idle timeout: the clock restarts whenever the server
+        sends something, so a slow download runs to completion and only
+        a silent one is cut off, raising AeptTimeout.  It is how a
+        script gets control back from a server that stops responding.
+        The alternative -- a signal -- acts on the whole process, not on
+        the one call.
+
+        Name resolution is not covered: getaddrinfo(3) cannot be
+        bounded from here, so an unreachable nameserver still blocks for
+        as long as the resolver's own configuration allows.
+        """
+        lib.aept_set_network_timeout(self._ctx, int(seconds))
 
     # --- Flags ------------------------------------------------------------
 

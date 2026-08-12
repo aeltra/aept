@@ -23,6 +23,20 @@
 #include "aept/solver.h"
 #include "aept/util.h"
 
+/*
+ * Record why a transfer failed, so a caller can tell "the peer went
+ * quiet" from "the peer said no".  A timeout is the one an embedding
+ * application is likely to want to retry rather than report.
+ */
+static void record_error(struct aept_ctx *ctx)
+{
+    if (libfetch_last_error.category == LIBFETCH_ERRCAT_FETCH &&
+        libfetch_last_error.code == LIBFETCH_ERR_TIMEOUT)
+        ctx->last_error = AEPT_ERR_TIMEOUT;
+    else
+        ctx->last_error = AEPT_ERR_GENERAL;
+}
+
 int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name)
 {
     libfetch_io_t *fio = NULL;
@@ -33,6 +47,8 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
     int ret = -1;
 
     aept_log_info("downloading %s", name);
+
+    ctx->last_error = AEPT_ERR_NONE;
 
     /*
      * Hand the client certificate to this context's fetch state.  It
@@ -46,7 +62,11 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
 
     fio = libfetch_get_url(ctx->http, url, "");
     if (!fio) {
-        aept_log_error("failed to download '%s'", url);
+        record_error(ctx);
+        if (ctx->last_error == AEPT_ERR_TIMEOUT)
+            aept_log_error("timed out downloading '%s'", url);
+        else
+            aept_log_error("failed to download '%s'", url);
         return -1;
     }
 
@@ -70,7 +90,11 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
         if (n < 0) {
             if (errno == EINTR)
                 continue;
-            aept_log_error("failed to download '%s'", url);
+            record_error(ctx);
+            if (ctx->last_error == AEPT_ERR_TIMEOUT)
+                aept_log_error("timed out downloading '%s'", url);
+            else
+                aept_log_error("failed to download '%s'", url);
             goto cleanup;
         }
         if (fwrite(buf, 1, n, fp) != (size_t)n) {

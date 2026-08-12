@@ -4,12 +4,12 @@ AM_CPPFLAGS = \
     -I$(top_srcdir)/src \
     -I$(srcdir)
 
-# Unit tests run as tests; httpget is a harness test_http.sh drives, so
-# it is built but never run on its own.
+# Unit tests run as tests; httpget and stallclient are harnesses the
+# shell tests drive, so they are built but never run on their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env
 
-check_PROGRAMS = $(unit_tests) httpget threadrace
+check_PROGRAMS = $(unit_tests) httpget threadrace stallclient
 
 noinst_HEADERS = test.h
 
@@ -20,6 +20,14 @@ httpget_CFLAGS = -D_GNU_SOURCE
 # The static archive keeps them, and these three reach past aept.h.
 httpget_LDADD = $(top_builddir)/src/libaept.la
 httpget_LDFLAGS = -static
+
+# A harness for test_cancel.sh and test_timeout.sh.  Links the library
+# rather than individual modules, for the same reason httpget does:
+# aept_download() is not part of the ABI.
+stallclient_SOURCES = stallclient.c
+stallclient_CFLAGS = -D_GNU_SOURCE
+stallclient_LDADD = $(top_builddir)/src/libaept.la
+stallclient_LDFLAGS = -static
 
 # Also a harness, driven by test_threads.sh.
 threadrace_SOURCES = threadrace.c
@@ -93,9 +101,11 @@ dist_check_SCRIPTS = \
     test_exec_path.sh \
     test_ssl_client_cert.sh \
     test_http.sh \
-    test_threads.sh
+    test_threads.sh \
+    test_cancel.sh \
+    test_timeout.sh
 
-EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py
+EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py
 
 TEST_EXTENSIONS = .sh
 
@@ -107,6 +117,7 @@ AM_TESTS_ENVIRONMENT = \
     AEPT_BIN='$(abs_top_builddir)/src/aept'; export AEPT_BIN; \
     srcdir='$(abs_srcdir)'; export srcdir; \
     HTTPGET='$(abs_builddir)/httpget'; export HTTPGET; \
-    THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE;
+    THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
+    STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT;
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)

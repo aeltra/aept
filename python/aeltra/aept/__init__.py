@@ -3,6 +3,7 @@
 from .aept import (
     Aept,
     AeptError,
+    AeptTimeout,
     Flag,
     LogLevel,
     PkgEntry,
@@ -13,6 +14,7 @@ from .aept import (
 __all__ = [
     "Aept",
     "AeptError",
+    "AeptTimeout",
     "Flag",
     "LogLevel",
     "PkgEntry",

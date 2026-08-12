@@ -49,6 +49,12 @@ aept_ctx_t *aept_init(void)
         free(ctx);
         return NULL;
     }
+    /* A caller that never loads a config file still gets the default
+     * timeout rather than an unbounded wait.  Set directly rather than
+     * through aept_config_set_defaults(), which allocates the path
+     * strings that only aept_load_config() knows how to free. */
+    ctx->config.network_timeout = AEPT_DEFAULT_NETWORK_TIMEOUT;
+    libfetch_set_timeout(ctx->http, ctx->config.network_timeout);
     return ctx;
 }
 
@@ -104,6 +110,8 @@ int aept_load_config(aept_ctx_t *ctx, const char *path)
     aept_config_apply_offline_root(&ctx->config);
     ctx->config_loaded = 1;
 
+    libfetch_set_timeout(ctx->http, ctx->config.network_timeout);
+
     return 0;
 }
 
@@ -116,6 +124,19 @@ void aept_set_offline_root(aept_ctx_t *ctx, const char *path)
 void aept_set_verbosity(aept_ctx_t *ctx, int level)
 {
     ctx->config.verbosity = level;
+}
+
+void aept_set_network_timeout(aept_ctx_t *ctx, int seconds)
+{
+    if (seconds < 0)
+        seconds = 0;
+    ctx->config.network_timeout = seconds;
+    libfetch_set_timeout(ctx->http, seconds);
+}
+
+int aept_last_error(aept_ctx_t *ctx)
+{
+    return ctx->last_error;
 }
 
 /* ── Flags ───────────────────────────────────────────────────────── */

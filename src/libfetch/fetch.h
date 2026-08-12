@@ -71,6 +71,7 @@ enum {
     LIBFETCH_OK = 0,
     LIBFETCH_ERR_UNKNOWN,
     LIBFETCH_ERR_UNCHANGED,
+    LIBFETCH_ERR_TIMEOUT,
 
     /* Error URL category codes */
     LIBFETCH_ERR_URL_MALFORMED = 1,
@@ -119,6 +120,22 @@ void libfetch_ctx_free(struct libfetch_ctx *);
 void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_file,
                                      const char *key_file);
 
+/*
+ * Seconds a single wait may take before the transfer is abandoned with
+ * LIBFETCH_ERR_TIMEOUT; 0 waits indefinitely.
+ *
+ * This is an idle timeout, not a budget for the transfer: the clock
+ * starts afresh on every wait, so it fires only when the peer stops
+ * saying anything at all.  A transfer that is merely slow is never cut
+ * off, which a deadline over the whole request could not promise.
+ *
+ * It belongs to the context rather than to the process, so two contexts
+ * downloading concurrently can hold different values.  Connections
+ * carry the value they were opened with, refreshed from the context
+ * when one is taken back out of the cache.
+ */
+void libfetch_set_timeout(struct libfetch_ctx *ctx, int seconds);
+
 void libfetch_io_close(libfetch_io_t *);
 ssize_t libfetch_io_read(libfetch_io_t *, void *, size_t);
 
@@ -139,12 +156,6 @@ void libfetch_free_url(struct libfetch_url *);
 
 /* Last error code, per-thread */
 extern _Thread_local struct libfetch_error libfetch_last_error;
-
-/* I/O timeout */
-extern int libfetch_timeout;
-
-/* Restart interrupted syscalls */
-extern volatile int libfetch_restart_calls;
 
 #if defined(__cplusplus)
 }

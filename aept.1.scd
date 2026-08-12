@@ -334,6 +334,12 @@ The following keys are recognized:
 |  allow_downgrade
 :  0
 :  Set to 1 to allow package downgrades
+|  network_timeout
+:  120
+:  Seconds a single network wait may take before a transfer is
+   abandoned; 0 waits indefinitely. This is an idle timeout, so a
+   slow download runs to completion and only one where nothing
+   arrives at all is cut off. Name resolution is not covered by it.
 
 ## Example configuration
 

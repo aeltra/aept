@@ -244,6 +244,45 @@ http_stub_stop() {
     STUB_PID=
 }
 
+# stall_serve <logfile> — start stallserver.py, which accepts a
+# connection and then never says anything.  Sets STALL_PORT and
+# STALL_PID.
+stall_serve() {
+    python3 -u "${srcdir:-.}/stallserver.py" > "$1" 2>&1 &
+    STALL_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        STALL_PORT=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' "$1" | head -1)
+        if [ -n "$STALL_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$STALL_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+stall_stop() {
+    [ -n "${STALL_PID:-}" ] && kill "$STALL_PID" 2>/dev/null
+    STALL_PID=
+}
+
+# wait_for_line <file> <pattern> <tenths> — true once the pattern shows
+# up in the file.  Used instead of watching for process death, because
+# an exited-but-unreaped child still answers kill -0.
+wait_for_line() {
+    _i=0
+    while [ "$_i" -lt "$3" ]; do
+        grep -q "$2" "$1" 2>/dev/null && return 0
+        sleep 0.1
+        _i=$((_i + 1))
+    done
+    return 1
+}
+
 # aept_run <root> <args...> — invoke aept against an offline root.
 aept_run() {
     _root=$1

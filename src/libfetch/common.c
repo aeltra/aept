@@ -63,6 +63,11 @@ void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_
     ctx->ssl_client_key_file = key_file;
 }
 
+void libfetch_set_timeout(struct libfetch_ctx *ctx, int seconds)
+{
+    ctx->timeout = seconds > 0 ? seconds : 0;
+}
+
 /*
  * Emit status message
  */
@@ -150,6 +155,9 @@ libfetch_conn_t *libfetch_reopen(int sd)
     conn->next_buf = NULL;
     conn->next_len = 0;
     conn->sd = sd;
+    /* POLLIN from the start, so a plain read waits in libfetch_wait()
+     * rather than in read(2).  libfetch_ssl() clears it: on a TLS
+     * connection it is SSL_read() that names the readiness it wants. */
     conn->buf_events = POLLIN;
     return conn;
 }
@@ -177,27 +185,57 @@ int libfetch_bind(int sd, int af, const char *addr)
     return -1;
 }
 
-static int compute_timeout(const struct timeval *tv)
+/*
+ * Every wait in this library funnels through here, and every wait is a
+ * poll: connect, the TLS handshake, reads and writes alike.  Two
+ * properties follow from that, and neither survives if any of them is
+ * allowed to block in a bare read(2) instead.
+ *
+ * It can be bounded.  `timeout` is the seconds this one wait may take,
+ * afresh each time -- an idle timeout, so a slow transfer is never cut
+ * off, only a silent one.  Zero waits indefinitely.
+ *
+ * It can be interrupted.  poll(2) is never restarted after a signal,
+ * whatever flags the handler carries, whereas read(2) is restarted when
+ * the handler was installed with SA_RESTART -- which is what glibc's
+ * signal(3) gives a C embedder by default, and what Python's
+ * signal.siginterrupt(sig, False) turns on.  Waiting here rather than in
+ * read(2) is therefore what lets any embedder abandon a transfer, and
+ * EINTR is reported rather than retried so the caller can act on it.
+ *
+ * One wait escapes both properties: getaddrinfo(3) retries internally on
+ * EINTR and is not ours to bound, so name resolution is capped only by
+ * the resolver's own configuration -- around ten seconds by default.
+ */
+int libfetch_wait(int sd, short events, int timeout)
 {
-    struct timeval cur;
-    int timeout;
+    struct pollfd pfd = {.fd = sd, .events = events};
+    int r;
 
-    gettimeofday(&cur, NULL);
-    timeout = (tv->tv_sec - cur.tv_sec) * 1000 + (tv->tv_usec - cur.tv_usec) / 1000;
-    return timeout;
+    errno = 0;
+    r = poll(&pfd, 1, timeout > 0 ? timeout * 1000 : -1);
+    if (r == 0) {
+        libfetch_seterr(LIBFETCH_ERR_TIMEOUT);
+        return -1;
+    }
+    if (r == -1) {
+        libfetch_syserr();
+        return -1;
+    }
+    return 0;
 }
 
 /*
  * Establish a TCP connection to the specified port on the specified host.
  */
 libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetch_url *url, int af,
-                                  int verbose)
+                                  int verbose, int timeout)
 {
     libfetch_conn_t *conn;
     char pbuf[10];
     const char *bindaddr;
     struct addrinfo hints, *res, *res0;
-    int sd, error, sock_flags = SOCK_CLOEXEC;
+    int sd, error, reported = 0;
 
     if (verbose)
         libfetch_info("looking up %s", url->host);
@@ -217,12 +255,20 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
     if (verbose)
         libfetch_info("connecting to %s:%d", url->host, url->port);
 
-    if (libfetch_timeout)
-        sock_flags |= SOCK_NONBLOCK;
-
-    /* try to connect */
+    /*
+     * The socket is non-blocking for the connect whether or not a
+     * timeout is set, so that the wait always happens in libfetch_wait()
+     * -- bounded when a timeout is configured, interruptible either way.
+     * Blocking is restored below; libfetch_ssl() turns it off again for
+     * the life of a TLS connection.
+     */
     for (sd = -1, res = res0; res; sd = -1, res = res->ai_next) {
-        if ((sd = socket(res->ai_family, res->ai_socktype | sock_flags, res->ai_protocol)) == -1)
+        /* Reset per attempt, so the last address tried is the one whose
+         * failure gets reported. */
+        reported = 0;
+
+        if ((sd = socket(res->ai_family, res->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                         res->ai_protocol)) == -1)
             continue;
         if (bindaddr != NULL && *bindaddr != '\0' &&
             libfetch_bind(sd, res->ai_family, bindaddr) != 0) {
@@ -234,46 +280,33 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
         if (connect(sd, res->ai_addr, res->ai_addrlen) == 0)
             break;
 
-        if (libfetch_timeout) {
-            struct timeval timeout_end;
-            struct pollfd pfd = {.fd = sd, .events = POLLOUT};
-            int r = -1;
-
-            gettimeofday(&timeout_end, NULL);
-            timeout_end.tv_sec += libfetch_timeout;
-
-            do {
-                int timeout_cur = compute_timeout(&timeout_end);
-                if (timeout_cur < 0) {
-                    errno = ETIMEDOUT;
-                    break;
-                }
-                errno = 0;
-                r = poll(&pfd, 1, timeout_cur);
-                if (r == -1) {
-                    if (errno == EINTR && libfetch_restart_calls)
-                        continue;
-                    break;
-                }
-            } while (pfd.revents == 0);
-
-            if (r == 1 && (pfd.revents & POLLOUT) == POLLOUT) {
+        if (errno == EINPROGRESS) {
+            if (libfetch_wait(sd, POLLOUT, timeout) == 0) {
                 socklen_t len = sizeof(error);
+
                 if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 && error == 0)
                     break;
                 errno = error;
+            } else {
+                /* libfetch_wait() has recorded the timeout or the
+                 * signal; close() below would clobber errno. */
+                reported = 1;
             }
         }
         close(sd);
     }
     freeaddrinfo(res0);
     if (sd == -1) {
-        libfetch_syserr();
+        if (!reported)
+            libfetch_syserr();
         return NULL;
     }
 
-    if (sock_flags & SOCK_NONBLOCK)
-        fcntl(sd, F_SETFL, fcntl(sd, F_GETFL) & ~O_NONBLOCK);
+    if (fcntl(sd, F_SETFL, fcntl(sd, F_GETFL) & ~O_NONBLOCK) == -1) {
+        libfetch_syserr();
+        close(sd);
+        return NULL;
+    }
 
     if ((conn = libfetch_reopen(sd)) == NULL) {
         libfetch_syserr();
@@ -282,6 +315,7 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
     }
     conn->cache_url = libfetch_copy_url(cache_url);
     conn->cache_af = af;
+    conn->timeout = timeout;
     return conn;
 }
 
@@ -350,6 +384,10 @@ libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *ctx, const struct libfe
                 last_conn->next_cached = conn->next_cached;
             else
                 ctx->connection_cache = conn->next_cached;
+            /* The connection carries the timeout it was opened with;
+             * refresh it in case the context has been reconfigured
+             * since. */
+            conn->timeout = ctx->timeout;
             return conn;
         }
         last_conn = conn;
@@ -551,6 +589,15 @@ static int map_tls_error(void)
     }
 }
 
+static int set_nonblocking(int sd)
+{
+    int flags = fcntl(sd, F_GETFL);
+
+    if (flags == -1)
+        return -1;
+    return fcntl(sd, F_SETFL, flags | O_NONBLOCK);
+}
+
 /*
  * Enable SSL on a connection.
  */
@@ -573,15 +620,44 @@ int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn, const struct 
         goto err;
 
     conn->buf_events = 0;
+
+    /*
+     * The socket goes non-blocking here and stays that way for the life
+     * of the connection, so OpenSSL never waits inside its own read(2):
+     * every wait is a libfetch_wait() we can bound and interrupt.  The
+     * handshake in particular was unreachable by any timeout before,
+     * which mattered because it is where a peer that accepts and then
+     * says nothing leaves us -- before a single byte of HTTP.
+     */
+    if (set_nonblocking(conn->sd) == -1) {
+        libfetch_syserr();
+        return -1;
+    }
+
     SSL_set_fd(conn->ssl, conn->sd);
     if (!SSL_set_tlsext_host_name(conn->ssl, (char *)(uintptr_t)URL->host)) {
         fprintf(stderr, "TLS server name indication extension failed for host %s\n", URL->host);
         goto err;
     }
 
-    if (SSL_connect(conn->ssl) == -1) {
-        tls_seterr(map_tls_error());
-        return -1;
+    for (;;) {
+        int r = SSL_connect(conn->ssl);
+
+        if (r == 1)
+            break;
+        switch (SSL_get_error(conn->ssl, r)) {
+        case SSL_ERROR_WANT_READ:
+            if (libfetch_wait(conn->sd, POLLIN, conn->timeout) == -1)
+                return -1;
+            break;
+        case SSL_ERROR_WANT_WRITE:
+            if (libfetch_wait(conn->sd, POLLOUT, conn->timeout) == -1)
+                return -1;
+            break;
+        default:
+            tls_seterr(map_tls_error());
+            return -1;
+        }
     }
 
     conn->ssl_cert = SSL_get_peer_certificate(conn->ssl);
@@ -625,15 +701,12 @@ err:
 }
 
 /*
- * Read a character from a connection w/ timeout
+ * Read from a connection.  Waits until data arrives, the peer hangs up,
+ * the idle timeout expires or a signal interrupts it.
  */
 ssize_t libfetch_read(libfetch_conn_t *conn, char *buf, size_t len)
 {
-    struct timeval timeout_end;
-    struct pollfd pfd;
-    int timeout_cur;
     ssize_t rlen;
-    int r;
 
     if (len == 0)
         return 0;
@@ -647,36 +720,10 @@ ssize_t libfetch_read(libfetch_conn_t *conn, char *buf, size_t len)
         return len;
     }
 
-    if (libfetch_timeout) {
-        gettimeofday(&timeout_end, NULL);
-        timeout_end.tv_sec += libfetch_timeout;
-    }
-
-    pfd.fd = conn->sd;
     for (;;) {
-        pfd.events = conn->buf_events;
-        if (pfd.events) {
-            do {
-                if (libfetch_timeout) {
-                    timeout_cur = compute_timeout(&timeout_end);
-                    if (timeout_cur < 0) {
-                        errno = ETIMEDOUT;
-                        libfetch_syserr();
-                        return -1;
-                    }
-                } else {
-                    timeout_cur = -1;
-                }
-                errno = 0;
-                r = poll(&pfd, 1, timeout_cur);
-                if (r == -1) {
-                    if (errno == EINTR && libfetch_restart_calls)
-                        continue;
-                    libfetch_syserr();
-                    return -1;
-                }
-            } while (pfd.revents == 0);
-        }
+        if (conn->buf_events &&
+            libfetch_wait(conn->sd, (short)conn->buf_events, conn->timeout) == -1)
+            return -1;
 
         if (conn->ssl != NULL) {
             rlen = SSL_read(conn->ssl, buf, len);
@@ -703,14 +750,18 @@ ssize_t libfetch_read(libfetch_conn_t *conn, char *buf, size_t len)
         if (rlen >= 0)
             break;
 
-        if (errno != EINTR || !libfetch_restart_calls)
-            return -1;
+        /* Only reachable when read(2) itself failed -- every other
+         * failure above has returned already, having recorded its own
+         * reason.  Report this one here too, so that callers never need
+         * to guess at errno and overwrite a timeout with it. */
+        libfetch_syserr();
+        return -1;
     }
     return rlen;
 }
 
 /*
- * Read a line of text from a connection w/ timeout
+ * Read a line of text from a connection
  */
 #define MIN_BUF_SIZE 1024
 
@@ -773,61 +824,51 @@ int libfetch_getln(libfetch_conn_t *conn)
 }
 
 /*
- * Write a vector to a connection w/ timeout
- * Note: can modify the iovec.
+ * Write to a connection.  Waits for the socket to accept the data, the
+ * idle timeout to expire or a signal to interrupt it.
  */
 ssize_t libfetch_write(libfetch_conn_t *conn, const void *buf, size_t len)
 {
-    struct timeval now, timeout, waittv;
-    fd_set writefds;
     ssize_t wlen, total;
-    int r;
-
-    if (libfetch_timeout) {
-        FD_ZERO(&writefds);
-        gettimeofday(&timeout, NULL);
-        timeout.tv_sec += libfetch_timeout;
-    }
 
     total = 0;
     while (len) {
-        while (libfetch_timeout && !FD_ISSET(conn->sd, &writefds)) {
-            FD_SET(conn->sd, &writefds);
-            gettimeofday(&now, NULL);
-            waittv.tv_sec = timeout.tv_sec - now.tv_sec;
-            waittv.tv_usec = timeout.tv_usec - now.tv_usec;
-            if (waittv.tv_usec < 0) {
-                waittv.tv_usec += 1000000;
-                waittv.tv_sec--;
+        errno = 0;
+        if (conn->ssl != NULL) {
+            /* Non-blocking on a TLS connection, so a write that cannot
+             * proceed asks to be retried rather than blocking inside
+             * OpenSSL.  It may want readability, mid-renegotiation. */
+            wlen = SSL_write(conn->ssl, buf, len);
+            if (wlen <= 0) {
+                switch (SSL_get_error(conn->ssl, wlen)) {
+                case SSL_ERROR_WANT_READ:
+                    if (libfetch_wait(conn->sd, POLLIN, conn->timeout) == -1)
+                        return -1;
+                    continue;
+                case SSL_ERROR_WANT_WRITE:
+                    if (libfetch_wait(conn->sd, POLLOUT, conn->timeout) == -1)
+                        return -1;
+                    continue;
+                default:
+                    errno = EIO;
+                    libfetch_syserr();
+                    return -1;
+                }
             }
-            if (waittv.tv_sec < 0) {
-                errno = ETIMEDOUT;
+        } else {
+            /* Wait here rather than in a blocking send(), so a peer that
+             * stops reading is bounded like every other stall. */
+            if (libfetch_wait(conn->sd, POLLOUT, conn->timeout) == -1)
+                return -1;
+            wlen = send(conn->sd, buf, len, MSG_NOSIGNAL);
+            if (wlen == 0) {
+                /* we consider a short write a failure */
+                errno = EPIPE;
                 libfetch_syserr();
                 return -1;
             }
-            errno = 0;
-            r = select(conn->sd + 1, NULL, &writefds, NULL, &waittv);
-            if (r == -1) {
-                if (errno == EINTR && libfetch_restart_calls)
-                    continue;
+            if (wlen < 0)
                 return -1;
-            }
-        }
-        errno = 0;
-        if (conn->ssl != NULL)
-            wlen = SSL_write(conn->ssl, buf, len);
-        else
-            wlen = send(conn->sd, buf, len, MSG_NOSIGNAL);
-        if (wlen == 0) {
-            /* we consider a short write a failure */
-            errno = EPIPE;
-            libfetch_syserr();
-            return -1;
-        }
-        if (wlen < 0) {
-            if (errno == EINTR && libfetch_restart_calls)
-                continue;
-            return -1;
         }
         total += wlen;
         buf = (const char *)buf + wlen;
