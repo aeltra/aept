@@ -14,6 +14,15 @@
 UPSTREAM_VERSION := $(shell sed -n 's/^AC_INIT[^,]*, *\[\([^]]*\)\].*/\1/p' configure.ac)
 CHANGELOG_VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://' -e 's/-[^-]*$$//')
 
+# The library major from -version-number is the soname, and so the name of
+# the binary package that ships it.  debian/libaept0.install installs
+# usr/lib/*/libaept.so.* -- a glob -- so bumping the major without renaming
+# the package produces a package called libaept0 containing libaept.so.1,
+# and the build succeeds.  dpkg-shlibdeps then tells dependents they need
+# libaept1, which nothing provides, and the breakage lands at install time
+# on somebody else's machine.
+SONAME_MAJOR := $(shell sed -n 's/^libaept_la_LDFLAGS *= *-version-number *\([0-9][0-9]*\).*/\1/p' src/Makefile.am)
+
 %:
 	dh $@ --with python3
 
@@ -22,6 +31,10 @@ override_dh_auto_configure:
 	    || { echo "debian/rules: could not read AC_INIT from configure.ac" >&2; exit 1; }
 	@test "$(UPSTREAM_VERSION)" = "$(CHANGELOG_VERSION)" \
 	    || { echo "debian/rules: version mismatch -- configure.ac says $(UPSTREAM_VERSION), debian/changelog says $(CHANGELOG_VERSION)" >&2; exit 1; }
+	@test -n "$(SONAME_MAJOR)" \
+	    || { echo "debian/rules: could not read -version-number from src/Makefile.am" >&2; exit 1; }
+	@grep -q "^Package: libaept$(SONAME_MAJOR)\$$" debian/control \
+	    || { echo "debian/rules: the library is libaept.so.$(SONAME_MAJOR), but debian/control declares no 'Package: libaept$(SONAME_MAJOR)' -- bumping the major renames the binary package, and debian/libaept*.install, debian/control and python/aeltra/aept/_ffi.py all need to follow" >&2; exit 1; }
 	dh_auto_configure
 
 override_dh_auto_build:
