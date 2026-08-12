@@ -163,29 +163,6 @@ libfetch_conn_t *libfetch_reopen(int sd)
 }
 
 /*
- * Bind a socket to a specific local address
- */
-int libfetch_bind(int sd, int af, const char *addr)
-{
-    struct addrinfo hints, *res, *res0;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = af;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = 0;
-    if (getaddrinfo(addr, NULL, &hints, &res0))
-        return -1;
-    for (res = res0; res; res = res->ai_next) {
-        if (bind(sd, res->ai_addr, res->ai_addrlen) == 0) {
-            freeaddrinfo(res0);
-            return 0;
-        }
-    }
-    freeaddrinfo(res0);
-    return -1;
-}
-
-/*
  * Every wait in this library funnels through here, and every wait is a
  * poll: connect, the TLS handshake, reads and writes alike.  Two
  * properties follow from that, and neither survives if any of them is
@@ -233,7 +210,6 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
 {
     libfetch_conn_t *conn;
     char pbuf[10];
-    const char *bindaddr;
     struct addrinfo hints, *res, *res0;
     int sd, error, reported = 0;
 
@@ -250,8 +226,6 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
         netdb_seterr(error);
         return NULL;
     }
-    bindaddr = getenv("FETCH_BIND_ADDRESS");
-
     if (verbose)
         libfetch_info("connecting to %s:%d", url->host, url->port);
 
@@ -270,12 +244,6 @@ libfetch_conn_t *libfetch_connect(struct libfetch_url *cache_url, struct libfetc
         if ((sd = socket(res->ai_family, res->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK,
                          res->ai_protocol)) == -1)
             continue;
-        if (bindaddr != NULL && *bindaddr != '\0' &&
-            libfetch_bind(sd, res->ai_family, bindaddr) != 0) {
-            libfetch_info("failed to bind to '%s'", bindaddr);
-            close(sd);
-            continue;
-        }
 
         if (connect(sd, res->ai_addr, res->ai_addrlen) == 0)
             break;

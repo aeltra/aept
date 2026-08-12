@@ -63,6 +63,8 @@
  * SUCH DAMAGE.
  */
 
+#include <config.h>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <ctype.h>
@@ -97,6 +99,20 @@
 #define HTTP_NEED_PROXY_AUTH 407
 #define HTTP_BAD_RANGE 416
 #define HTTP_PROTOCOL_ERROR 999
+
+/*
+ * What aept calls itself to a repository.
+ *
+ * Fixed, and deliberately not taken from $HTTP_USER_AGENT: how a package
+ * manager identifies itself is part of the request it makes, not something
+ * the surrounding environment gets to rewrite.  Built from PACKAGE_NAME and
+ * PACKAGE_VERSION so it tracks releases instead of going stale.
+ *
+ * It used to send "libfetch/2.0" -- a vendored fork claiming to be upstream
+ * libfetch, at a version it is not, telling an operator reading their logs
+ * nothing they could act on.
+ */
+#define AEPT_USER_AGENT PACKAGE_NAME "/" PACKAGE_VERSION
 
 #define HTTP_REDIRECT(xyz)                                                                         \
     ((xyz) == HTTP_MOVED_PERM || (xyz) == HTTP_MOVED_TEMP || (xyz) == HTTP_TEMP_REDIRECT ||        \
@@ -818,17 +834,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             }
         }
 
-        /* other headers */
-        if ((p = getenv("HTTP_REFERER")) != NULL && *p != '\0') {
-            if (strcasecmp(p, "auto") == 0)
-                http_cmd(conn, "Referer: %s://%s%s\r\n", url->scheme, host, url->doc);
-            else
-                http_cmd(conn, "Referer: %s\r\n", p);
-        }
-        if ((p = getenv("HTTP_USER_AGENT")) != NULL && *p != '\0')
-            http_cmd(conn, "User-Agent: %s\r\n", p);
-        else
-            http_cmd(conn, "User-Agent: %s\r\n", LIBFETCH_VER);
+        http_cmd(conn, "User-Agent: %s\r\n", AEPT_USER_AGENT);
         http_cmd(conn, "\r\n");
 
         /*

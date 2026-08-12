@@ -305,4 +305,38 @@ conns=$(cat "$work/count4")
 connections, expected 3 — a connection crossed between contexts"
 note "three contexts keep their connections to themselves"
 
+# ── the request identifies aept, and the environment cannot change it ──
+#
+# How a package manager identifies itself is part of the request it
+# makes.  libfetch inherited three environment variables that let the
+# surrounding process rewrite it: $HTTP_USER_AGENT replaced the
+# User-Agent outright, $HTTP_REFERER added a Referer aept never wants to
+# send, and $FETCH_BIND_ADDRESS chose the local source address.  All
+# three are gone; these assertions are what would notice them coming
+# back.
+
+HTTP_USER_AGENT="evil/9" HTTP_REFERER="http://evil.example/" \
+    timeout 60 "$HTTPGET" "$base/echo-headers" "$out" >/dev/null 2>&1 \
+    || fail "user agent: the echo request itself failed"
+
+grep -q '^user-agent: aept/' "$out" \
+    || fail "the request did not identify aept:
+$(cat "$out")"
+grep -q 'evil/9' "$out" \
+    && fail "\$HTTP_USER_AGENT rewrote the User-Agent:
+$(cat "$out")"
+grep -q '^referer: (absent)$' "$out" \
+    || fail "\$HTTP_REFERER added a Referer header:
+$(cat "$out")"
+note "identifies as $(sed -n 's/^user-agent: //p' "$out"), whatever the environment says"
+
+# An address the machine cannot bind to.  While FETCH_BIND_ADDRESS was
+# honoured, the bind failed, that address was skipped, and the download
+# failed with it; now the variable is simply not consulted.
+FETCH_BIND_ADDRESS=192.0.2.1 timeout 60 "$HTTPGET" "$base/ok" "$out" >/dev/null 2>&1 \
+    || fail "\$FETCH_BIND_ADDRESS is still honoured: it broke the connection"
+body_is_file "$out" 'hello from ok
+'
+note "\$FETCH_BIND_ADDRESS no longer chooses the local address"
+
 exit 0

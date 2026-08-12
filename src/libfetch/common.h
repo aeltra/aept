@@ -116,7 +116,6 @@ void libfetch_info(const char *, ...) LIBFETCH_PRINTFLIKE(1, 2);
 uintmax_t libfetch_parseuint(const char *p, const char **endptr, unsigned int radix, uintmax_t max);
 int libfetch_default_port(const char *);
 int libfetch_default_proxy_port(const char *);
-int libfetch_bind(int, int, const char *);
 libfetch_conn_t *libfetch_cache_get(struct libfetch_ctx *, const struct libfetch_url *, int);
 void libfetch_cache_put(struct libfetch_ctx *, libfetch_conn_t *, int (*)(libfetch_conn_t *));
 libfetch_conn_t *libfetch_connect(struct libfetch_url *, struct libfetch_url *, int, int, int);

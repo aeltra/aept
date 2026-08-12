@@ -36,8 +36,6 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define LIBFETCH_VER "libfetch/2.0"
-
 #define LIBFETCH_URL_HOSTLEN 255
 #define LIBFETCH_URL_SCHEMELEN 16
 #define LIBFETCH_URL_USERLEN 256

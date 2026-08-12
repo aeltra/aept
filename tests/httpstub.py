@@ -127,6 +127,18 @@ class Handler(socketserver.BaseRequestHandler):
                 send(response("403 Forbidden", b"wrong credentials\n"))
             return True
 
+        elif path == "/echo-headers":
+            # Report the request headers the client chooses to send, so a
+            # test can assert on aept's identity rather than on the
+            # environment's.  Absent headers are reported as "(absent)",
+            # which is the expected answer for Referer.
+            interesting = ("user-agent", "referer")
+            body = "".join(
+                "%s: %s\n" % (name, headers.get(name, "(absent)"))
+                for name in interesting
+            ).encode("latin-1")
+            send(response("200 OK", body))
+
         elif path == "/ok":
             send(response("200 OK", b"hello from ok\n"))
         elif path == "/close":
