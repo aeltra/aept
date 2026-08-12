@@ -7,7 +7,8 @@ AM_CPPFLAGS = \
 # Unit tests run as tests; httpget and stallclient are harnesses the
 # shell tests drive, so they are built but never run on their own.
 unit_tests = test_archive_path test_script test_config_root \
-    test_archive_open test_clearsign test_trigger_entries test_ssl_env
+    test_archive_open test_clearsign test_trigger_entries test_ssl_env \
+    test_no_proxy
 
 check_PROGRAMS = $(unit_tests) httpget threadrace stallclient
 
@@ -87,6 +88,13 @@ test_ssl_env_SOURCES = test_ssl_env.c
 test_ssl_env_CFLAGS = -D_GNU_SOURCE
 test_ssl_env_LDADD = $(top_builddir)/src/libaept.la
 test_ssl_env_LDFLAGS = -static
+
+# Links the library for the same reason test_ssl_env does, and needs the
+# OpenSSL headers because libfetch/common.h includes them directly.
+test_no_proxy_SOURCES = test_no_proxy.c
+test_no_proxy_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS)
+test_no_proxy_LDADD = $(top_builddir)/src/libaept.la
+test_no_proxy_LDFLAGS = -static
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.

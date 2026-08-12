@@ -978,7 +978,28 @@ int libfetch_no_proxy_match(const char *host)
                 break;
 
         d_len = q - p;
-        if (d_len > 0 && h_len >= d_len && strncasecmp(host + h_len - d_len, p, d_len) == 0) {
+
+        /*
+         * A leading dot is accepted and ignored, so ".example.com" and
+         * "example.com" mean the same thing.  curl and apt both read it
+         * that way, and a no_proxy string is usually copied from one of
+         * them.
+         */
+        while (d_len > 0 && *p == '.') {
+            p++;
+            d_len--;
+        }
+
+        /*
+         * The host must *be* the domain or sit under it -- the entry has
+         * to line up with a label boundary.  This was a bare suffix
+         * compare, so "example.com" also matched "notexample.com", and
+         * the request then went direct instead of through the proxy.
+         * Silently: the fetch succeeds either way, and only a packet
+         * capture or a puzzled look at the proxy's logs would show it.
+         */
+        if (d_len > 0 && h_len >= d_len && strncasecmp(host + h_len - d_len, p, d_len) == 0 &&
+            (h_len == d_len || host[h_len - d_len - 1] == '.')) {
             /* domain name matches */
             return 1;
         }
