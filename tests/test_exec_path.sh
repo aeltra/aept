@@ -44,10 +44,10 @@ assert_not_hijacked() {
 root=$work/root
 new_root "$root"
 
-make_aep "$work/app_1.0.aep" app 1.0
+make_aeltra "$work/app_1.0.aeltra" app 1.0
 
 out=$(PATH="$evil:$PATH" aept_run "$root" install --non-interactive \
-        "$work/app_1.0.aep" 2>&1)
+        "$work/app_1.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "install exited $rc:
 $out"
@@ -72,10 +72,10 @@ setup_conffile_conflict() {
     rm -rf "$root"
     new_root "$root"
 
-    make_aep_conffile "$work/cf_1.0.aep" cf 1.0 /etc/cf.conf "shipped by 1.0"
-    make_aep_conffile "$work/cf_2.0.aep" cf 2.0 /etc/cf.conf "shipped by 2.0"
+    make_aeltra_conffile "$work/cf_1.0.aeltra" cf 1.0 /etc/cf.conf "shipped by 1.0"
+    make_aeltra_conffile "$work/cf_2.0.aeltra" cf 2.0 /etc/cf.conf "shipped by 2.0"
 
-    out=$(aept_run "$root" install --non-interactive "$work/cf_1.0.aep" 2>&1)
+    out=$(aept_run "$root" install --non-interactive "$work/cf_1.0.aeltra" 2>&1)
     [ $? -eq 0 ] || fail "conffile setup install failed:
 $out"
 
@@ -89,7 +89,7 @@ drive() {
     PATH="$evil:$PATH" SHELL="$evil/from_env" \
         python3 "${srcdir:-.}/ptydrive.py" "$1" -- \
         "$AEPT_BIN" -o "$root" -c "$root/etc/aept/aept.conf" \
-        install "$work/cf_2.0.aep" 2>&1
+        install "$work/cf_2.0.aeltra" 2>&1
 }
 
 # D shows the differences.

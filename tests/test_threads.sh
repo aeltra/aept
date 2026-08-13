@@ -38,8 +38,8 @@ build_root() {
     # Deliberately not in alphabetical order: the listing has to sort
     # them, which is the operation under test.
     for _n in 7 3 1 5 2; do
-        make_aep "$work/$_prefix$_n.aep" "$_prefix$_n" 1.0
-        packages_stanza "$_prefix$_n" 1.0 "$work/$_prefix$_n.aep" \
+        make_aeltra "$work/$_prefix$_n.aeltra" "$_prefix$_n" 1.0
+        packages_stanza "$_prefix$_n" 1.0 "$work/$_prefix$_n.aeltra" \
             >> "$_root/var/lib/aept/lists/testrepo"
     done
 }
@@ -50,15 +50,15 @@ build_root "$work/root-b" bravo
 # One package per root for the install/remove threads to cycle, so the
 # solver, archive extraction, the status database, the owner index and
 # triggers all run concurrently too.
-make_aep "$work/cycle-a.aep" cycle-a 1.0
-make_aep "$work/cycle-b.aep" cycle-b 1.0
+make_aeltra "$work/cycle-a.aeltra" cycle-a 1.0
+make_aeltra "$work/cycle-b.aeltra" cycle-b 1.0
 note "two roots prepared, five packages each, listed out of order"
 
 http_stub "$work/count" "$work/stub.log" || skip "could not start the stub"
 
 out=$(timeout 300 "$THREADRACE" 10 "$work/root-a" "$work/root-b" \
         "http://127.0.0.1:$STUB_PORT/ok" \
-        "$work/cycle-a.aep" "$work/cycle-b.aep" 2>&1)
+        "$work/cycle-a.aeltra" "$work/cycle-b.aeltra" 2>&1)
 rc=$?
 
 [ "$rc" -eq 124 ] && fail "the threaded run timed out — a deadlock?

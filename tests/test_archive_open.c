@@ -1,4 +1,4 @@
-/* test_archive_open.c - opening malformed .aep containers
+/* test_archive_open.c - opening malformed .aeltra containers
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -134,7 +134,7 @@ int main(void)
             {"data.tar.gz",    data,    data_len           },
         };
 
-        path = fixture_path("good.aep");
+        path = fixture_path("good.aeltra");
         write_ar(path, m, 3);
 
         ar = aept_ar_open_pkg_control_archive(path);
@@ -168,7 +168,7 @@ int main(void)
             {"data.tar.gz",    data,    data_len           },
         };
 
-        path = fixture_path("badctrl.aep");
+        path = fixture_path("badctrl.aeltra");
         write_ar(path, m, 3);
 
         ar = aept_ar_open_pkg_control_archive(path);
@@ -187,7 +187,7 @@ int main(void)
             {"data.tar.gz",    garbage, sizeof(garbage) - 1},
         };
 
-        path = fixture_path("baddata.aep");
+        path = fixture_path("baddata.aeltra");
         write_ar(path, m, 3);
 
         ar = aept_ar_open_pkg_data_archive(path, 1);
@@ -216,7 +216,7 @@ int main(void)
             {"control.tar.gz", ctrl,    ctrl_len           },
         };
 
-        path = fixture_path("nodata.aep");
+        path = fixture_path("nodata.aeltra");
         write_ar(path, m, 2);
 
         ar = aept_ar_open_pkg_data_archive(path, 1);
@@ -232,7 +232,7 @@ int main(void)
     {
         FILE *fp;
 
-        path = fixture_path("notanar.aep");
+        path = fixture_path("notanar.aeltra");
         fp = fopen(path, "wb");
         fwrite(garbage, 1, sizeof(garbage) - 1, fp);
         fclose(fp);

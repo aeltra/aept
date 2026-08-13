@@ -21,13 +21,13 @@ require_aept() {
     [ -n "${AEPT_BIN:-}" ] && [ -x "$AEPT_BIN" ] || skip "aept is not built"
 }
 
-# make_aep <out.aep> <name> <version> [script-name] [script-exit-code]
+# make_aeltra <out.aeltra> <name> <version> [script-name] [script-exit-code]
 #
-# Builds a minimal .aep: outer ar containing debian-binary,
+# Builds a minimal .aeltra: outer ar containing debian-binary,
 # control.tar.gz and data.tar.gz.  The payload is a single file at
 # usr/bin/<name>.  When a maintainer script name is given, a script
 # exiting with the requested code is added to the control archive.
-make_aep() {
+make_aeltra() {
     _out=$1 _name=$2 _ver=$3 _script=${4:-} _code=${5:-0}
 
     case $_out in
@@ -60,12 +60,12 @@ make_aep() {
     rm -rf "$_d"
 }
 
-# make_aep_conffile <out.aep> <name> <version> <conffile-path> <content>
+# make_aeltra_conffile <out.aeltra> <name> <version> <conffile-path> <content>
 #
-# Like make_aep, but the payload also carries one configuration file at
+# Like make_aeltra, but the payload also carries one configuration file at
 # <conffile-path> (an absolute path) listed in the control archive's
 # "conffiles".
-make_aep_conffile() {
+make_aeltra_conffile() {
     _out=$1 _name=$2 _ver=$3 _cf=$4 _content=$5
 
     case $_out in
@@ -95,11 +95,11 @@ make_aep_conffile() {
     rm -rf "$_d"
 }
 
-# make_aep_script <out.aep> <name> <version> <script-name> <body>
+# make_aeltra_script <out.aeltra> <name> <version> <script-name> <body>
 #
-# Like make_aep, but the named maintainer script carries the given shell
+# Like make_aeltra, but the named maintainer script carries the given shell
 # body instead of a bare exit.
-make_aep_script() {
+make_aeltra_script() {
     _out=$1 _name=$2 _ver=$3 _script=$4 _body=$5
 
     case $_out in
@@ -128,7 +128,7 @@ make_aep_script() {
     rm -rf "$_d"
 }
 
-# packages_stanza <name> <version> <aep-file> — emit one Packages entry.
+# packages_stanza <name> <version> <aeltra-file> — emit one Packages entry.
 packages_stanza() {
     printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \
         "$1" "$2" "$(basename "$3")" "$(wc -c < "$3")" \

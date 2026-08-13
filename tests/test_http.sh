@@ -87,7 +87,7 @@ size_is /empty 0
 note "a zero-length body yields an empty file"
 
 # A body with NUL and high bytes: the read path must be binary-clean,
-# since .aep packages are.
+# since .aeltra packages are.
 expect_ok /binary
 python3 -c "import sys; sys.stdout.buffer.write(bytes([0,1,2,255,10,0,65,66,0,254]))" \
     > "$work/want.bin"

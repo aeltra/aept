@@ -36,7 +36,7 @@
 struct job {
     const char *root;     /* offline root */
     const char *url;      /* downloading job */
-    const char *pkg;      /* install/remove job: local .aep path */
+    const char *pkg;      /* install/remove job: local .aeltra path */
     const char *pkg_name; /* ... and the name to remove again */
     int iterations;
     int failures; /* written by the thread, read after join */
@@ -203,7 +203,7 @@ int main(int argc, char **argv)
     if (argc != 7) {
         fprintf(stderr,
                 "usage: %s <iterations> <root-a> <root-b> <url> "
-                "<pkg-a.aep> <pkg-b.aep>\n",
+                "<pkg-a.aeltra> <pkg-b.aeltra>\n",
                 argv[0]);
         return 2;
     }

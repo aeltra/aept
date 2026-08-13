@@ -20,11 +20,11 @@ new_root "$root"
 
 info=$root/var/lib/aept/info
 
-make_aep_conffile "$work/app_1.0.aep" app 1.0 /etc/app.conf "one"
-make_aep          "$work/app_2.0.aep" app 2.0
-make_aep_conffile "$work/app_3.0.aep" app 3.0 /etc/app.conf "three"
+make_aeltra_conffile "$work/app_1.0.aeltra" app 1.0 /etc/app.conf "one"
+make_aeltra          "$work/app_2.0.aeltra" app 2.0
+make_aeltra_conffile "$work/app_3.0.aeltra" app 3.0 /etc/app.conf "three"
 
-out=$(aept_run "$root" install --non-interactive "$work/app_1.0.aep" 2>&1)
+out=$(aept_run "$root" install --non-interactive "$work/app_1.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "install of app 1.0 exited $rc:
 $out"
@@ -43,7 +43,7 @@ note "a package with conffiles records its hashes"
 # survive the upgrade and then influence conffile decisions for a later
 # version that reintroduces the path.
 
-out=$(aept_run "$root" install --non-interactive "$work/app_2.0.aep" 2>&1)
+out=$(aept_run "$root" install --non-interactive "$work/app_2.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "upgrade to app 2.0 exited $rc:
 $out"
@@ -60,7 +60,7 @@ note "upgrading to a version without conffiles drops the stale hashes"
 # after the resolve step: that would delete the hashes the upgrade just
 # recorded.
 
-out=$(aept_run "$root" install --non-interactive "$work/app_3.0.aep" 2>&1)
+out=$(aept_run "$root" install --non-interactive "$work/app_3.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "upgrade to app 3.0 exited $rc:
 $out"

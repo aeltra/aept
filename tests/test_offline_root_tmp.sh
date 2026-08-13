@@ -17,13 +17,13 @@ trap 'rm -rf "$work"' EXIT
 
 root=$work/root
 new_root "$root"
-make_aep "$work/good_1.0.aep" good 1.0
+make_aeltra "$work/good_1.0.aeltra" good 1.0
 
 # The offline root deliberately has no /tmp yet: a root that is still
 # being bootstrapped will not have one, and aept has to cope.
 [ -d "$root/tmp" ] && fail "fixture error: $root/tmp should not exist yet"
 
-out=$(aept_run "$root" -v install --non-interactive "$work/good_1.0.aep" 2>&1)
+out=$(aept_run "$root" -v install --non-interactive "$work/good_1.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "install exited $rc:
 $out"
@@ -64,10 +64,10 @@ note "scratch directory cleaned up"
 #
 # So 255 is the pass: the child got all the way to exec.
 
-make_aep_script "$work/scripted_1.0.aep" scripted 1.0 postinst 'exit 0'
+make_aeltra_script "$work/scripted_1.0.aeltra" scripted 1.0 postinst 'exit 0'
 
 out=$(aept_run "$root" install --non-interactive \
-        "$work/scripted_1.0.aep" 2>&1)
+        "$work/scripted_1.0.aeltra" 2>&1)
 
 printf '%s\n' "$out" | grep -q 'exit code 254' \
     && fail "namespace setup failed before the interpreter was reached:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# test_install_local_noop.sh - installing a local .aep that is already
+# test_install_local_noop.sh - installing a local .aeltra that is already
 # installed must do nothing, not upgrade the whole system.
 #
 # Copyright (C) 2026 Tobias Koch
@@ -18,12 +18,12 @@ trap 'rm -rf "$work"' EXIT
 root=$work/root
 new_root "$root"
 
-make_aep "$work/app_1.0.aep"   app   1.0
-make_aep "$work/other_1.0.aep" other 1.0
-make_aep "$work/other_2.0.aep" other 2.0
+make_aeltra "$work/app_1.0.aeltra"   app   1.0
+make_aeltra "$work/other_1.0.aeltra" other 1.0
+make_aeltra "$work/other_2.0.aeltra" other 2.0
 
 out=$(aept_run "$root" install --non-interactive \
-        "$work/app_1.0.aep" "$work/other_1.0.aep" 2>&1)
+        "$work/app_1.0.aeltra" "$work/other_1.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "setup install exited $rc:
 $out"
@@ -31,7 +31,7 @@ $out"
 # A repository offering a newer "other" — something a stray upgrade-all
 # would visibly pick up.
 add_repo "$root" testrepo "$work"
-packages_stanza other 2.0 "$work/other_2.0.aep" \
+packages_stanza other 2.0 "$work/other_2.0.aeltra" \
     > "$root/var/lib/aept/lists/testrepo"
 
 # ── the regression ───────────────────────────────────────────────────
@@ -41,7 +41,7 @@ packages_stanza other 2.0 "$work/other_2.0.aep" \
 # "upgrade everything", so this used to schedule other 1.0 -> 2.0 — a
 # package the user never mentioned — without prompting.
 
-out=$(aept_run "$root" install -n --non-interactive "$work/app_1.0.aep" 2>&1)
+out=$(aept_run "$root" install -n --non-interactive "$work/app_1.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "install of an already-installed file exited $rc:
 $out"
@@ -74,7 +74,7 @@ note "aept upgrade still schedules a full upgrade"
 
 # ── a local file that is not installed yet still installs ────────────
 
-out=$(aept_run "$root" install -n --non-interactive "$work/other_2.0.aep" 2>&1)
+out=$(aept_run "$root" install -n --non-interactive "$work/other_2.0.aeltra" 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "install of a newer local file exited $rc:
 $out"
