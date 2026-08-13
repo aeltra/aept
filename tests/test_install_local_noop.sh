@@ -18,9 +18,9 @@ trap 'rm -rf "$work"' EXIT
 root=$work/root
 new_root "$root"
 
-make_aeltra "$work/app_1.0.aeltra"   app   1.0
-make_aeltra "$work/other_1.0.aeltra" other 1.0
-make_aeltra "$work/other_2.0.aeltra" other 2.0
+make_pkg "$work/app_1.0.aeltra"   app   1.0
+make_pkg "$work/other_1.0.aeltra" other 1.0
+make_pkg "$work/other_2.0.aeltra" other 2.0
 
 out=$(aept_run "$root" install --non-interactive \
         "$work/app_1.0.aeltra" "$work/other_1.0.aeltra" 2>&1)

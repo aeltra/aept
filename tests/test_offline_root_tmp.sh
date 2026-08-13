@@ -17,7 +17,7 @@ trap 'rm -rf "$work"' EXIT
 
 root=$work/root
 new_root "$root"
-make_aeltra "$work/good_1.0.aeltra" good 1.0
+make_pkg "$work/good_1.0.aeltra" good 1.0
 
 # The offline root deliberately has no /tmp yet: a root that is still
 # being bootstrapped will not have one, and aept has to cope.
@@ -64,7 +64,7 @@ note "scratch directory cleaned up"
 #
 # So 255 is the pass: the child got all the way to exec.
 
-make_aeltra_script "$work/scripted_1.0.aeltra" scripted 1.0 postinst 'exit 0'
+make_pkg_script "$work/scripted_1.0.aeltra" scripted 1.0 postinst 'exit 0'
 
 out=$(aept_run "$root" install --non-interactive \
         "$work/scripted_1.0.aeltra" 2>&1)

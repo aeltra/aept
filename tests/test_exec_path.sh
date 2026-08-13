@@ -44,7 +44,7 @@ assert_not_hijacked() {
 root=$work/root
 new_root "$root"
 
-make_aeltra "$work/app_1.0.aeltra" app 1.0
+make_pkg "$work/app_1.0.aeltra" app 1.0
 
 out=$(PATH="$evil:$PATH" aept_run "$root" install --non-interactive \
         "$work/app_1.0.aeltra" 2>&1)
@@ -72,8 +72,8 @@ setup_conffile_conflict() {
     rm -rf "$root"
     new_root "$root"
 
-    make_aeltra_conffile "$work/cf_1.0.aeltra" cf 1.0 /etc/cf.conf "shipped by 1.0"
-    make_aeltra_conffile "$work/cf_2.0.aeltra" cf 2.0 /etc/cf.conf "shipped by 2.0"
+    make_pkg_conffile "$work/cf_1.0.aeltra" cf 1.0 /etc/cf.conf "shipped by 1.0"
+    make_pkg_conffile "$work/cf_2.0.aeltra" cf 2.0 /etc/cf.conf "shipped by 2.0"
 
     out=$(aept_run "$root" install --non-interactive "$work/cf_1.0.aeltra" 2>&1)
     [ $? -eq 0 ] || fail "conffile setup install failed:

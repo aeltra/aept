@@ -38,7 +38,7 @@ build_root() {
     # Deliberately not in alphabetical order: the listing has to sort
     # them, which is the operation under test.
     for _n in 7 3 1 5 2; do
-        make_aeltra "$work/$_prefix$_n.aeltra" "$_prefix$_n" 1.0
+        make_pkg "$work/$_prefix$_n.aeltra" "$_prefix$_n" 1.0
         packages_stanza "$_prefix$_n" 1.0 "$work/$_prefix$_n.aeltra" \
             >> "$_root/var/lib/aept/lists/testrepo"
     done
@@ -50,8 +50,8 @@ build_root "$work/root-b" bravo
 # One package per root for the install/remove threads to cycle, so the
 # solver, archive extraction, the status database, the owner index and
 # triggers all run concurrently too.
-make_aeltra "$work/cycle-a.aeltra" cycle-a 1.0
-make_aeltra "$work/cycle-b.aeltra" cycle-b 1.0
+make_pkg "$work/cycle-a.aeltra" cycle-a 1.0
+make_pkg "$work/cycle-b.aeltra" cycle-b 1.0
 note "two roots prepared, five packages each, listed out of order"
 
 http_stub "$work/count" "$work/stub.log" || skip "could not start the stub"

@@ -18,8 +18,8 @@ trap 'rm -rf "$work"' EXIT
 root=$work/root
 new_root "$root"
 
-make_aeltra "$work/good_1.0.aeltra"   good   1.0
-make_aeltra "$work/badpre_1.0.aeltra" badpre 1.0 preinst 1
+make_pkg "$work/good_1.0.aeltra"   good   1.0
+make_pkg "$work/badpre_1.0.aeltra" badpre 1.0 preinst 1
 
 # ── a healthy package installs, registers and lands on disk ──────────
 

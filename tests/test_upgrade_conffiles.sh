@@ -20,9 +20,9 @@ new_root "$root"
 
 info=$root/var/lib/aept/info
 
-make_aeltra_conffile "$work/app_1.0.aeltra" app 1.0 /etc/app.conf "one"
-make_aeltra          "$work/app_2.0.aeltra" app 2.0
-make_aeltra_conffile "$work/app_3.0.aeltra" app 3.0 /etc/app.conf "three"
+make_pkg_conffile "$work/app_1.0.aeltra" app 1.0 /etc/app.conf "one"
+make_pkg          "$work/app_2.0.aeltra" app 2.0
+make_pkg_conffile "$work/app_3.0.aeltra" app 3.0 /etc/app.conf "three"
 
 out=$(aept_run "$root" install --non-interactive "$work/app_1.0.aeltra" 2>&1)
 rc=$?

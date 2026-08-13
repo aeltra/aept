@@ -22,13 +22,13 @@ require_tools ar tar python3
 work=$(mktemp -d) || fail "mktemp failed"
 trap 'rm -rf "$work"' EXIT
 
-# make_aeltra_hardlink <out.aeltra> <name> <link-target>
+# make_pkg_hardlink <out.aeltra> <name> <link-target>
 #
 # A package whose payload is a regular file at usr/bin/<name> plus a
 # hardlink at usr/bin/<name>-link pointing at <link-target>.  tar(1)
 # cannot be talked into an arbitrary link target, so the data archive is
 # written by hand.
-make_aeltra_hardlink() {
+make_pkg_hardlink() {
     _out=$1 _name=$2 _target=$3
 
     case $_out in
@@ -79,7 +79,7 @@ with tarfile.open(out, "w:gz") as tf:
 
 root=$work/root-ok
 new_root "$root"
-make_aeltra_hardlink "$work/inside.aeltra" inside usr/bin/inside
+make_pkg_hardlink "$work/inside.aeltra" inside usr/bin/inside
 
 out=$(aept_run "$root" install --non-interactive "$work/inside.aeltra" 2>&1)
 rc=$?
@@ -93,7 +93,7 @@ note "contained hardlink: installs normally"
 
 root=$work/root-escape
 new_root "$root"
-make_aeltra_hardlink "$work/escape.aeltra" escape ../../../../../../etc/passwd
+make_pkg_hardlink "$work/escape.aeltra" escape ../../../../../../etc/passwd
 
 out=$(aept_run "$root" install --non-interactive "$work/escape.aeltra" 2>&1)
 rc=$?
