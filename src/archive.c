@@ -319,7 +319,7 @@ static int stream_entry(struct archive *ar, FILE *fp, uint64_t max_bytes)
 }
 
 /*
- * Open the outer .aep container (an AR or gzipped-tar archive).
+ * Open the outer .aeltra container (an AR or gzipped-tar archive).
  */
 static struct archive *open_outer(const char *path)
 {

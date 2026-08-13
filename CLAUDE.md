@@ -44,7 +44,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 ## Project Overview
 
-**aept** (Aeltra Package Tool) is a minimal package manager for .aep packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification), plus `rm`, `diff` and `/bin/sh`. Every one of them is exec'd by absolute path from the `AEPT_*_BIN` defines in `internal.h` — aept normally runs as root, so no exec may resolve through `PATH` or `$SHELL`.
+**aept** (Aeltra Package Tool) is a minimal package manager for .aeltra packages with dependency resolution. It handles update/install/remove/upgrade operations using libsolv for dependency solving and libarchive for archive extraction. Uses libfetch for downloads. External tools: usign (signature verification), plus `rm`, `diff` and `/bin/sh`. Every one of them is exec'd by absolute path from the `AEPT_*_BIN` defines in `internal.h` — aept normally runs as root, so no exec may resolve through `PATH` or `$SHELL`.
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
@@ -176,7 +176,7 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 **Key subsystems:**
 
 - **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos.
-- **archive.c** — Two-level AEP extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
+- **archive.c** — Two-level extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.
