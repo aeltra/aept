@@ -25,6 +25,7 @@
 #include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"
+#include "aept/index.h"
 #include "aept/install.h"
 #include "aept/msg.h"
 #include "aept/pin.h"
@@ -427,7 +428,13 @@ static int query_load_repos(aept_ctx_t *ctx)
             continue;
         }
 
-        aept_solver_load_repo(ctx, ctx->config.sources[i].name, fp, i);
+        /* An expired index is skipped rather than aborting the query: a
+         * listing that silently omits one source is bad, but the diagnostic
+         * says which, and refusing to answer at all would be worse. */
+        if (aept_index_check_expiry(list_path, ctx->config.sources[i].name,
+                                    ctx->config.check_index_expiry) == 0)
+            aept_solver_load_repo(ctx, ctx->config.sources[i].name, fp, i);
+
         fclose(fp);
         free(list_path);
     }

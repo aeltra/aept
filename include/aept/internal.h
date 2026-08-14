@@ -38,7 +38,12 @@ typedef struct aept_config {
 
     int network_timeout; /* seconds per network wait; 0 = wait forever */
     int check_signature; /* default 1 */
-    int ignore_uid;      /* default 0 */
+    /* Refuse an index past its Valid-Until rather than warning.  Default 0,
+     * because it needs a re-signing job republishing on a timer: without one,
+     * every archive that stops receiving uploads expires and every client
+     * stops working.  A deployment that runs such a job turns this on. */
+    int check_index_expiry;
+    int ignore_uid; /* default 0 */
     int allow_downgrade;
     int force_depends;
     int noaction;

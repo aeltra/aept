@@ -23,6 +23,7 @@
 #include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/download.h"
+#include "aept/index.h"
 #include "aept/msg.h"
 #include "aept/owner_index.h"
 #include "aept/pin.h"
@@ -49,6 +50,13 @@ static int load_repos(struct aept_ctx *ctx)
             aept_log_error("cannot open package list '%s': %s\n"
                            "  (have you run 'aept update'?)",
                            list_path, strerror(errno));
+            free(list_path);
+            return -1;
+        }
+
+        if (aept_index_check_expiry(list_path, ctx->config.sources[i].name,
+                                    ctx->config.check_index_expiry) < 0) {
+            fclose(fp);
             free(list_path);
             return -1;
         }

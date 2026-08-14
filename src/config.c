@@ -33,6 +33,7 @@ void aept_config_set_defaults(struct aept_config *cfg)
     cfg->pin_file = aept_strdup("/var/lib/aept/pinned-packages");
 
     cfg->check_signature = 1;
+    cfg->check_index_expiry = 0;
     cfg->verbosity = AEPT_INFO;
 
     /*
@@ -139,6 +140,11 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
         strp = &cfg->ssl_client_key;
     else if (strcmp(key, "check_signature") == 0) {
         cfg->check_signature = parse_bool(key, value, 1);
+        return;
+    } else if (strcmp(key, "check_index_expiry") == 0) {
+        /* Typos resolve to the enforcing value, like every other option
+         * here: a misspelling must not be what quietly disables a check. */
+        cfg->check_index_expiry = parse_bool(key, value, 1);
         return;
     } else if (strcmp(key, "ignore_uid") == 0) {
         cfg->ignore_uid = parse_bool(key, value, 0);

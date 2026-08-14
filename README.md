@@ -341,6 +341,7 @@ The following keys are recognized:
 | auto_file       | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                  |
 | pin_file        | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                      |
 | check_signature | 1                             | Set to 0 to disable signature verification                                                                                                         |
+| check_index_expiry | 0                          | Set to 1 to refuse a package index past its Valid-Until instead of warning. Requires a repository that re-signs its index on a timer; without one, an archive that stops receiving uploads expires and clients stop working. |
 | ignore_uid      | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package. |
 | ssl_client_cert | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                         |
 | ssl_client_key  | (none)                        | Path to the corresponding PEM private key                                                                                                          |

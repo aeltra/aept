@@ -14,6 +14,7 @@ libaept_la_SOURCES = \
     solver.c \
     archive.c \
     script.c \
+    index.c \
     install.c \
     owner_index.c \
     remove.c \
