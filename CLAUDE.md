@@ -54,10 +54,45 @@ exports **34** symbols: the 31 in `aept.h`, plus `aept_log()`,
 internal helper, and `src/libfetch/` stayed hidden only because its names
 failed the old `-export-symbols-regex '^aept_'`. Tests that reach past `aept.h`
 link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
-hidden visibility does not apply. Check with
-`nm -D --defined-only src/.libs/libaept.so`, **after `make clean`** — a
-`CFLAGS` change in `Makefile.am` does not force a recompile, so a stale tree
-reports the old surface.
+hidden visibility does not apply.
+
+**The ABI baseline.** `tests/libaept.abi` records the ABI as *declarations*,
+not as names — 45 interfaces: the 34 `AEPT_API` functions, plus every type and
+enum in `aept.h`. `tests/test_abi_symbols.sh` checks it, and
+`tests/abi-declarations.sh` extracts the current one by preprocessing the
+headers with `-DAEPT_API=AEPT_EXPORT` (everything from `aept.h`, since it is
+the public header; only marked declarations from the internal ones). Whole
+declarations, because a symbol table has no signatures in it: a name list
+cannot see that `aept_install()` grew an argument, that a field was added to
+`aept_pkg_info_t`, or that the `AEPT_FLAG_*` enumerators were reordered — and
+those break un-recompiled callers *silently*, which is worse than a symbol
+going missing. Regenerate with **`make abi-update`**.
+
+The three cases are not treated alike, following the `-version-number` rules
+in `src/Makefile.am`:
+
+- **removed** or **changed** → **fails**. Needs `major++, minor = revision = 0`,
+  so old binaries are refused at load time rather than dying at run time.
+- **added** → **passes**, with a note. An addition breaks no existing caller.
+  It needs `minor++, revision = 0` before release and an `abi-update` so it is
+  guarded from then on.
+
+Two further checks hold regardless of the baseline: the exported set must equal
+exactly what `AEPT_API` marks (so neither a leaked internal nor a declared-but-
+missing function passes — this is what the old `-export-symbols-regex '^aept_'`
+could not do, since `src/libfetch/` stayed hidden only by failing the prefix),
+and every symbol must be a function (`T`), since `AEPT_API` marks nothing else.
+An exported signature naming a type the baseline does not record also fails,
+or that type's layout would be ABI with nothing watching it.
+
+`nm` needs no configure check: libtool cannot build a shared library without
+it, so `$(NM)` — substituted by `LT_INIT`, host-prefixed on a cross build — is
+already guaranteed, and `binutils` comes with `build-essential` on Debian. Run
+**after `make clean`** if you have changed `CFLAGS` or `LDFLAGS`: a
+`Makefile.am` flag change does not force a recompile, so a stale tree reports
+the old surface. `abidiff` would add little here — every public type is either
+opaque (`struct aept_ctx`) or defined in `aept.h` out of primitives, so the
+declared text *is* the ABI.
 
 ## Coding Conventions
 

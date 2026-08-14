@@ -107,6 +107,7 @@ dist_check_SCRIPTS = \
     test_upgrade_conffiles.sh \
     test_hardlink_escape.sh \
     test_update_size_limit.sh \
+    test_abi_symbols.sh \
     test_exec_path.sh \
     test_ssl_client_cert.sh \
     test_http.sh \
@@ -114,7 +115,8 @@ dist_check_SCRIPTS = \
     test_cancel.sh \
     test_timeout.sh
 
-EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py
+EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py libaept.abi \
+    abi-declarations.sh
 
 TEST_EXTENSIONS = .sh
 
@@ -127,6 +129,10 @@ AM_TESTS_ENVIRONMENT = \
     srcdir='$(abs_srcdir)'; export srcdir; \
     HTTPGET='$(abs_builddir)/httpget'; export HTTPGET; \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
-    STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT;
+    STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
+    LIBAEPT_SO='$(abs_top_builddir)/src/.libs/libaept.so'; export LIBAEPT_SO; \
+    NM='$(NM)'; export NM; \
+    ABI_INCLUDEDIR='$(abs_top_srcdir)/include'; export ABI_INCLUDEDIR; \
+    CC='$(CC)'; export CC;
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)

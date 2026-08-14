@@ -36,6 +36,7 @@ Makefile
 !/tests/*.h
 !/tests/*.py
 !/tests/*.sh
+!/tests/*.abi
 
 # Distribution tarballs
 *.tar.gz

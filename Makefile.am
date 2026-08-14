@@ -92,4 +92,17 @@ format-check:
 readme:
 	$(srcdir)/scripts/update-readme.sh
 
-.PHONY: readme format format-all format-check
+# Re-bless the ABI baseline that tests/test_abi_symbols.sh checks against.
+# Run it after deliberately changing an interface, together with the
+# -version-number bump in src/Makefile.am that the change requires: a
+# removal or a signature change needs major++, an addition minor++.
+# The comment header is kept; only the declarations below it are replaced.
+abi-update:
+	@abi=$(top_srcdir)/tests/libaept.abi; \
+	sed -n '1,/^$$/p' $$abi > $$abi.new; \
+	CC='$(CC)' $(SHELL) $(top_srcdir)/tests/abi-declarations.sh \
+	    $(top_srcdir)/include >> $$abi.new || { rm -f $$abi.new; exit 1; }; \
+	mv $$abi.new $$abi; \
+	echo "blessed `grep -c '^[a-z]' $$abi` interfaces in tests/libaept.abi"
+
+.PHONY: readme format format-all format-check abi-update
