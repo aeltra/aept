@@ -44,9 +44,11 @@ int aept_index_header_field(const char *path, const char *field, char *out, size
          * the index carries no header -- which is what one published before
          * the header existed looks like.  Checked across the whole stanza
          * rather than on the first line alone: the control format fixes no
-         * field order, so a producer other than ours may not lead with it,
-         * and reading a package's fields as repository metadata would let a
-         * package claim the index never expires.
+         * field order, so a producer other than ours may not lead with it.
+         * Reading a package's fields as repository metadata would let one
+         * package's Valid-Until govern the whole index -- either claiming it
+         * never expires, or, with check_index_expiry set, expiring it on the
+         * spot and taking the entire repository down with it.
          */
         if (strncmp(buf, "Package:", 8) == 0) {
             r = -1;
