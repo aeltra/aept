@@ -154,7 +154,8 @@ run by Automake's harness.
   `silence_logging()` in `test_clearsign.c` — so a passing run stays clean.
 - Shell tests source `tests/aeptlib.sh` (`make_pkg`, `make_pkg_conffile`,
   `new_root`, `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`,
-  `cond_serve`) and `skip` (exit 77) when a tool is missing rather than failing.
+  `cond_serve`, `dribble_serve`) and `skip` (exit 77) when a tool is missing
+  rather than failing.
 - libfetch is built without `file.c`, so HTTP/HTTPS are the only transports.
   Tests needing a real fetch serve over loopback via `http_serve`. `cond_serve`
   starts `condserver.py` instead when the test is about revalidation: it emits
@@ -162,13 +163,25 @@ run by Automake's harness.
   precedence, and **logs what each request asked**. python3's own `http.server`
   handles `If-Modified-Since` but emits no `ETag` and reports nothing, so a test
   built on it cannot tell a conditional request answered `304` from one that was
-  never made — which is exactly the distinction being tested.
+  never made — which is exactly the distinction being tested. `dribble_serve`
+  starts `dribbleserver.py`, which sends a body one piece at a time — and in
+  chunked mode splits each chunk header from its own CRLF, and each chunk from
+  its trailer — so the client spends the transfer waiting in `poll()` and a
+  signal has somewhere to land. A server answering at loopback speed opens no
+  such window, and the test would pass without ever exercising anything.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
-- `httpget`, `httpstub.py` and `threadrace` are harnesses driven by shell
-  tests, not tests themselves: they are in `check_PROGRAMS` but deliberately
-  absent from `unit_tests`, so `TESTS` never runs them directly.
+- `httpget`, `partialget`, `httpstub.py`, `stallclient` and `threadrace` are
+  harnesses driven by shell tests, not tests themselves: they are in
+  `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS` never
+  runs them directly. `partialget` is the one that goes to libfetch directly
+  rather than through `aept_download()`, because what it does — stop reading a
+  response part-way — is precisely what `aept_download()` never does.
+- **`make` does not build `check_PROGRAMS`.** Running `./tests/test_foo` or a
+  shell test after a plain `make` runs the *previous* binary, so a revert probe
+  can come out green on a fix that is no longer there. This has now happened
+  twice. Build the harness first: `make -C tests stallclient`, or `make check`.
 
 **Data races.** `make check` catches crashes and wrong answers, but a race that
 happens to come out right passes silently — this was demonstrated: with the
@@ -195,7 +208,9 @@ own build of everything.
 
 Downloading used to be the exception, because libfetch kept its state in process globals. That is no longer so: the connection cache, the client certificate and the network timeout live in the per-context `struct libfetch_ctx` (`ctx->http`, created by `aept_init()`), and the error state is `_Thread_local`. **Nothing at file scope in `src/libfetch/` is mutable any more.** The last two globals, `libfetch_timeout` and `libfetch_restart_calls`, are gone: the first became `ctx->timeout`, stamped onto each connection and refreshed from the context when one comes back out of the cache; the second was a knob nobody set, guarding branches that never ran.
 
-**Getting out of a transfer that is going nowhere.** Every wait in libfetch — connect, the TLS handshake, reads, writes — goes through `libfetch_wait()`, and every one of them is a `poll()`. That is not incidental. `poll(2)` is never restarted after a signal whatever flags the handler carries, whereas `read(2)` *is* restarted under `SA_RESTART`, which glibc's `signal(3)` sets by default and which `signal.siginterrupt(sig, False)` sets in Python. Waiting anywhere else costs an embedder the ability to abandon a stalled transfer, and it costs the timeout its coverage. This is why `libfetch_ssl()` puts the socket into non-blocking mode for the life of a TLS connection and drives `SSL_connect()`/`SSL_write()` through `WANT_READ`/`WANT_WRITE` loops: with a blocking socket OpenSSL waits inside its own `read(2)`, where neither property holds. EINTR is reported, never retried, so the caller can act on it.
+**Getting out of a transfer that is going nowhere.** Every wait in libfetch — connect, the TLS handshake, reads, writes — goes through `libfetch_wait()`, and every one of them is a `poll()`. That is not incidental. `poll(2)` is never restarted after a signal whatever flags the handler carries, whereas `read(2)` *is* restarted under `SA_RESTART`, which glibc's `signal(3)` sets by default and which `signal.siginterrupt(sig, False)` sets in Python. Waiting anywhere else costs an embedder the ability to abandon a stalled transfer, and it costs the timeout its coverage. This is why `libfetch_ssl()` puts the socket into non-blocking mode for the life of a TLS connection and drives `SSL_connect()`/`SSL_write()` through `WANT_READ`/`WANT_WRITE` loops: with a blocking socket OpenSSL waits inside its own `read(2)`, where neither property holds. It is also why `libfetch_read()` keeps EINTR out of the `SSL_ERROR_SYSCALL` flattening to `EIO`: a signal must arrive at the caller as a signal. (With a non-blocking socket the wait is in `poll()` and OpenSSL should never see EINTR itself, so that guard is belt and braces — it is not covered by a test.)
+
+**A signal is reported, never retried down there — and never treated as a stream failure either.** Those are two different rules and both matter. libfetch reports EINTR rather than looping on it so the decision belongs to the caller, which is what lets `download.c` check `aept_cancelled()` *before* it retries and what lets a signal end a handshake that would otherwise hang: before a body has begun there is no reader to decide, so an interruption there is final. But an interrupted wait consumed nothing, so the stream survives it, and `struct httpio` keeps a transient `intr` apart from the sticky `error` that condemns a connection. Latching the two together is what made `download.c`'s `if (errno == EINTR) continue;` **unable to succeed** — the retry it cost landed on a stream that had already given up, was restated as `EIO`, and the transfer died of somebody else's `SIGWINCH`. Resuming is state, not luck: a chunk's closing CRLF is read at the top of the *next* fill (`trailer`/`trailer_got`), and `libfetch_getln()` resumes a half-read line instead of restarting it (`conn->line_partial`) — restarting would re-read the tail of a line as if it were the next one, and in a chunked body the lines *are* the framing. A connection therefore goes back in the cache only when its stream **ended at the end of its response** (`io->end_of_body`), not merely when it did not fail: anything else leaves bytes of this response on the wire for the next request to be answered by. `tests/test_signal_resume.sh` drives both framings under a signal storm; `/abandon` in `tests/httpstub.py` covers the caching rule with leftovers built to *parse*, since binary ones only produce a protocol error and a protocol error on a cached connection is silently retried on a fresh one.
 
 Two escapes, in order of importance: a caller *must not* have to send a signal to get control back, because a signal acts on the whole process — hence `option network_timeout` (default 120s, `0` disables), an **idle** timeout re-armed on every wait, so a slow transfer completes and only a silent one is cut off. It reports `AEPT_ERR_TIMEOUT` via `aept_last_error()`, which the Python bindings turn into `AeptTimeout`. And a signal *must still* work for the CLI's Ctrl-C. `tests/test_timeout.sh` and `tests/test_cancel.sh` hold both down, the latter covering `SA_RESTART` explicitly. One wait is beyond reach: `getaddrinfo(3)` retries internally on EINTR, so an unreachable nameserver blocks for as long as `resolv.conf` allows — about ten seconds by default — neither bounded nor interruptible.
 
@@ -231,7 +246,7 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
 - **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction.
-- **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
+- **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.
 - **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.
 - **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) via `/bin/sh` through `aept_system_offline_root()`. No environment is set for them: with an offline root the script runs chrooted, so it already sees that root as `/` and needs no prefix variable (unlike opkg, which does not chroot and passes `$PKG_ROOT` instead).

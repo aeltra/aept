@@ -296,6 +296,32 @@ stall_stop() {
     STALL_PID=
 }
 
+# dribble_serve <plain|chunked> <logfile> — start dribbleserver.py,
+# which sends a body a piece at a time so the client spends the transfer
+# waiting in poll(2).  Sets DRIBBLE_PORT and DRIBBLE_PID.
+dribble_serve() {
+    python3 -u "${srcdir:-.}/dribbleserver.py" "$1" > "$2" 2>&1 &
+    DRIBBLE_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        DRIBBLE_PORT=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' "$2" | head -1)
+        if [ -n "$DRIBBLE_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$DRIBBLE_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+dribble_stop() {
+    [ -n "${DRIBBLE_PID:-}" ] && kill "$DRIBBLE_PID" 2>/dev/null
+    DRIBBLE_PID=
+}
+
 # wait_for_line <file> <pattern> <tenths> — true once the pattern shows
 # up in the file.  Used instead of watching for process death, because
 # an exited-but-unreaped child still answers kill -0.

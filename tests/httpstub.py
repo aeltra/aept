@@ -202,6 +202,18 @@ class Handler(socketserver.BaseRequestHandler):
             send(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n"
                  b"Connection: keep-alive\r\n\r\npoisoned\n")
             return True
+        elif path == "/abandon":
+            # A perfectly good keep-alive response whose body, after its
+            # first 64 bytes, is itself a complete and plausible
+            # response.  Nothing here fails: the point is a client that
+            # stops reading part-way and then reuses the connection, and
+            # is answered by these leftovers rather than by its own next
+            # request.  Binary filler would merely produce a protocol
+            # error, which the cached-connection retry papers over.
+            poison = (b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n"
+                      b"Connection: keep-alive\r\n\r\npoisoned\n")
+            send(response("200 OK", b"x" * 64 + poison))
+            return True
         elif path == "/chunktrunc":
             # Chunked, and the stream stops in the middle of a chunk:
             # sixteen bytes are promised, six arrive, and there is no

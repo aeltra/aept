@@ -178,6 +178,29 @@ body_is_file "$work/u" 'hello from ok
 '
 note "a failed stream's connection is dropped, not reused"
 
+# The same hazard without a failure anywhere: a caller that simply stops
+# reading.  The response was fine and the connection is still open, but
+# the rest of that body is still on it, so reuse means the next request
+# is answered by whatever follows — and /abandon is built so that what
+# follows reads as a complete, plausible response.  Binary leftovers
+# would only produce a protocol error, and a protocol error on a cached
+# connection is retried on a fresh one, which hides the whole thing.
+#
+# Nothing aept does can reach this — aept_download() reads every
+# transfer to the end — but a signal the caller declines to resume from
+# would, which is why the rule is "ended at the end of its response",
+# not "did not fail".
+if [ -n "${PARTIALGET:-}" ] && [ -x "$PARTIALGET" ]; then
+    timeout 60 "$PARTIALGET" "$base/abandon" 64 "$base/ok" "$work/v" > "$work/verdict" 2>&1 \
+        || fail "after an abandoned response the next request failed:
+$(cat "$work/verdict")"
+    body_is_file "$work/v" 'hello from ok
+'
+    note "a response abandoned part-read does not put its connection back"
+else
+    note "partialget is not built, so the abandoned-response case is skipped"
+fi
+
 # ── an unsolicited range reply ───────────────────────────────────────
 #
 # aept never sends a Range header, so 206 can only come from a server

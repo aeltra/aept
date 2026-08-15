@@ -4,13 +4,14 @@ AM_CPPFLAGS = \
     -I$(top_srcdir)/src \
     -I$(srcdir)
 
-# Unit tests run as tests; httpget and stallclient are harnesses the
-# shell tests drive, so they are built but never run on their own.
+# Unit tests run as tests; httpget, partialget and stallclient are
+# harnesses the shell tests drive, so they are built but never run on
+# their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator
 
-check_PROGRAMS = $(unit_tests) httpget threadrace stallclient
+check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
 
 noinst_HEADERS = test.h
 
@@ -21,6 +22,14 @@ httpget_CFLAGS = -D_GNU_SOURCE
 # The static archive keeps them, and these three reach past aept.h.
 httpget_LDADD = $(top_builddir)/src/libaept.la
 httpget_LDFLAGS = -static
+
+# Another harness for test_http.sh, this one going to libfetch directly:
+# what it does -- stop reading a response part-way -- is precisely what
+# aept_download() never does.
+partialget_SOURCES = partialget.c
+partialget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS)
+partialget_LDADD = $(top_builddir)/src/libaept.la
+partialget_LDFLAGS = -static
 
 # A harness for test_cancel.sh and test_timeout.sh.  Links the library
 # rather than individual modules, for the same reason httpget does:
@@ -123,10 +132,11 @@ dist_check_SCRIPTS = \
     test_http.sh \
     test_threads.sh \
     test_cancel.sh \
-    test_timeout.sh
+    test_timeout.sh \
+    test_signal_resume.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
-    libaept.abi abi-declarations.sh
+    dribbleserver.py libaept.abi abi-declarations.sh
 
 TEST_EXTENSIONS = .sh
 
@@ -138,6 +148,7 @@ AM_TESTS_ENVIRONMENT = \
     AEPT_BIN='$(abs_top_builddir)/src/aept'; export AEPT_BIN; \
     srcdir='$(abs_srcdir)'; export srcdir; \
     HTTPGET='$(abs_builddir)/httpget'; export HTTPGET; \
+    PARTIALGET='$(abs_builddir)/partialget'; export PARTIALGET; \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
     STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
     LIBAEPT_SO='$(abs_top_builddir)/src/.libs/libaept.so'; export LIBAEPT_SO; \

@@ -135,14 +135,50 @@ struct httpio {
     size_t bufsize;           /* size of chunk buffer */
     ssize_t buflen;           /* amount of data currently in buffer */
     int bufpos;               /* current read offset in buffer */
-    int eof;                  /* end-of-file flag */
+    int end_of_body;          /* the body ended where its framing said */
     int error;                /* error flag */
+    int intr;                 /* the last fill was interrupted by a signal */
+    int trailer;              /* the CRLF closing a chunk is still owed */
+    int trailer_got;          /* how much of that CRLF has arrived */
+    char trailer_buf[2];      /* ... and what it was */
     size_t chunksize;         /* remaining size of current chunk */
     off_t contentlength;      /* remaining size of the content */
 };
 
 /*
+ * A signal is not a stream failure.  poll(2) is never restarted, so any
+ * handler the embedding application has installed turns a wait for the
+ * next bytes of a body into EINTR -- and the connection is untouched by
+ * that: nothing was consumed, and reading again resumes exactly where
+ * the transfer stood.  So `intr` is kept apart from `error`, which is
+ * sticky and condemns the stream: latching a signal there is what made
+ * download.c's `if (errno == EINTR) continue;` unable to succeed, since
+ * the retry it costs lands on a stream that has already given up.
+ *
+ * The flag is transient -- set by a fill, consumed by the read that
+ * asked for it -- so it says only "this call transferred nothing
+ * because a signal arrived", never anything about the stream.
+ *
+ * EINTR is still never retried down here.  It is reported, and whether
+ * anyone tries again is the caller's decision: aept's own reader checks
+ * for cancellation before it retries, and before a body has begun there
+ * is no reader to decide, which is precisely what lets a signal end a
+ * handshake that would otherwise hang.
+ */
+static int http_interrupted(struct httpio *io)
+{
+    if (errno != EINTR)
+        return 0;
+    io->intr = 1;
+    return 1;
+}
+
+/*
  * Get next chunk header
+ *
+ * Fails with errno set, always: the caller tells an interruption from a
+ * malformed header by it, and a stale EINTR left behind by an earlier
+ * call would be read as the first when it is the second.
  */
 static int http_new_chunk(struct httpio *io)
 {
@@ -151,12 +187,16 @@ static int http_new_chunk(struct httpio *io)
     if (libfetch_getln(io->conn) == -1)
         return -1;
 
-    if (io->conn->buflen < 2)
+    if (io->conn->buflen < 2) {
+        errno = EIO;
         return -1;
+    }
 
     io->chunksize = libfetch_parseuint(io->conn->buf, &p, 16, SIZE_MAX);
-    if (*p && *p != ';' && !isspace((unsigned char)*p))
+    if (*p && *p != ';' && !isspace((unsigned char)*p)) {
+        errno = EIO;
         return -1;
+    }
 
     return 0;
 }
@@ -179,25 +219,85 @@ static int http_growbuf(struct httpio *io, size_t len)
 }
 
 /*
+ * Consume the CRLF that closes a chunk.
+ *
+ * Split out of the chunk body, and read on the way *into* the next fill
+ * rather than on the way out of the last one, so that an interruption
+ * here can be resumed: io->trailer says the CRLF is still owed and
+ * io->trailer_got how much of it has arrived, which is state a signal
+ * cannot lose.  The cost is that the bytes of a chunk are handed to the
+ * caller before its framing has been checked -- a mis-framed body is
+ * still refused, one read later, and aept only accepts a download that
+ * ends at end-of-body, so no caller sees the difference.
+ */
+static int http_chunk_trailer(struct httpio *io)
+{
+    while (io->trailer_got < 2) {
+        ssize_t n = libfetch_read(io->conn, io->trailer_buf + io->trailer_got, 2 - io->trailer_got);
+
+        if (n == -1) {
+            if (http_interrupted(io))
+                return -1;
+            io->error = 1;
+            return -1;
+        }
+        if (n == 0) {
+            /* The peer hung up inside the framing. */
+            io->error = 1;
+            errno = EIO;
+            return -1;
+        }
+        io->trailer_got += n;
+    }
+
+    /*
+     * Missing CRLF means the framing is not what the server claimed, so
+     * the stream has to be abandoned -- and io->error is what says so:
+     * a bare -1 from here leaves the flag clear, and http_readfn then
+     * hands the caller the bytes it had already collected as if the
+     * body had simply ended.
+     */
+    if (io->trailer_buf[0] != '\r' || io->trailer_buf[1] != '\n') {
+        io->error = 1;
+        errno = EIO;
+        return -1;
+    }
+
+    io->trailer = 0;
+    io->trailer_got = 0;
+    return 0;
+}
+
+/*
  * Fill the input buffer, do chunk decoding on the fly
  */
 static int http_fillbuf(struct httpio *io, size_t len)
 {
+    ssize_t n;
+
     if (io->error)
         return -1;
-    if (io->eof)
+    if (io->end_of_body)
         return 0;
 
     if (io->contentlength >= 0 && (off_t)len > io->contentlength)
         len = io->contentlength;
 
     if (io->chunked == 0) {
-        if (http_growbuf(io, len) == -1)
+        if (http_growbuf(io, len) == -1) {
+            /* Not an end of body: a -1 that left both flags clear would
+             * be read as one by http_readfn. */
+            io->error = 1;
+            errno = ENOMEM;
             return -1;
-        if ((io->buflen = libfetch_read(io->conn, io->buf, len)) == -1) {
+        }
+        if ((n = libfetch_read(io->conn, io->buf, len)) == -1) {
+            if (http_interrupted(io))
+                return -1;
             io->error = 1;
             return -1;
         }
+        io->buflen = n;
         if (io->buflen == 0) {
             /*
              * The peer hung up.  If it promised a length and
@@ -212,7 +312,7 @@ static int http_fillbuf(struct httpio *io, size_t len)
                 errno = EIO;
                 return -1;
             }
-            io->eof = 1;
+            io->end_of_body = 1;
             return 0;
         }
         if (io->contentlength > 0)
@@ -221,27 +321,52 @@ static int http_fillbuf(struct httpio *io, size_t len)
         return io->buflen;
     }
 
+    /* The CRLF the previous chunk still owes, before anything is read
+     * that would depend on the framing being what it claimed. */
+    if (io->trailer && http_chunk_trailer(io) == -1)
+        return -1;
+
     if (io->chunksize == 0) {
         if (http_new_chunk(io) == -1) {
+            /* The header line resumes where it was interrupted, so a
+             * signal costs nothing here either. */
+            if (http_interrupted(io))
+                return -1;
             io->error = 1;
             return -1;
         }
         if (io->chunksize == 0) {
-            io->eof = 1;
-            if (libfetch_getln(io->conn) == -1)
+            /*
+             * The line that follows the terminating chunk is part of
+             * this response too, so the body has not ended until it has
+             * been read -- and until it has, the connection still has
+             * bytes on it that are nobody else's business.
+             */
+            if (libfetch_getln(io->conn) == -1) {
+                if (http_interrupted(io))
+                    return -1;
+                io->error = 1;
                 return -1;
+            }
+            io->end_of_body = 1;
             return 0;
         }
     }
 
     if (len > io->chunksize)
         len = io->chunksize;
-    if (http_growbuf(io, len) == -1)
+    if (http_growbuf(io, len) == -1) {
+        io->error = 1;
+        errno = ENOMEM;
         return -1;
-    if ((io->buflen = libfetch_read(io->conn, io->buf, len)) == -1) {
+    }
+    if ((n = libfetch_read(io->conn, io->buf, len)) == -1) {
+        if (http_interrupted(io))
+            return -1;
         io->error = 1;
         return -1;
     }
+    io->buflen = n;
     if (io->buflen == 0) {
         /* End of file in the middle of a chunk: same story. */
         io->error = 1;
@@ -252,29 +377,10 @@ static int http_fillbuf(struct httpio *io, size_t len)
     if (io->contentlength >= 0)
         io->contentlength -= io->buflen;
 
-    if (io->chunksize == 0) {
-        char endl[2];
-        ssize_t len2;
-
-        /*
-         * Every chunk is followed by CRLF.  Missing it means the
-         * framing is not what the server claimed, so the stream
-         * has to be abandoned -- and io->error is what says so:
-         * a bare -1 from here leaves the flag clear, and
-         * http_readfn then hands the caller the bytes it had
-         * already collected as if the body had simply ended.
-         */
-        len2 = libfetch_read(io->conn, endl, 2);
-        if (len2 == 1 && libfetch_read(io->conn, endl + 1, 1) != 1) {
-            io->error = 1;
-            return -1;
-        }
-        if (len2 == -1 || endl[0] != '\r' || endl[1] != '\n') {
-            io->error = 1;
-            errno = EIO;
-            return -1;
-        }
-    }
+    /* Every chunk is followed by CRLF; it is read at the top of the
+     * next fill, where an interruption can be resumed. */
+    if (io->chunksize == 0)
+        io->trailer = 1;
 
     io->bufpos = 0;
 
@@ -300,8 +406,10 @@ static ssize_t http_readfn(void *v, void *buf, size_t len)
         errno = EIO;
         return -1;
     }
-    if (io->eof)
+    if (io->end_of_body)
         return 0;
+
+    io->intr = 0;
 
     for (pos = 0; len > 0; pos += l, len -= l) {
         /* empty buffer */
@@ -315,8 +423,21 @@ static ssize_t http_readfn(void *v, void *buf, size_t len)
         io->bufpos += l;
     }
 
-    if (!pos && io->error)
-        return -1;
+    if (!pos) {
+        if (io->error)
+            return -1;
+        /*
+         * Interrupted with nothing to show for it.  Reported as EINTR
+         * so a caller can tell it from the end of the body and read
+         * again; had anything been read, those bytes are returned
+         * instead and the signal goes unmentioned, since the next read
+         * resumes anyway.
+         */
+        if (io->intr) {
+            errno = EINTR;
+            return -1;
+        }
+    }
     return pos;
 }
 
@@ -339,11 +460,20 @@ static void http_closefn(void *v)
     libfetch_conn_t *conn = io->conn;
 
     /*
-     * A stream that failed stopped at an unknown point in the
-     * protocol, so the connection cannot be reused: the next request
-     * on it would be answered by the tail of this one's body.
+     * A connection is reusable only when this stream ended exactly at
+     * the end of its response.  Anything else -- a failure, a caller
+     * that stopped reading early, a signal it chose not to resume from
+     * -- leaves the stream at an unknown point in the protocol with
+     * bytes of this response still on the wire, and the next request
+     * would be answered by them.  end_of_body is what says that end was
+     * reached; error only says the stream failed, which is a narrower
+     * thing.  Note that the connection is still open at that point --
+     * the body ends where Content-Length or the chunked framing says it
+     * does, not where the socket does.  A response delimited by the
+     * close itself is the one case where the two coincide, and it never
+     * gets this far: keep_alive is cleared for it.
      */
-    if (io->keep_alive && !io->error) {
+    if (io->keep_alive && io->end_of_body && !io->error) {
         libfetch_cache_put(io->ctx, conn, libfetch_close);
     } else {
         libfetch_close(conn);
@@ -1102,6 +1232,10 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
 
         if (keep_alive) {
             char buf[512];
+
+            /* Drain the error body, so the connection ends at the end
+             * of its response and http_closefn can cache it.  A drain
+             * that stops early simply does not reach that point. */
             do {
             } while (libfetch_io_read(f, buf, sizeof(buf)) > 0);
         }

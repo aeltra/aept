@@ -107,6 +107,14 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
         if (n == 0)
             break;
         if (n < 0) {
+            /*
+             * A signal, not a failure: nothing was transferred and the
+             * stream is intact, so read again.  Cancellation is looked
+             * at first, above, which is what keeps this from swallowing
+             * the one signal aept is meant to act on -- and it is the
+             * reason libfetch may report an interruption instead of
+             * deciding for itself to retry.
+             */
             if (errno == EINTR)
                 continue;
             record_error(ctx);

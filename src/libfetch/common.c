@@ -694,9 +694,15 @@ ssize_t libfetch_read(libfetch_conn_t *conn, char *buf, size_t len)
             return -1;
 
         if (conn->ssl != NULL) {
+            int err;
+
+            /* Cleared, so that the errno inspected below belongs to
+             * this call and not to whatever last set it. */
+            errno = 0;
             rlen = SSL_read(conn->ssl, buf, len);
             if (rlen == -1) {
-                switch (SSL_get_error(conn->ssl, rlen)) {
+                err = SSL_get_error(conn->ssl, rlen);
+                switch (err) {
                 case SSL_ERROR_WANT_READ:
                     conn->buf_events = POLLIN;
                     continue;
@@ -704,7 +710,17 @@ ssize_t libfetch_read(libfetch_conn_t *conn, char *buf, size_t len)
                     conn->buf_events = POLLOUT;
                     continue;
                 default:
-                    errno = EIO;
+                    /*
+                     * Only SSL_ERROR_SYSCALL leaves a meaningful errno,
+                     * and only EINTR is worth keeping out of it: a
+                     * signal must arrive at the caller as a signal, not
+                     * as an I/O failure that condemns the stream.  Every
+                     * other case -- a protocol error, or the syscall
+                     * error 0 that means the peer went away mid-record
+                     * -- is one, and is restated as such.
+                     */
+                    if (!(err == SSL_ERROR_SYSCALL && errno == EINTR))
+                        errno = EIO;
                     libfetch_syserr();
                     return -1;
                 }
@@ -747,7 +763,18 @@ int libfetch_getln(libfetch_conn_t *conn)
         conn->bufsize = MIN_BUF_SIZE;
     }
 
-    conn->buflen = 0;
+    /*
+     * A line interrupted by a signal is resumed, not restarted.  What
+     * has arrived is off the wire for good, so starting over would read
+     * the rest of this line as if it were the next one -- and in a
+     * chunked body the lines are the framing, which is why an
+     * interruption there used to have to condemn the stream.  The flag
+     * is the only state needed: the buffer holds no newline yet, or
+     * this call would not be happening.
+     */
+    if (!conn->line_partial)
+        conn->buflen = 0;
+    conn->line_partial = 0;
     next = NULL;
 
     do {
@@ -757,8 +784,11 @@ int libfetch_getln(libfetch_conn_t *conn)
          * the case of len == 0.
          */
         len = libfetch_read(conn, conn->buf + conn->buflen, conn->bufsize - conn->buflen);
-        if (len == -1)
+        if (len == -1) {
+            if (errno == EINTR)
+                conn->line_partial = 1;
             return -1;
+        }
         if (len == 0)
             break;
         next = memchr(conn->buf + conn->buflen, '\n', len);

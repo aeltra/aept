@@ -101,6 +101,7 @@ struct libfetch_conn {
     int timeout;                /* copied from the context that opened it */
     char *next_buf;             /* pending buffer, e.g. after getln */
     size_t next_len;            /* size of pending buffer */
+    int line_partial;           /* a line was interrupted half-read */
     int err;                    /* last protocol reply code */
     SSL *ssl;                   /* SSL handle */
     SSL_CTX *ssl_ctx;           /* SSL context */
