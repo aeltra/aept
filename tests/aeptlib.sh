@@ -244,6 +244,32 @@ http_stub_stop() {
     STUB_PID=
 }
 
+# cond_serve <dir> <mode> <logfile> — start condserver.py, which
+# revalidates and logs what each request asked.  Sets COND_PORT and
+# COND_PID.
+cond_serve() {
+    python3 -u "${srcdir:-.}/condserver.py" "$1" "$2" > "$3" 2>&1 &
+    COND_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        COND_PORT=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' "$3" | head -1)
+        if [ -n "$COND_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$COND_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+cond_stop() {
+    [ -n "${COND_PID:-}" ] && kill "$COND_PID" 2>/dev/null
+    COND_PID=
+}
+
 # stall_serve <logfile> — start stallserver.py, which accepts a
 # connection and then never says anything.  Sets STALL_PORT and
 # STALL_PID.

@@ -12,6 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "libfetch/fetch.h"
+
 #include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/clearsign.h"
@@ -19,6 +21,7 @@
 #include "aept/msg.h"
 #include "aept/update.h"
 #include "aept/util.h"
+#include "aept/validator.h"
 #include "aept/verify.h"
 
 /*
@@ -96,8 +99,32 @@ static char *slurp_gz(const char *path, size_t *out_len)
 }
 
 /*
+ * Ask for the index only if the copy already held is out of date.
+ *
+ * Two things have to be true before a request may be conditional: the
+ * files that would be kept are all still there, and the validators on
+ * record were written for this very url.  Miss either and the answer
+ * "unchanged" would leave nothing behind, or leave the wrong thing.
+ *
+ * Sets *have and returns 1 when the request may carry validators.
+ */
+static int have_validators(const char *val_path, const char *url, const char *keep_a,
+                           const char *keep_b, struct libfetch_validators *have)
+{
+    memset(have, 0, sizeof(*have));
+
+    if (!aept_file_exists(keep_a))
+        return 0;
+    if (keep_b && !aept_file_exists(keep_b))
+        return 0;
+
+    return aept_validator_load(val_path, url, have) == 0;
+}
+
+/*
  * Fetch InPackages.gz — the index and its signature in a single object —
- * and split it into the message and signature files that usign expects.
+ * split it into the message and signature files that usign expects, and
+ * verify it.
  *
  * Fetching one object instead of two removes the window in which a
  * republished repository can hand out an index and a signature that do
@@ -106,31 +133,45 @@ static char *slurp_gz(const char *path, size_t *out_len)
  * Packages.sig, so that blocking this one request cannot push a client
  * back onto the two-object path.
  *
+ * On a 304 nothing is downloaded, nothing is written and nothing is
+ * verified: what is on disk was verified when it was put there, which
+ * is the whole saving.
+ *
  * Returns 0 on success, -1 on error.
  */
 static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src, const char *list_path,
-                              const char *sig_path)
+                              const char *sig_path, const char *val_path, int *unchanged)
 {
     char *url = NULL;
     char *tmp_path = NULL;
     char *buf = NULL;
     size_t buf_len = 0;
+    struct libfetch_validators have, got;
     aept_clearsign_t cs;
+    int conditional;
     int r;
 
     aept_asprintf(&url, "%s/InPackages.gz", src->url);
     aept_asprintf(&tmp_path, "%s.in.gz", list_path);
 
-    r = aept_download(ctx, url, tmp_path, url);
-    free(url);
+    conditional = have_validators(val_path, url, list_path, sig_path, &have);
+
+    r = aept_download_cond(ctx, url, tmp_path, url, conditional ? &have : NULL, &got, unchanged);
 
     if (r < 0) {
         aept_log_error("failed to download InPackages.gz for '%s'; a signed "
                        "repository must publish one",
                        src->name);
         unlink(tmp_path);
+        free(url);
         free(tmp_path);
         return -1;
+    }
+
+    if (*unchanged) {
+        free(url);
+        free(tmp_path);
+        return 0;
     }
 
     buf = slurp_gz(tmp_path, &buf_len);
@@ -139,25 +180,44 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src, const ch
 
     if (!buf) {
         aept_log_error("failed to decompress InPackages.gz for '%s'", src->name);
+        free(url);
         return -1;
     }
 
     if (aept_clearsign_parse(buf, buf_len, &cs) < 0) {
         aept_log_error("malformed signed index for '%s'", src->name);
         free(buf);
+        free(url);
         return -1;
     }
 
     r = aept_clearsign_write(&cs, list_path, sig_path);
     free(buf);
 
+    if (r == 0 && aept_verify_signature(ctx, list_path, sig_path) < 0) {
+        unlink(list_path);
+        unlink(sig_path);
+        unlink(val_path);
+        r = -1;
+    }
+
+    /* Last, and only here: a validator recorded for an index that was
+     * then rejected would revalidate against a document this client
+     * never accepted, and the 304 it earns would freeze it there. */
+    if (r == 0)
+        aept_validator_save(val_path, url, &got);
+
+    free(url);
     return r < 0 ? -1 : 0;
 }
 
 /* Fetch the plain index, decompressing it when the source is gzipped. */
-static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const char *list_path)
+static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const char *list_path,
+                             const char *val_path, int *unchanged)
 {
     char *url = NULL;
+    struct libfetch_validators have, got;
+    int conditional;
     int r;
 
     if (src->gzip) {
@@ -166,22 +226,36 @@ static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const cha
         aept_asprintf(&url, "%s/Packages.gz", src->url);
         aept_asprintf(&gz_path, "%s.gz", list_path);
 
-        r = aept_download(ctx, url, gz_path, url);
-        free(url);
+        conditional = have_validators(val_path, url, list_path, NULL, &have);
 
-        if (r == 0) {
+        r = aept_download_cond(ctx, url, gz_path, url, conditional ? &have : NULL, &got, unchanged);
+
+        if (r == 0 && !*unchanged) {
             r = decompress_gz(gz_path, list_path);
-            if (r < 0)
+            if (r < 0) {
                 aept_log_error("failed to decompress Packages.gz for '%s'", src->name);
+                unlink(val_path);
+            } else {
+                aept_validator_save(val_path, url, &got);
+            }
         }
 
         unlink(gz_path);
         free(gz_path);
+        free(url);
         return r;
     }
 
     aept_asprintf(&url, "%s/Packages", src->url);
-    r = aept_download(ctx, url, list_path, "Packages");
+
+    conditional = have_validators(val_path, url, list_path, NULL, &have);
+
+    r = aept_download_cond(ctx, url, list_path, "Packages", conditional ? &have : NULL, &got,
+                           unchanged);
+
+    if (r == 0 && !*unchanged)
+        aept_validator_save(val_path, url, &got);
+
     free(url);
 
     return r;
@@ -199,6 +273,9 @@ static int is_active_source(struct aept_ctx *ctx, const char *name)
     return 0;
 }
 
+/* What a source leaves in the lists directory besides the index itself. */
+static const char *const list_suffixes[] = {".sig", ".validator"};
+
 static void prune_stale_lists(struct aept_ctx *ctx)
 {
     DIR *d;
@@ -213,17 +290,24 @@ static void prune_stale_lists(struct aept_ctx *ctx)
         const char *name = ent->d_name;
         char *base;
         char *copy;
+        size_t i;
 
         if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
             continue;
 
-        /* Strip .sig suffix to get the source name */
+        /* Strip the suffix, if any, to get the source name */
         copy = aept_strdup(name);
         base = copy;
 
         size_t len = strlen(base);
-        if (len > 4 && strcmp(base + len - 4, ".sig") == 0)
-            base[len - 4] = '\0';
+        for (i = 0; i < sizeof(list_suffixes) / sizeof(list_suffixes[0]); i++) {
+            size_t slen = strlen(list_suffixes[i]);
+
+            if (len > slen && strcmp(base + len - slen, list_suffixes[i]) == 0) {
+                base[len - slen] = '\0';
+                break;
+            }
+        }
 
         if (!is_active_source(ctx, base)) {
             aept_asprintf(&path, "%s/%s", ctx->config.lists_dir, name);
@@ -253,6 +337,8 @@ int aept_op_update(struct aept_ctx *ctx)
         aept_source_t *src = &ctx->config.sources[i];
         char *list_path = NULL;
         char *sig_path = NULL;
+        char *val_path = NULL;
+        int unchanged = 0;
 
         if (aept_cancelled()) {
             aept_log_warning("interrupted, stopping");
@@ -262,29 +348,27 @@ int aept_op_update(struct aept_ctx *ctx)
 
         aept_asprintf(&list_path, "%s/%s", ctx->config.lists_dir, src->name);
         aept_asprintf(&sig_path, "%s.sig", list_path);
+        aept_asprintf(&val_path, "%s.validator", list_path);
 
         if (ctx->config.check_signature) {
-            if (fetch_signed_index(ctx, src, list_path, sig_path) < 0) {
+            if (fetch_signed_index(ctx, src, list_path, sig_path, val_path, &unchanged) < 0) {
                 errors++;
                 goto next;
             }
-
-            if (aept_verify_signature(ctx, list_path, sig_path) < 0) {
-                unlink(list_path);
-                unlink(sig_path);
-                errors++;
-                goto next;
-            }
-        } else if (fetch_plain_index(ctx, src, list_path) < 0) {
+        } else if (fetch_plain_index(ctx, src, list_path, val_path, &unchanged) < 0) {
             errors++;
             goto next;
         }
 
-        aept_log_info("updated source '%s'", src->name);
+        if (unchanged)
+            aept_log_info("source '%s' is already up to date", src->name);
+        else
+            aept_log_info("updated source '%s'", src->name);
 
     next:
         free(list_path);
         free(sig_path);
+        free(val_path);
     }
 
     prune_stale_lists(ctx);

@@ -392,6 +392,8 @@ typedef enum {
     hdr_unknown = 1,
     hdr_connection,
     hdr_content_length,
+    hdr_etag,
+    hdr_last_modified,
     hdr_location,
     hdr_transfer_encoding,
     hdr_www_authenticate
@@ -404,11 +406,29 @@ static struct {
 } hdr_names[] = {
     {hdr_connection,        "Connection"       },
     {hdr_content_length,    "Content-Length"   },
+    {hdr_etag,              "ETag"             },
+    {hdr_last_modified,     "Last-Modified"    },
     {hdr_location,          "Location"         },
     {hdr_transfer_encoding, "Transfer-Encoding"},
     {hdr_www_authenticate,  "WWW-Authenticate" },
     {hdr_unknown,           NULL               },
 };
+
+/*
+ * Record a validator exactly as it arrived.
+ *
+ * A value that does not fit is dropped rather than truncated: a
+ * truncated validator is one that can never match, so storing it would
+ * turn every later request into a full download while looking from the
+ * outside as though revalidation were working.  Not fitting is the
+ * honest answer -- no validator, hence no conditional request.
+ */
+static void http_set_validator(char *dst, const char *value)
+{
+    if (strlen(value) > LIBFETCH_VALIDATOR_MAX)
+        return;
+    strcpy(dst, value);
+}
 
 /*
  * Send a formatted line; optionally echo to terminal
@@ -745,7 +765,9 @@ static struct libfetch_url *http_get_proxy(struct libfetch_url *url, const char 
  * XXX off into a separate function.
  */
 static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_url *URL,
-                                   const char *op, struct libfetch_url *purl, const char *flags)
+                                   const char *op, struct libfetch_url *purl, const char *flags,
+                                   const struct libfetch_validators *have,
+                                   struct libfetch_validators *got)
 {
     libfetch_conn_t *conn;
     struct libfetch_url *url, *new;
@@ -756,7 +778,11 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
     const char *p, *q;
     libfetch_io_t *f;
     hdr_t h;
+    struct libfetch_validators seen;
     char hbuf[LIBFETCH_URL_HOSTLEN + 7], *host;
+
+    if (got)
+        memset(got, 0, sizeof(*got));
 
     direct = CHECK_FLAG('d');
     noredirect = CHECK_FLAG('A');
@@ -782,6 +808,9 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
         new = NULL;
         chunked = 0;
         clength = -1;
+        /* Cleared per attempt, so a redirect's headers cannot be
+         * mistaken for the ones describing the body finally sent. */
+        memset(&seen, 0, sizeof(seen));
 
         /* check port */
         if (!url->port)
@@ -834,6 +863,18 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             }
         }
 
+        /*
+         * Ask for the body only if what we already hold is out of date.
+         * RFC 9110 13.1.3 says a client holding both validators SHOULD
+         * send both; a server with a strong ETag then prefers
+         * If-None-Match and ignores the date, so this degrades in the
+         * right direction if a fronting proxy ever weakens the ETag.
+         */
+        if (have && have->etag[0])
+            http_cmd(conn, "If-None-Match: %s\r\n", have->etag);
+        if (have && have->last_modified[0])
+            http_cmd(conn, "If-Modified-Since: %s\r\n", have->last_modified);
+
         http_cmd(conn, "User-Agent: %s\r\n", AEPT_USER_AGENT);
         http_cmd(conn, "\r\n");
 
@@ -849,8 +890,18 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
         /* get reply */
         switch (http_get_reply(conn)) {
         case HTTP_OK:
-        case HTTP_NOT_MODIFIED:
             /* fine */
+            break;
+        case HTTP_NOT_MODIFIED:
+            /*
+             * An answer to a question, so only fine if the question
+             * was asked.  Unsolicited it is the 206 case again: the
+             * server is talking about a request that was never made,
+             * and taking it at its word would mean reporting a
+             * document as current on no evidence at all.
+             */
+            if (!have)
+                goto protocol_error;
             break;
         case HTTP_PARTIAL:
         case HTTP_BAD_RANGE:
@@ -935,6 +986,12 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
                 if (*q)
                     goto protocol_error;
                 break;
+            case hdr_etag:
+                http_set_validator(seen.etag, p);
+                break;
+            case hdr_last_modified:
+                http_set_validator(seen.last_modified, p);
+                break;
             case hdr_location:
                 if (!HTTP_REDIRECT(conn->err))
                     break;
@@ -1012,6 +1069,9 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
     if (clength == -1 && !chunked)
         keep_alive = 0;
 
+    /* No body to hand back, so this returns NULL like a failure does;
+     * the caller tells the two apart by the error code, which is why
+     * LIBFETCH_HTTP_NOT_MODIFIED is spelled out in fetch.h. */
     if (conn->err == HTTP_NOT_MODIFIED) {
         http_seterr(HTTP_NOT_MODIFIED);
         if (keep_alive) {
@@ -1020,6 +1080,12 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
         }
         goto ouch;
     }
+
+    /* Only for a body that was really sent: a 304 leaves the caller's
+     * stored validators alone, and an error page describes itself
+     * rather than the document that was asked for. */
+    if (got && conn->err == HTTP_OK)
+        *got = seen;
 
     /* wrap it up in a libfetch_io_t */
     if ((f = http_funopen(fctx, conn, chunked, keep_alive, clength)) == NULL) {
@@ -1069,7 +1135,8 @@ ouch:
  * Retrieve a file by HTTP
  */
 libfetch_io_t *libfetch_get_http(struct libfetch_ctx *fctx, struct libfetch_url *URL,
-                                 const char *flags)
+                                 const char *flags, const struct libfetch_validators *have,
+                                 struct libfetch_validators *got)
 {
-    return http_request(fctx, URL, "GET", http_get_proxy(URL, flags), flags);
+    return http_request(fctx, URL, "GET", http_get_proxy(URL, flags), flags, have, got);
 }

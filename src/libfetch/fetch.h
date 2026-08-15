@@ -41,7 +41,33 @@
 #define LIBFETCH_URL_USERLEN 256
 #define LIBFETCH_URL_PWDLEN 4096
 
+/* Longest cache validator that will be stored.  An ETag is bounded by
+ * nothing in the specification, but the ones servers actually emit are
+ * a hash or an inode-mtime-size triple; an HTTP-date is 29 characters. */
+#define LIBFETCH_VALIDATOR_MAX 255
+
+/* The one status code a caller has to be able to tell from a failure. */
+#define LIBFETCH_HTTP_NOT_MODIFIED 304
+
 typedef struct libfetch_io_t libfetch_io_t;
+
+/*
+ * Cache validators, for asking a server whether a copy already held is
+ * still current.
+ *
+ * Both are opaque tokens: whatever arrived is stored and sent back byte
+ * for byte, so neither an ETag nor an HTTP-date is ever parsed, here or
+ * above.  That is a deliberate consequence of keeping them in a file of
+ * our own rather than in the cached file's mtime -- the mtime route
+ * forces a date through time_t, and so needs a parser and a generator
+ * on top of a store that any copy without -a silently resets.
+ *
+ * An empty string means "none".
+ */
+struct libfetch_validators {
+    char etag[LIBFETCH_VALIDATOR_MAX + 1];          /* ETag, quotes and all */
+    char last_modified[LIBFETCH_VALIDATOR_MAX + 1]; /* HTTP-date, verbatim */
+};
 
 struct libfetch_url {
     char scheme[LIBFETCH_URL_SCHEMELEN + 1];
@@ -137,11 +163,29 @@ void libfetch_set_timeout(struct libfetch_ctx *ctx, int seconds);
 void libfetch_io_close(libfetch_io_t *);
 ssize_t libfetch_io_read(libfetch_io_t *, void *, size_t);
 
+/*
+ * Retrieve a document.
+ *
+ * "have" holds the validators recorded for this URL when it was last
+ * retrieved, or is NULL to fetch unconditionally.  When it is given,
+ * the request carries them and the server may answer 304 Not Modified,
+ * which is reported as a NULL return with libfetch_last_error set to
+ * LIBFETCH_ERRCAT_HTTP / LIBFETCH_HTTP_NOT_MODIFIED.
+ *
+ * "got" is filled in with the validators the server offered for what it
+ * sent, or emptied when it offered none, and may be NULL.  It is only
+ * ever written for a body that was actually returned.
+ */
+
 /* HTTP */
-libfetch_io_t *libfetch_get_http(struct libfetch_ctx *, struct libfetch_url *, const char *);
+libfetch_io_t *libfetch_get_http(struct libfetch_ctx *, struct libfetch_url *, const char *,
+                                 const struct libfetch_validators *have,
+                                 struct libfetch_validators *got);
 
 /* Generic */
-libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *, const char *);
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *, const char *,
+                                const struct libfetch_validators *have,
+                                struct libfetch_validators *got);
 
 /* URL parsing.  Internal to the library: nothing outside it needs to
  * build or inspect a struct libfetch_url, but redirects and the connection

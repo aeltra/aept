@@ -23,11 +23,12 @@ and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
 `HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
 nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
 a proxy; there is no environment variable that supplies a user and password.
-Range requests, restart/resume, `If-Modified-Since` and `struct url_stat` are
-gone as well: aept never set `url->offset`, so that machinery was unreachable
-by design yet live enough that an **unsolicited `206 Partial Content` was
-accepted and written out as a whole file**. `206` and `416` are now protocol
-errors. `tests/test_http.sh` characterises its behaviour — run it after any
+Range requests, restart/resume and `struct url_stat` are gone as well: aept
+never set `url->offset`, so that machinery was unreachable by design yet live
+enough that an **unsolicited `206 Partial Content` was accepted and written out
+as a whole file**. `206` and `416` are now protocol errors, and so is an
+unsolicited `304` — see the conditional-GET note under update.c.
+`tests/test_http.sh` characterises its behaviour — run it after any
 change there. It carries **no OpenSSL compatibility shims**: 1.1.1 is the floor, so
 `TLS_client_method()` and `X509_check_host()` are used unguarded, and
 `src/libfetch/common.h` includes `<openssl/{err,ssl,x509,x509v3}.h>` directly.
@@ -152,10 +153,16 @@ run by Automake's harness.
 - Tests that log expected errors install a quiet context — see
   `silence_logging()` in `test_clearsign.c` — so a passing run stays clean.
 - Shell tests source `tests/aeptlib.sh` (`make_pkg`, `make_pkg_conffile`,
-  `new_root`, `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`) and
-  `skip` (exit 77) when a tool is missing rather than failing.
+  `new_root`, `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`,
+  `cond_serve`) and `skip` (exit 77) when a tool is missing rather than failing.
 - libfetch is built without `file.c`, so HTTP/HTTPS are the only transports.
-  Tests needing a real fetch serve over loopback via `http_serve`.
+  Tests needing a real fetch serve over loopback via `http_serve`. `cond_serve`
+  starts `condserver.py` instead when the test is about revalidation: it emits
+  `ETag` and `Last-Modified`, honours both conditional headers with the RFC's
+  precedence, and **logs what each request asked**. python3's own `http.server`
+  handles `If-Modified-Since` but emits no `ETag` and reports nothing, so a test
+  built on it cannot tell a conditional request answered `304` from one that was
+  never made — which is exactly the distinction being tested.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
@@ -216,13 +223,15 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
 - **status.c** — Reads/writes the installed-packages database (Debian control format). Loaded into libsolv as the "@installed" repo.
 - **update.c** — Fetches package lists. With `check_signature` on (the default) it fetches **`InPackages.gz`** — index and signature in one object — and there is deliberately **no** fallback to `Packages` + `Packages.sig`, so blocking one request cannot push a client onto the two-object path. Decompression is capped at `MAX_INDEX_SIZE`, since the stream is chosen by the remote side. **The signature is checked here and nowhere else** — `aept_verify_signature()` has exactly one caller — so the stored index is trusted thereafter because it was verified once, when written. The `.sig` written beside it is never read again.
+
+  **Conditional GET.** The index request carries `If-None-Match` and `If-Modified-Since` when both are known, per RFC 9110 §13.1.3, and a `304` means keep what is on disk — no download, no re-verification, since it was verified when it was written. Packages are never revalidated: they are immutable and already checksummed. The validators live in `<lists_dir>/<name>.validator` (`validator.c`), the **first** per-source state file in the tree, as **opaque tokens echoed verbatim** — an ETag and an HTTP-date are equally unparsed, so there is no date parser anywhere in aept. That is the whole reason for a side file: apt keeps the validator in the cached file's mtime and is therefore forced through `time_t`, needing a parser *and* a generator, in a store any `cp` without `-a` resets. The record names the URL it was written for and is only sent back to that URL, or the same source fetched as `Packages.gz` instead of `InPackages.gz` would revalidate against the wrong document. It is written **last**, after the index has been verified and stored — a validator recorded for an index that was then rejected would earn a `304` and freeze the client on a document it never accepted. An **unsolicited `304` is a protocol error** in libfetch, on the same grounds as an unsolicited `206`: a request that asked no question gets no answer. **None of this is a freshness mechanism** — `ETag`, `Last-Modified` and `304` are all unsigned, a mirror answering "not modified" forever *is* the freeze attack, and only index.c's signed `Valid-Until` bounds it. `tests/test_update_conditional.sh` and `tests/test_validator.c` cover it.
 - **index.c** — the repository metadata stanza an index opens with (`Origin`, `Date`, `Valid-Until`) instead of a package. Timestamps are UTC and fixed width, so comparing two is `strcmp` and needs no date parsing. `aept_index_check_expiry()` runs at **index load time** (`install.c` and `api.c`), not at update time, and that placement is the point: the client this catches is one whose updates never arrive, and an attacker who simply drops the request leaves a client on a stale index forever where nothing on the update path can see it. `option check_index_expiry` decides whether expiry is fatal — default `0` (warn and use it anyway), because enforcing needs a re-signing job republishing on a timer, and without one every archive that stops receiving uploads expires and every client stops working. A deployment that runs such a job sets it to `1`; `install` then fails and `api.c` skips the source rather than aborting the whole query. An index carrying no `Valid-Until` is never refused, or repositories indexed before the field existed would break. **Rollback is not defended against**: `Date` is emitted and signed, but nothing compares it to the index already held. `tests/test_index_freshness.sh` covers the rest.
 - **clearsign.c** — Splits a signify clearsigned envelope into message and signature. Splits at the **last** signature marker, because the envelope has no escaping and a package `Description` can contain a line that looks like one. The signature covers the index bytes exactly, trailing newline included.
 - **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
 - **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction.
-- **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. Only the checksum saves a truncated package; nothing saves a truncated unsigned index.
-- **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup.
+- **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
+- **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.
 - **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.
 - **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) via `/bin/sh` through `aept_system_offline_root()`. No environment is set for them: with an offline root the script runs chrooted, so it already sees that root as `/` and needs no prefix variable (unlike opkg, which does not chroot and passes `$PKG_ROOT` instead).

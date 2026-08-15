@@ -50,7 +50,9 @@ _Thread_local struct libfetch_error libfetch_last_error;
  * Parse the given URL and return a read-only stream connected to the
  * document it references.  HTTP and HTTPS are the only schemes.
  */
-libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL, const char *flags)
+libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL, const char *flags,
+                                const struct libfetch_validators *have,
+                                struct libfetch_validators *got)
 {
     struct libfetch_url *u;
     libfetch_io_t *f;
@@ -60,7 +62,7 @@ libfetch_io_t *libfetch_get_url(struct libfetch_ctx *fctx, const char *URL, cons
 
     if (strcasecmp(u->scheme, LIBFETCH_SCHEME_HTTP) == 0 ||
         strcasecmp(u->scheme, LIBFETCH_SCHEME_HTTPS) == 0) {
-        f = libfetch_get_http(fctx, u, flags);
+        f = libfetch_get_http(fctx, u, flags, have, got);
     } else {
         url_seterr(URL_BAD_SCHEME);
         f = NULL;

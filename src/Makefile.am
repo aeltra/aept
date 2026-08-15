@@ -24,6 +24,7 @@ libaept_la_SOURCES = \
     util.c \
     msg.c \
     pin.c \
+    validator.c \
     libfetch/common.c \
     libfetch/fetch.c \
     libfetch/http.c \

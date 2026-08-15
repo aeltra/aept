@@ -29,6 +29,7 @@ noinst_HEADERS = \
     include/aept/trigger.h \
     include/aept/update.h \
     include/aept/util.h \
+    include/aept/validator.h \
     include/aept/verify.h
 
 EXTRA_DIST = .clang-format .git-blame-ignore-revs

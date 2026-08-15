@@ -37,7 +37,9 @@ static void record_error(struct aept_ctx *ctx)
         ctx->last_error = AEPT_ERR_GENERAL;
 }
 
-int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name)
+int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, const char *name,
+                       const struct libfetch_validators *have, struct libfetch_validators *got,
+                       int *unchanged)
 {
     libfetch_io_t *fio = NULL;
     FILE *fp = NULL;
@@ -47,6 +49,9 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
     int ret = -1;
 
     aept_log_info("downloading %s", name);
+
+    if (unchanged)
+        *unchanged = 0;
 
     ctx->last_error = AEPT_ERR_NONE;
 
@@ -60,8 +65,22 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
     libfetch_set_client_certificate(ctx->http, ctx->config.ssl_client_cert,
                                     ctx->config.ssl_client_key);
 
-    fio = libfetch_get_url(ctx->http, url, "");
+    fio = libfetch_get_url(ctx->http, url, "", have, got);
     if (!fio) {
+        /*
+         * "Still current" is an answer, not a failure, and there is no
+         * body to write: what is on disk stays, already verified when
+         * it was put there.  libfetch only reports this in reply to a
+         * request that carried a validator -- an unsolicited 304 never
+         * reaches here, it is a protocol error like an unsolicited 206.
+         */
+        if (libfetch_last_error.category == LIBFETCH_ERRCAT_HTTP &&
+            libfetch_last_error.code == LIBFETCH_HTTP_NOT_MODIFIED) {
+            aept_log_debug("%s is unchanged", name);
+            *unchanged = 1;
+            return 0;
+        }
+
         record_error(ctx);
         if (ctx->last_error == AEPT_ERR_TIMEOUT)
             aept_log_error("timed out downloading '%s'", url);
@@ -126,6 +145,11 @@ cleanup:
         unlink(tmp);
     free(tmp);
     return ret;
+}
+
+int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name)
+{
+    return aept_download_cond(ctx, url, dest, name, NULL, NULL, NULL);
 }
 
 static int verify_checksum(const char *path, Pool *pool, Solvable *s)

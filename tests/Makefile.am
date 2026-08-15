@@ -8,7 +8,7 @@ AM_CPPFLAGS = \
 # shell tests drive, so they are built but never run on their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy
+    test_no_proxy test_validator
 
 check_PROGRAMS = $(unit_tests) httpget threadrace stallclient
 
@@ -82,6 +82,15 @@ test_trigger_entries_SOURCES = \
     $(top_srcdir)/src/msg.c
 test_trigger_entries_CFLAGS = -D_GNU_SOURCE
 
+# validator.c reads and writes the record beside an index; nothing in it
+# reaches the network, so only the allocators and logging come with it.
+test_validator_SOURCES = \
+    test_validator.c \
+    $(top_srcdir)/src/validator.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_validator_CFLAGS = -D_GNU_SOURCE
+
 # Links the library rather than individual modules: aept_download()
 # pulls in libfetch and its OpenSSL dependency.
 test_ssl_env_SOURCES = test_ssl_env.c
@@ -103,6 +112,7 @@ dist_check_SCRIPTS = \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
+    test_update_conditional.sh \
     test_index_freshness.sh \
     test_upgrade_conffiles.sh \
     test_hardlink_escape.sh \
@@ -115,8 +125,8 @@ dist_check_SCRIPTS = \
     test_cancel.sh \
     test_timeout.sh
 
-EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py libaept.abi \
-    abi-declarations.sh
+EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
+    libaept.abi abi-declarations.sh
 
 TEST_EXTENSIONS = .sh
 
