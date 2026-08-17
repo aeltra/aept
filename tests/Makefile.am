@@ -50,6 +50,7 @@ threadrace_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 test_archive_path_SOURCES = \
     test_archive_path.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_path_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -59,6 +60,7 @@ test_script_SOURCES = \
     test_script.c \
     $(top_srcdir)/src/script.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_script_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_script_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -67,6 +69,7 @@ test_config_root_SOURCES = \
     test_config_root.c \
     $(top_srcdir)/src/config.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_config_root_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_config_root_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -75,6 +78,7 @@ test_archive_open_SOURCES = \
     test_archive_open.c \
     $(top_srcdir)/src/archive.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_open_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -84,6 +88,7 @@ test_clearsign_SOURCES = \
     test_clearsign.c \
     $(top_srcdir)/src/clearsign.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_clearsign_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -93,6 +98,7 @@ test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_trigger_entries_SOURCES = \
     test_trigger_entries.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_trigger_entries_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_trigger_entries_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -103,6 +109,7 @@ test_validator_SOURCES = \
     test_validator.c \
     $(top_srcdir)/src/validator.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_validator_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_validator_LDFLAGS = $(COVERAGE_LDFLAGS)
@@ -110,6 +117,7 @@ test_validator_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_url_sanitize_SOURCES = \
     test_url_sanitize.c \
     $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_url_sanitize_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_url_sanitize_LDFLAGS = $(COVERAGE_LDFLAGS)

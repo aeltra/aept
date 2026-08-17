@@ -187,14 +187,20 @@ libfetch_io_t *libfetch_get_url(struct libfetch_ctx *, const char *, const char 
                                 const struct libfetch_validators *have,
                                 struct libfetch_validators *got);
 
-/* URL parsing.  Internal to the library: nothing outside it needs to
- * build or inspect a struct libfetch_url, but redirects and the connection
- * cache do. */
+/* URL parsing.  Used by redirects and the connection cache inside the
+ * library, and by aept's download.c, which parses the credential-free
+ * url and injects the source's user and password before the request --
+ * the one place the two halves of a credentialed source meet. */
 struct libfetch_url *libfetch_make_url(const char *, const char *, int, const char *, const char *,
                                        const char *);
 struct libfetch_url *libfetch_parse_url(const char *);
 struct libfetch_url *libfetch_copy_url(const struct libfetch_url *);
 void libfetch_free_url(struct libfetch_url *);
+
+/* The percent-escape decoder the URL parser uses (pctdecode.c),
+ * exported so aept's config-time credential split (util.c) shares the
+ * one definition of what an escape means. */
+const char *libfetch_pctdecode(char *dst, const char *src, const char *brk, size_t dlen);
 
 /* Last error code, per-thread */
 extern _Thread_local struct libfetch_error libfetch_last_error;

@@ -28,6 +28,7 @@ libaept_la_SOURCES = \
     libfetch/common.c \
     libfetch/fetch.c \
     libfetch/http.c \
+    libfetch/pctdecode.c \
     libfetch/common.h \
     libfetch/fetch.h
 

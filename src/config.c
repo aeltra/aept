@@ -48,8 +48,22 @@ void aept_config_set_defaults(struct aept_config *cfg)
 
 static void add_source(struct aept_config *cfg, const char *name, const char *url, int gzip)
 {
+    char *clean, *user, *password;
+
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_warning("ignoring source with unsafe name '%s'", name);
+        return;
+    }
+
+    /*
+     * Credentials are split off here, at the door: src->url never
+     * carries them, so nothing downstream can log or store a password
+     * by accident.  Refused rather than dropped on a malformed
+     * userinfo -- libfetch would have refused the assembled url too,
+     * only later and with a worse message.
+     */
+    if (aept_url_split(url, &clean, &user, &password) != 0) {
+        aept_log_warning("ignoring source '%s': malformed credentials in url", name);
         return;
     }
 
@@ -58,7 +72,9 @@ static void add_source(struct aept_config *cfg, const char *name, const char *ur
 
     aept_source_t *src = &cfg->sources[cfg->nsources - 1];
     src->name = aept_strdup(name);
-    src->url = aept_strdup(url);
+    src->url = clean;
+    src->user = user;
+    src->password = password;
     src->gzip = gzip;
 }
 
@@ -317,6 +333,8 @@ void aept_config_free(struct aept_config *cfg)
     for (i = 0; i < cfg->nsources; i++) {
         free(cfg->sources[i].name);
         free(cfg->sources[i].url);
+        free(cfg->sources[i].user);
+        free(cfg->sources[i].password);
     }
     free(cfg->sources);
 

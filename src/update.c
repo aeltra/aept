@@ -156,7 +156,8 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src, const ch
 
     conditional = have_validators(val_path, url, list_path, sig_path, &have);
 
-    r = aept_download_cond(ctx, url, tmp_path, url, conditional ? &have : NULL, &got, unchanged);
+    r = aept_download_cond(ctx, url, tmp_path, url, src->user, src->password,
+                           conditional ? &have : NULL, &got, unchanged);
 
     if (r < 0) {
         aept_log_error("failed to download InPackages.gz for '%s'; a signed "
@@ -228,7 +229,8 @@ static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const cha
 
         conditional = have_validators(val_path, url, list_path, NULL, &have);
 
-        r = aept_download_cond(ctx, url, gz_path, url, conditional ? &have : NULL, &got, unchanged);
+        r = aept_download_cond(ctx, url, gz_path, url, src->user, src->password,
+                               conditional ? &have : NULL, &got, unchanged);
 
         if (r == 0 && !*unchanged) {
             r = decompress_gz(gz_path, list_path);
@@ -250,8 +252,8 @@ static int fetch_plain_index(struct aept_ctx *ctx, aept_source_t *src, const cha
 
     conditional = have_validators(val_path, url, list_path, NULL, &have);
 
-    r = aept_download_cond(ctx, url, list_path, "Packages", conditional ? &have : NULL, &got,
-                           unchanged);
+    r = aept_download_cond(ctx, url, list_path, "Packages", src->user, src->password,
+                           conditional ? &have : NULL, &got, unchanged);
 
     if (r == 0 && !*unchanged)
         aept_validator_save(val_path, url, &got);

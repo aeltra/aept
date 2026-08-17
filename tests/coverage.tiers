@@ -67,5 +67,6 @@ file src/libfetch/common.c      plumbing
 file src/libfetch/common.h      plumbing
 file src/libfetch/fetch.c       plumbing
 file src/libfetch/http.c        plumbing
+file src/libfetch/pctdecode.c   plumbing
 
 file src/main.c                 cli

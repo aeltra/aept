@@ -74,6 +74,18 @@ grep -q "^URL: http://127.0.0.1:$COND_PORT/InPackages.gz\$" "$val" \
 $(cat "$val")"
 note "the validator record carries the url without its credentials"
 
+# ── the credentials still reach the wire ─────────────────────────────
+#
+# Redaction that quietly stopped sending the password would look
+# identical from the outside, so ask the server what it saw.
+
+b64=$(printf 'user:%s' "$PASS" \
+    | python3 -c 'import base64,sys; print(base64.b64encode(sys.stdin.buffer.read()).decode())')
+grep -q "^AUTH /InPackages.gz Basic $b64\$" "$log" \
+    || fail "the request did not carry the configured credentials:
+$(grep '^AUTH ' "$log")"
+note "the request carried the credentials as basic auth"
+
 # ── the sanitized record still revalidates ───────────────────────────
 
 out=$(aept_run "$root" update 2>&1)

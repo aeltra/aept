@@ -38,9 +38,11 @@ static void record_error(struct aept_ctx *ctx)
 }
 
 int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, const char *name,
+                       const char *user, const char *password,
                        const struct libfetch_validators *have, struct libfetch_validators *got,
                        int *unchanged)
 {
+    struct libfetch_url *fu = NULL;
     libfetch_io_t *fio = NULL;
     FILE *fp = NULL;
     char *tmp = NULL;
@@ -69,7 +71,24 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
     libfetch_set_client_certificate(ctx->http, ctx->config.ssl_client_cert,
                                     ctx->config.ssl_client_key);
 
-    fio = libfetch_get_url(ctx->http, url, "", have, got);
+    /*
+     * Parse, inject, fetch -- libfetch_get_url() minus the scheme
+     * dispatch, which the parser already performs: it accepts nothing
+     * but http and https.  The credentials enter here, after the parse,
+     * so they exist in no url string anywhere in aept; a url that
+     * carries its own userinfo (a caller going through aept_download()
+     * directly) still works, since the parse fills the same two fields
+     * and the injection only overrides what it was given.
+     */
+    fu = libfetch_parse_url(url);
+    if (fu) {
+        if (user)
+            snprintf(fu->user, sizeof(fu->user), "%s", user);
+        if (password)
+            snprintf(fu->pwd, sizeof(fu->pwd), "%s", password);
+        fio = libfetch_get_http(ctx->http, fu, "", have, got);
+        libfetch_free_url(fu);
+    }
     if (!fio) {
         /*
          * "Still current" is an answer, not a failure, and there is no
@@ -164,7 +183,7 @@ cleanup:
 
 int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name)
 {
-    return aept_download_cond(ctx, url, dest, name, NULL, NULL, NULL);
+    return aept_download_cond(ctx, url, dest, name, NULL, NULL, NULL, NULL, NULL);
 }
 
 static int verify_checksum(const char *path, Pool *pool, Solvable *s)
@@ -239,7 +258,9 @@ int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool, char **dest_ou
         return -1;
     }
 
-    aept_asprintf(&url, "%s/%s", ctx->config.sources[src_idx].url, location);
+    aept_source_t *source = &ctx->config.sources[src_idx];
+
+    aept_asprintf(&url, "%s/%s", source->url, location);
 
     location_copy = aept_strdup(location);
     base = basename(location_copy);
@@ -259,7 +280,7 @@ int aept_download_package(struct aept_ctx *ctx, Id p, Pool *pool, char **dest_ou
         /* checksum failed — verify_checksum already deleted the file */
     }
 
-    r = aept_download(ctx, url, dest, base);
+    r = aept_download_cond(ctx, url, dest, base, source->user, source->password, NULL, NULL, NULL);
     free(url);
     free(location_copy);
 

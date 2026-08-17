@@ -171,52 +171,6 @@ struct libfetch_url *libfetch_copy_url(const struct libfetch_url *src)
 }
 
 /*
- * Return value of the given hex digit.
- */
-static int libfetch_hexval(char ch)
-{
-    if (ch >= '0' && ch <= '9')
-        return ch - '0';
-    else if (ch >= 'a' && ch <= 'f')
-        return ch - 'a' + 10;
-    else if (ch >= 'A' && ch <= 'F')
-        return ch - 'A' + 10;
-    return -1;
-}
-
-/*
- * Decode percent-encoded URL component from src into dst, stopping at end
- * of string or one of the characters contained in brk.  Returns a pointer
- * to the unhandled part of the input string (null terminator, specified
- * character).  No terminator is written to dst (it is the caller's
- * responsibility).
- */
-static const char *libfetch_pctdecode(char *dst, const char *src, const char *brk, size_t dlen)
-{
-    int d1, d2;
-    char c;
-    const char *s;
-
-    for (s = src; *s != '\0' && !strchr(brk, *s); s++) {
-        if (s[0] == '%' && (d1 = libfetch_hexval(s[1])) >= 0 && (d2 = libfetch_hexval(s[2])) >= 0 &&
-            (d1 > 0 || d2 > 0)) {
-            c = d1 << 4 | d2;
-            s += 2;
-        } else if (s[0] == '%') {
-            /* Invalid escape sequence. */
-            return NULL;
-        } else {
-            c = *s;
-        }
-        if (!dlen)
-            return NULL;
-        dlen--;
-        *dst++ = c;
-    }
-    return s;
-}
-
-/*
  * Split a URL into components. URL syntax is:
  * [method:/][/[user[:pwd]@]host[:port]/][document]
  * This almost, but not quite, RFC1738 URL syntax.

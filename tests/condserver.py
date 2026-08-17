@@ -11,12 +11,15 @@
 #   lastmod    offer a Last-Modified only
 #   always304  answer 304 to everything, conditional request or not
 #
-# Prints "PORT <n>" on stdout once it is listening, then one line per
+# Prints "PORT <n>" on stdout once it is listening, then two lines per
 # request:
 #
 #   REQ <path> <status> inm=<If-None-Match> ims=<If-Modified-Since>
+#   AUTH <path> <Authorization header, or ->
 #
-# with "-" for a header the client did not send.  That log is the point
+# with "-" for a header the client did not send.  The AUTH line is
+# separate so the REQ format stays exactly what the older tests match
+# against.  That log is the point
 # of this server: python3's http.server does handle If-Modified-Since,
 # but it emits no ETag and reports nothing about the request, so a test
 # using it cannot tell a conditional request that was answered 304 from
@@ -96,6 +99,8 @@ class Handler(socketserver.BaseRequestHandler):
         def done(status):
             log("REQ %s %s inm=%s ims=%s"
                 % (path, status, inm or "-", ims or "-"))
+            log("AUTH %s %s"
+                % (path, headers.get("authorization") or "-"))
 
         local = os.path.join(directory, path.lstrip("/"))
         if not os.path.isfile(local):

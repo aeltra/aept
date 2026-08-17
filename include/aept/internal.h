@@ -11,9 +11,18 @@
 
 #include "aept/aept.h"
 
+/*
+ * The url never carries credentials: any userinfo in the configured
+ * source line is split off at parse time (config.c), so the string that
+ * every log message, validator record and download path circulates is
+ * incapable of leaking a password.  The credentials live apart, here,
+ * and only the request assembly in download.c puts them back together.
+ */
 typedef struct {
     char *name;
     char *url;
+    char *user;     /* NULL when the configured url carried none */
+    char *password; /* NULL when the configured url carried none */
     int gzip;
 } aept_source_t;
 

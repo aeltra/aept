@@ -43,12 +43,35 @@ and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
 `HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
 nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
 a proxy; there is no environment variable that supplies a user and password.
-They also go nowhere else: `aept_url_sanitized()` (util.c) strips the userinfo
-from every URL that is logged — download.c sanitizes its `name` argument too,
-because update.c passes the URL there — or stored: validator save and load
-both sanitize, so a credentialed URL still matches its own record without the
-password ever landing in the state file. `tests/test_redact_credentials.sh`
-covers it end to end.
+They also go nowhere else, **by construction rather than by discipline**:
+`aept_url_split()` (util.c) separates the userinfo out of a source URL at
+config-parse time, so `src->url` — the string every log message, validator
+record and download path circulates — never contains a password a future
+`aept_log_*()` call could leak. The two halves meet again in exactly one
+place, `aept_download_cond()`, which parses the clean URL and injects
+`src->user`/`src->password` into the `struct libfetch_url` before
+`libfetch_get_http()` — the same two fields libfetch's own parser fills, so a
+URL that still carries its own userinfo (anything going through
+`aept_download()` directly) keeps working. The split decodes
+percent-escapes through `libfetch_pctdecode()` itself, not a copy of it, so
+there is exactly one definition of what an escape means — invalid escapes and
+`%00` refuse the source, and the length caps match `struct libfetch_url`. The
+decoder lives in `src/libfetch/pctdecode.c`, split out of fetch.c **with its
+BSD licence header intact** so that the unit tests linking util.c can pull in
+that one file rather than the whole fork and its OpenSSL dependency — the
+BSD-licensed expression stays in a BSD-labelled file, and nothing of it is
+restated under aept's MIT headers. The one deliberate divergence from
+libfetch's URL parser is splitting at the *last* `@` of the authority, which
+it never handled (a raw `@` in a password ran the host up to the next `@` and
+the connect failed), so reading it as the user meant it breaks nothing that
+worked.
+`aept_url_sanitized()` stays as defense in depth on top: download.c redacts
+its log strings (its `name` argument too, because update.c passes the URL
+there) and validator save/load both sanitize before writing or matching.
+`tests/test_redact_credentials.sh` holds both directions down: no password in
+output or state, *and* — via condserver's `AUTH` log line — the Basic header
+still on the wire, because redaction that quietly stopped sending the
+password would look identical from the outside.
 Range requests, restart/resume and `struct url_stat` are gone as well: aept
 never set `url->offset`, so that machinery was unreachable by design yet live
 enough that an **unsolicited `206 Partial Content` was accepted and written out

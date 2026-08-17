@@ -18,6 +18,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "libfetch/fetch.h"
+
 #include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/util.h"
@@ -71,6 +73,40 @@ int aept_asprintf(char **strp, const char *fmt, ...)
 }
 
 /*
+ * Locate the userinfo of url: *start is set to the first byte after the
+ * "://", *at to the last '@' of the authority.  Returns 1 when there is
+ * one, 0 for a string without a scheme or without userinfo.  The last
+ * '@' rather than the first: RFC 3986 wants a raw '@' in a password
+ * percent-encoded, but libfetch's own parser never accepted one either
+ * -- it ran the host up to the next '@' and the connect failed -- so
+ * reading it the way the user meant it breaks nothing that worked.
+ */
+static int url_userinfo(const char *url, const char **start, const char **at)
+{
+    const char *auth, *end, *p, *found;
+
+    auth = strstr(url, "://");
+    if (!auth)
+        return 0;
+    auth += 3;
+
+    /* The authority ends where the path, query or fragment begins. */
+    end = auth + strcspn(auth, "/?#");
+
+    found = NULL;
+    for (p = auth; p < end; p++) {
+        if (*p == '@')
+            found = p;
+    }
+    if (!found)
+        return 0;
+
+    *start = auth;
+    *at = found;
+    return 1;
+}
+
+/*
  * A copy of url with the userinfo removed.  Credentials arrive in a
  * url and nowhere else, so anything between the "://" and the last '@'
  * of the authority is somebody's password, and this is the form every
@@ -81,29 +117,101 @@ int aept_asprintf(char **strp, const char *fmt, ...)
  */
 char *aept_url_sanitized(const char *url)
 {
-    const char *auth, *end, *at, *p;
+    const char *start, *at;
     char *out;
 
-    auth = strstr(url, "://");
-    if (!auth)
-        return aept_strdup(url);
-    auth += 3;
-
-    /* The authority ends where the path, query or fragment begins. */
-    end = auth + strcspn(auth, "/?#");
-
-    at = NULL;
-    for (p = auth; p < end; p++) {
-        if (*p == '@')
-            at = p;
-    }
-    if (!at)
+    if (!url_userinfo(url, &start, &at))
         return aept_strdup(url);
 
-    out = aept_malloc(strlen(url) - (size_t)(at + 1 - auth) + 1);
-    memcpy(out, url, (size_t)(auth - url));
-    strcpy(out + (auth - url), at + 1);
+    out = aept_malloc(strlen(url) - (size_t)(at + 1 - start) + 1);
+    memcpy(out, url, (size_t)(start - url));
+    strcpy(out + (start - url), at + 1);
     return out;
+}
+
+/*
+ * Decode the percent-escapes in [s, end) into a fresh string, through
+ * libfetch's own decoder so there is exactly one definition of what an
+ * escape means: an invalid escape and %00 are errors rather than
+ * literals, and max_len is the capacity of the field in struct
+ * libfetch_url the result must fit.  The span is copied out first
+ * because the decoder wants a terminated string; nothing is lost by
+ * that, since end marks a raw ':' or '@' and neither is a hex digit,
+ * so no valid escape reaches beyond it.  Returns NULL when the decoder
+ * refuses.
+ */
+static char *pct_decoded(const char *s, const char *end, size_t max_len)
+{
+    char *raw, *dst, *out = NULL;
+    const char *rest;
+    size_t len = (size_t)(end - s);
+
+    raw = aept_malloc(len + 1);
+    memcpy(raw, s, len);
+    raw[len] = '\0';
+
+    /* Zeroed so the decoded value is terminated: the decoder writes at
+     * most max_len bytes and no terminator of its own. */
+    dst = aept_malloc(max_len + 1);
+    memset(dst, 0, max_len + 1);
+
+    rest = libfetch_pctdecode(dst, raw, "", max_len);
+    if (rest && !*rest)
+        out = aept_strdup(dst);
+
+    free(raw);
+    free(dst);
+    return out;
+}
+
+/*
+ * Split url into the url without its userinfo and the decoded
+ * credentials it carried, so the secret can be kept apart from the
+ * string that circulates: *clean never holds a password, and only the
+ * request assembly in download.c ever puts the two back together.
+ * *user and *password come back NULL when the url carries none, and
+ * *user alone may be the empty string ("https://:pw@...").  Returns -1
+ * without setting anything when userinfo is present but malformed --
+ * an escape that does not decode, or a component longer than libfetch
+ * could carry -- because silently dropping a password would send an
+ * unauthenticated request to a server that was owed one.  All three
+ * results are the caller's to free.
+ */
+int aept_url_split(const char *url, char **clean, char **user, char **password)
+{
+    const char *start, *at, *colon, *p;
+    char *u, *pw = NULL;
+
+    if (!url_userinfo(url, &start, &at)) {
+        *clean = aept_strdup(url);
+        *user = NULL;
+        *password = NULL;
+        return 0;
+    }
+
+    colon = NULL;
+    for (p = start; p < at; p++) {
+        if (*p == ':') {
+            colon = p;
+            break;
+        }
+    }
+
+    u = pct_decoded(start, colon ? colon : at, LIBFETCH_URL_USERLEN);
+    if (!u)
+        return -1;
+    if (colon) {
+        pw = pct_decoded(colon + 1, at, LIBFETCH_URL_PWDLEN);
+        if (!pw) {
+            free(u);
+            return -1;
+        }
+    }
+
+    *clean = aept_url_sanitized(url);
+    *user = u;
+    *password = pw;
+    return 0;
 }
 
 int aept_pkg_name_is_safe(const char *name)

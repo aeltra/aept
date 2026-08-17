@@ -16,7 +16,14 @@ struct libfetch_validators;
 int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const char *name);
 
 /*
- * The same, revalidating a copy that is already held.
+ * The same, revalidating a copy that is already held, and carrying the
+ * credentials apart from the url.
+ *
+ * "user" and "password" are the source's credentials or NULL; they are
+ * handed to libfetch here and appear in no string.  This is the one
+ * place the two halves of a credentialed source meet again after
+ * config.c split them, which is what makes every url that circulates
+ * in between safe to log or store.
  *
  * "have" is what was recorded for this url when it was last fetched, or
  * NULL to fetch unconditionally; "got" receives what the server offered
@@ -28,6 +35,7 @@ int aept_download(struct aept_ctx *ctx, const char *url, const char *dest, const
  * Returns 0 on success, -1 on error.
  */
 int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, const char *name,
+                       const char *user, const char *password,
                        const struct libfetch_validators *have, struct libfetch_validators *got,
                        int *unchanged);
 
