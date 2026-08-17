@@ -15,7 +15,25 @@ make clean           # remove build artifacts
 make format          # clang-format the files you changed (see Coding Conventions)
 make coverage        # gcov report (needs --enable-coverage; see Coverage)
 make coverage-check  # the ratchet CI runs
+make docs            # re-render docs/aept.1.md from aept.1.scd
 ```
+
+**README.md is written by hand.** It used to be `scdoc | pandoc` output —
+the manpage, rendered — which put NAME and SYNOPSIS at the top of the
+landing page and left escaped brackets in every heading. The reference is
+still generated, by `make docs`, but into `docs/aept.1.md`, which the README
+links to. Do not regenerate README.md from the manpage.
+
+**`make distcheck` passing does not mean the tarball is complete.** It runs
+configure, make and `make check` against the unpacked tarball, and nothing
+in that path touches `aept.1.scd`, `python/` or `NOTICE` — all three were
+missing from `make dist` while distcheck was green, which broke a package
+build from a release tarball (`debian/rules` runs `scdoc` over the manpage
+source and builds a wheel from `python/`) and dropped the third-party BSD
+attributions that a source redistribution has to carry. They are in
+`EXTRA_DIST` now. Anything a *consumer* of the tarball needs, rather than
+the build itself, has to be listed there deliberately; check `make dist`
+output when adding such a file.
 
 Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv + libsolvext
 (AC_CHECK_LIB). `src/libfetch/` is a **fork**, no longer tracked upstream — edit it

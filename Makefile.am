@@ -32,7 +32,36 @@ noinst_HEADERS = \
     include/aept/validator.h \
     include/aept/verify.h
 
-EXTRA_DIST = .clang-format .git-blame-ignore-revs
+# Files that are not built but must ship, or the release tarball cannot
+# produce what the git tree produces.
+#
+# Watch what does NOT catch a mistake here: "make distcheck" runs
+# configure, make and make check against the unpacked tarball, and none
+# of those touch the manpage source, the bindings or NOTICE.  distcheck
+# passing is evidence that the tarball builds, not that it is complete.
+# All three of these were missing while distcheck was green.
+#
+#   NOTICE          the BSD attributions for libarchive and the other
+#                   third-party code.  Their terms require a source
+#                   redistribution to carry them, and the tarball is one.
+#   aept.1.scd      debian/rules runs scdoc over it to build the manpage,
+#                   so without it a package build from the tarball fails.
+#   python/         debian/rules builds a wheel from it -- same story.
+#                   Listed file by file rather than as a directory, so a
+#                   stray __pycache__ or build/ cannot ride along.
+#   docs/, scripts/ so "make docs" works from an unpacked tarball.
+EXTRA_DIST = .clang-format .git-blame-ignore-revs \
+    NOTICE \
+    aept.1.scd \
+    docs/aept.1.md \
+    scripts/render-manual.sh \
+    python/pyproject.toml \
+    python/aeltra/aept/__init__.py \
+    python/aeltra/aept/_cdef.py \
+    python/aeltra/aept/_ffi.py \
+    python/aeltra/aept/_marshalling.py \
+    python/aeltra/aept/aept.py \
+    python/examples/demo.py
 
 # ── formatting ───────────────────────────────────────────────────────────
 #
@@ -90,8 +119,11 @@ format-check:
 	files=`$(FORMAT_ALL)`; \
 	$(CLANG_FORMAT) --dry-run -Werror $$files
 
-readme:
-	$(srcdir)/scripts/update-readme.sh
+# Render the manpage into docs/aept.1.md, which the README links to.
+# The README itself is written by hand: it is the page somebody lands on,
+# and that is a different job from the reference.
+docs:
+	$(srcdir)/scripts/render-manual.sh
 
 # ── coverage ─────────────────────────────────────────────────────────────
 #
@@ -173,5 +205,5 @@ abi-update:
 	mv $$abi.new $$abi; \
 	echo "blessed `grep -c '^[a-z]' $$abi` interfaces in tests/libaept.abi"
 
-.PHONY: readme format format-all format-check abi-update \
+.PHONY: docs format format-all format-check abi-update \
 	coverage coverage-check coverage-update coverage-clean
