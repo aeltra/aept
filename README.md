@@ -134,10 +134,12 @@ A `.aeltra` package is an `ar` archive containing `debian-binary`,
 
 ## License
 
-MIT — see [COPYING](COPYING). [NOTICE](NOTICE) carries attributions for
-third-party code linked into the binary. `src/archive.c` was originally
-adapted from opkg (GPL); it was rewritten from scratch and relicensed
-MIT in `4f0989d`.
+MIT — see [COPYING](COPYING) — except the vendored `src/libfetch/`
+fork, which remains under its original BSD licence. [NOTICE](NOTICE)
+carries that licence and the attributions for the third-party code
+linked into the binary; ship it alongside binaries. `src/archive.c` was
+originally adapted from opkg (GPL); it was rewritten from scratch and
+relicensed MIT in `4f0989d`.
 
 [libsolv]: https://github.com/openSUSE/libsolv
 [libarchive]: https://www.libarchive.org/
