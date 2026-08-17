@@ -43,6 +43,12 @@ and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
 `HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
 nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
 a proxy; there is no environment variable that supplies a user and password.
+They also go nowhere else: `aept_url_sanitized()` (util.c) strips the userinfo
+from every URL that is logged — download.c sanitizes its `name` argument too,
+because update.c passes the URL there — or stored: validator save and load
+both sanitize, so a credentialed URL still matches its own record without the
+password ever landing in the state file. `tests/test_redact_credentials.sh`
+covers it end to end.
 Range requests, restart/resume and `struct url_stat` are gone as well: aept
 never set `url->offset`, so that machinery was unreachable by design yet live
 enough that an **unsolicited `206 Partial Content` was accepted and written out

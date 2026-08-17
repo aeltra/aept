@@ -44,11 +44,15 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
     libfetch_io_t *fio = NULL;
     FILE *fp = NULL;
     char *tmp = NULL;
+    /* Everything this function says, it says without the userinfo:
+     * url carries the credentials, and name is often the same url. */
+    char *shown_url = aept_url_sanitized(url);
+    char *shown_name = aept_url_sanitized(name);
     char buf[65536];
     ssize_t n;
     int ret = -1;
 
-    aept_log_info("downloading %s", name);
+    aept_log_info("downloading %s", shown_name);
 
     if (unchanged)
         *unchanged = 0;
@@ -76,17 +80,18 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
          */
         if (libfetch_last_error.category == LIBFETCH_ERRCAT_HTTP &&
             libfetch_last_error.code == LIBFETCH_HTTP_NOT_MODIFIED) {
-            aept_log_debug("%s is unchanged", name);
+            aept_log_debug("%s is unchanged", shown_name);
             *unchanged = 1;
-            return 0;
+            ret = 0;
+            goto cleanup;
         }
 
         record_error(ctx);
         if (ctx->last_error == AEPT_ERR_TIMEOUT)
-            aept_log_error("timed out downloading '%s'", url);
+            aept_log_error("timed out downloading '%s'", shown_url);
         else
-            aept_log_error("failed to download '%s'", url);
-        return -1;
+            aept_log_error("failed to download '%s'", shown_url);
+        goto cleanup;
     }
 
     /* Download to <dest>.<pid>, then rename into place. This ensures
@@ -119,9 +124,9 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
                 continue;
             record_error(ctx);
             if (ctx->last_error == AEPT_ERR_TIMEOUT)
-                aept_log_error("timed out downloading '%s'", url);
+                aept_log_error("timed out downloading '%s'", shown_url);
             else
-                aept_log_error("failed to download '%s'", url);
+                aept_log_error("failed to download '%s'", shown_url);
             goto cleanup;
         }
         if (fwrite(buf, 1, n, fp) != (size_t)n) {
@@ -152,6 +157,8 @@ cleanup:
     if (ret != 0 && tmp)
         unlink(tmp);
     free(tmp);
+    free(shown_url);
+    free(shown_name);
     return ret;
 }
 

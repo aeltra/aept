@@ -35,6 +35,24 @@ static void silence_logging(void)
     aept_log_set_ctx(&ctx);
 }
 
+/* Whether the record on disk mentions needle anywhere. */
+static int file_contains(const char *needle)
+{
+    FILE *fp = fopen(path, "r");
+    char buf[4096];
+    size_t n;
+
+    if (!fp) {
+        perror(path);
+        exit(1);
+    }
+    n = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+
+    return strstr(buf, needle) != NULL;
+}
+
 /* Write a record by hand, to test what the loader accepts. */
 static void write_raw(const char *text)
 {
@@ -92,6 +110,27 @@ int main(void)
     test_int_eq(aept_validator_load(path, "https://example.com/testrepo/Packages.gz", &loaded), -1,
                 "a record for another url is not used");
     test_str_eq(loaded.etag, "", "and nothing is left in the caller's buffer");
+
+    /* ── credentials never reach the record ───────────────────────── *
+     *
+     * A source url may carry userinfo.  The record identifies a
+     * document, not a login, so what is written and matched is the url
+     * with the userinfo stripped -- a state file must not hold a
+     * password that was only ever meant for the wire.
+     */
+
+    memset(&saved, 0, sizeof(saved));
+    snprintf(saved.etag, sizeof(saved.etag), "%s", ETAG);
+    test_int_eq(
+        aept_validator_save(path, "https://user:secret@example.com/testrepo/InPackages.gz", &saved),
+        0, "a record for a credentialed url is written");
+    test_int_eq(file_contains("secret"), 0, "without the password in it");
+    test_int_eq(file_contains("URL: " URL "\n"), 1, "naming the sanitized url instead");
+    test_int_eq(aept_validator_load(path, "https://user:secret@example.com/testrepo/InPackages.gz",
+                                    &loaded),
+                0, "the credentialed url matches its own record");
+    test_int_eq(aept_validator_load(path, URL, &loaded), 0,
+                "and so does the same url without the credentials");
 
     /* ── one validator is enough, none is not ─────────────────────── */
 

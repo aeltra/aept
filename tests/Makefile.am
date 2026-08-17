@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator
+    test_no_proxy test_validator test_url_sanitize
 
 check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
 
@@ -107,6 +107,13 @@ test_validator_SOURCES = \
 test_validator_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_validator_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+test_url_sanitize_SOURCES = \
+    test_url_sanitize.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/msg.c
+test_url_sanitize_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_url_sanitize_LDFLAGS = $(COVERAGE_LDFLAGS)
+
 # Links the library rather than individual modules: aept_download()
 # pulls in libfetch and its OpenSSL dependency.
 test_ssl_env_SOURCES = test_ssl_env.c
@@ -129,6 +136,7 @@ dist_check_SCRIPTS = \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
     test_update_conditional.sh \
+    test_redact_credentials.sh \
     test_index_freshness.sh \
     test_upgrade_conffiles.sh \
     test_hardlink_escape.sh \

@@ -70,6 +70,42 @@ int aept_asprintf(char **strp, const char *fmt, ...)
     return r;
 }
 
+/*
+ * A copy of url with the userinfo removed.  Credentials arrive in a
+ * url and nowhere else, so anything between the "://" and the last '@'
+ * of the authority is somebody's password, and this is the form every
+ * log message and every state file must carry -- the original leaks
+ * the moment it is printed.  A string without a scheme or without
+ * userinfo comes back as a plain copy, so a caller can sanitize
+ * unconditionally.  The caller frees the result.
+ */
+char *aept_url_sanitized(const char *url)
+{
+    const char *auth, *end, *at, *p;
+    char *out;
+
+    auth = strstr(url, "://");
+    if (!auth)
+        return aept_strdup(url);
+    auth += 3;
+
+    /* The authority ends where the path, query or fragment begins. */
+    end = auth + strcspn(auth, "/?#");
+
+    at = NULL;
+    for (p = auth; p < end; p++) {
+        if (*p == '@')
+            at = p;
+    }
+    if (!at)
+        return aept_strdup(url);
+
+    out = aept_malloc(strlen(url) - (size_t)(at + 1 - auth) + 1);
+    memcpy(out, url, (size_t)(auth - url));
+    strcpy(out + (auth - url), at + 1);
+    return out;
+}
+
 int aept_pkg_name_is_safe(const char *name)
 {
     if (!name || name[0] == '\0')

@@ -69,10 +69,17 @@ static const char *field_value(const char *line, const char *field)
     return line;
 }
 
+/*
+ * The url is recorded and matched without its userinfo: the record
+ * identifies a document, not a login, and a state file must not hold a
+ * password that was only ever meant for the wire.  Both directions
+ * sanitize, so a credentialed url still matches the record it earned.
+ */
 int aept_validator_load(const char *path, const char *url, struct libfetch_validators *out)
 {
     FILE *fp;
     char buf[VALIDATOR_LINE_MAX];
+    char *clean_url;
     int url_matched = 0;
     int ok = 1;
 
@@ -81,6 +88,8 @@ int aept_validator_load(const char *path, const char *url, struct libfetch_valid
     fp = fopen(path, "r");
     if (!fp)
         return -1;
+
+    clean_url = aept_url_sanitized(url);
 
     while (ok && fgets(buf, sizeof(buf), fp)) {
         const char *value;
@@ -100,7 +109,7 @@ int aept_validator_load(const char *path, const char *url, struct libfetch_valid
             continue;
 
         if ((value = field_value(buf, "URL")) != NULL) {
-            url_matched = (strcmp(value, url) == 0);
+            url_matched = (strcmp(value, clean_url) == 0);
         } else if ((value = field_value(buf, "ETag")) != NULL) {
             if (validator_is_sane(value))
                 snprintf(out->etag, sizeof(out->etag), "%s", value);
@@ -115,6 +124,7 @@ int aept_validator_load(const char *path, const char *url, struct libfetch_valid
     }
 
     fclose(fp);
+    free(clean_url);
 
     if (!ok || !url_matched || (!out->etag[0] && !out->last_modified[0])) {
         memset(out, 0, sizeof(*out));
@@ -127,6 +137,7 @@ int aept_validator_load(const char *path, const char *url, struct libfetch_valid
 int aept_validator_save(const char *path, const char *url, const struct libfetch_validators *v)
 {
     char *tmp = NULL;
+    char *clean_url = NULL;
     FILE *fp;
     int r = -1;
 
@@ -149,7 +160,8 @@ int aept_validator_save(const char *path, const char *url, const struct libfetch
         return -1;
     }
 
-    fprintf(fp, "URL: %s\n", url);
+    clean_url = aept_url_sanitized(url);
+    fprintf(fp, "URL: %s\n", clean_url);
     if (validator_is_sane(v->etag))
         fprintf(fp, "ETag: %s\n", v->etag);
     if (validator_is_sane(v->last_modified))
@@ -171,5 +183,6 @@ cleanup:
     if (r != 0)
         unlink(tmp);
     free(tmp);
+    free(clean_url);
     return r;
 }

@@ -30,6 +30,7 @@ void *aept_realloc(void *ptr, size_t size);
 char *aept_strdup(const char *s);
 AEPT_API int aept_asprintf(char **strp, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
+char *aept_url_sanitized(const char *url);
 int aept_pkg_name_is_safe(const char *name);
 int aept_symlink_target_is_recordable(const char *target);
 int aept_archive_path_is_safe(const char *path);
