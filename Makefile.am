@@ -93,6 +93,73 @@ format-check:
 readme:
 	$(srcdir)/scripts/update-readme.sh
 
+# ── coverage ─────────────────────────────────────────────────────────────
+#
+# Needs ./configure --enable-coverage, and its own build directory: a
+# CFLAGS change does not force a recompile, so a tree that was built
+# without instrumentation stays uninstrumented and the report comes out
+# empty (or worse, stale).
+#
+#   make coverage         report, whatever the suite did
+#   make coverage-check   the gate: per-file floors and no tier regressing
+#   make coverage-update  re-bless tests/coverage.baseline
+#
+# "coverage" reports and "coverage-check" judges, deliberately kept apart.
+# Reporting a number the gate would reject is the honest thing for the
+# report to do; a single target that refused to print would leave you
+# without the figure exactly when you need it.
+#
+# The suite is run serially.  Parallel processes merging into the same
+# .gcda is a race, and a race in the measurement is worse than a slow
+# measurement.
+COVERAGE_REPORT = $(PYTHON) $(top_srcdir)/tests/coverage-report.py \
+	--build-dir $(top_builddir) --srcdir $(top_srcdir)
+
+check_coverage_enabled = \
+	if test -z '$(COVERAGE_CFLAGS)'; then \
+	    echo "not a coverage build; reconfigure with --enable-coverage" >&2; \
+	    echo "  (in a separate build directory -- a CFLAGS change does not" >&2; \
+	    echo "   force a recompile, so an existing tree stays stale)" >&2; \
+	    exit 1; \
+	fi
+
+# All three clear the counters first, so the figure depends on the tree
+# and not on how many times you have run the suite.  gcov counters
+# accumulate across runs by design -- a second run reports the union of
+# both -- which is right for building up a picture by hand and wrong for
+# a number that is committed and compared.  Measured: running the suite
+# twice moved the transaction tier by a line and five branches, all from
+# tests whose covered path varies with timing.  Small, and small drift
+# that nobody can reproduce is the worst kind.
+#
+# To accumulate deliberately, run "make check" as often as you like and
+# then invoke tests/coverage-report.py directly.
+#
+# The suite failing does not invalidate the numbers, so this reports
+# either way -- but it says so, because a red suite is a red suite.
+coverage:
+	@$(check_coverage_enabled)
+	@$(MAKE) $(AM_MAKEFLAGS) coverage-clean
+	-@$(MAKE) $(AM_MAKEFLAGS) -j1 check
+	@if test -n "`find $(top_builddir) -name '*.gcda' -print -quit`"; then :; else \
+	    echo "no profile data was produced" >&2; exit 1; fi
+	@$(COVERAGE_REPORT) --uncovered
+
+coverage-check:
+	@$(check_coverage_enabled)
+	@$(MAKE) $(AM_MAKEFLAGS) coverage-clean
+	-@$(MAKE) $(AM_MAKEFLAGS) -j1 check
+	@$(COVERAGE_REPORT) --check
+
+coverage-update:
+	@$(check_coverage_enabled)
+	@$(MAKE) $(AM_MAKEFLAGS) coverage-clean
+	-@$(MAKE) $(AM_MAKEFLAGS) -j1 check
+	@$(COVERAGE_REPORT) --update
+
+coverage-clean:
+	@find $(top_builddir) -name '*.gcda' -delete
+
 # Re-bless the ABI baseline that tests/test_abi_symbols.sh checks against.
 # Run it after deliberately changing an interface, together with the
 # -version-number bump in src/Makefile.am that the change requires: a
@@ -106,4 +173,5 @@ abi-update:
 	mv $$abi.new $$abi; \
 	echo "blessed `grep -c '^[a-z]' $$abi` interfaces in tests/libaept.abi"
 
-.PHONY: readme format format-all format-check abi-update
+.PHONY: readme format format-all format-check abi-update \
+	coverage coverage-check coverage-update coverage-clean

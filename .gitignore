@@ -37,6 +37,14 @@ Makefile
 !/tests/*.py
 !/tests/*.sh
 !/tests/*.abi
+!/tests/*.tiers
+!/tests/*.baseline
+
+# Coverage instrumentation and profile data
+*.gcno
+*.gcda
+*.gcov
+*.gcov.json.gz
 
 # Distribution tarballs
 *.tar.gz

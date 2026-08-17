@@ -29,6 +29,16 @@ set -u
 
 . "${srcdir:-.}/aeptlib.sh"
 
+# A coverage build cannot answer this question.  libgcov's runtime
+# (__gcov_dump, __gcov_master, __gcov_var, ...) and mangle_path come out
+# of libgcov.a, which is not compiled with -fvisibility=hidden, so they
+# reach the dynamic symbol table and the "exported set is exactly what
+# AEPT_API marks" rule is genuinely violated.  That rule is correct and
+# the violation is real, so this skips rather than being taught to ignore
+# a class of symbol -- an exception carried here would also hide a real
+# internal that escaped.  Every non-coverage build still checks it.
+[ "${AEPT_COVERAGE:-0}" = 1 ] && skip "coverage build: libgcov exports symbols of its own"
+
 blessed=${srcdir:-.}/libaept.abi
 extract=${srcdir:-.}/abi-declarations.sh
 incdir=${ABI_INCLUDEDIR:-${srcdir:-.}/../include}

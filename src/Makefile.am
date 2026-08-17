@@ -35,7 +35,7 @@ libaept_la_SOURCES = \
 # whatever is spelled aept_*.  This is also what keeps src/libfetch/ out of
 # the dynamic symbol table now that its own prefix no longer does the job.
 libaept_la_CFLAGS = -D_GNU_SOURCE -fvisibility=hidden \
-    $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) \
+    $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include
 libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # -version-number major:minor:revision, which reads in the same order as
@@ -58,8 +58,10 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # new library rather than dying on a missing symbol.  0:1:0 is where
 # aept_set_network_timeout() and aept_last_error() put us: added, nothing
 # removed, so callers built against libaept.so.0 keep working unrebuilt.
-libaept_la_LDFLAGS = -version-number 0:1:0
+libaept_la_LDFLAGS = -version-number 0:1:0 $(COVERAGE_LDFLAGS)
 
 aept_SOURCES = main.c
-aept_CFLAGS = $(LIBARCHIVE_CFLAGS) -I$(top_builddir) -I$(top_srcdir)/include
+aept_CFLAGS = $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS) \
+    -I$(top_builddir) -I$(top_srcdir)/include
 aept_LDADD = libaept.la
+aept_LDFLAGS = $(COVERAGE_LDFLAGS)

@@ -1,7 +1,14 @@
 # libaept.abi - the ABI of libaept, guarded by test_abi_symbols.sh
 #
-# Copyright (C) 2026 Tobias Koch
+# SPDX-FileCopyrightText: NONE
 # SPDX-License-Identifier: MIT
+#
+# NONE rather than a copyright line because this file is extracted rather
+# than written: "make abi-update" preprocesses the headers and sorts what
+# it finds.  Whatever is protectable in these declarations is protectable
+# in include/aept/, where it is already stated; restating it here would
+# claim authorship of a transformation.  The licence is still named, so
+# anything scanning the tarball has an answer for this file.
 #
 # One line per interface, "<kind>:<name>: <declaration>", sorted; "#"
 # comments and blank lines ignored.  Regenerate with "make abi-update".

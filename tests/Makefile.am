@@ -16,34 +16,34 @@ check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
 noinst_HEADERS = test.h
 
 httpget_SOURCES = httpget.c
-httpget_CFLAGS = -D_GNU_SOURCE
+httpget_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 # -static: libaept is built with -fvisibility=hidden, so internals such
 # as aept_download() are absent from the shared object's symbol table.
 # The static archive keeps them, and these three reach past aept.h.
 httpget_LDADD = $(top_builddir)/src/libaept.la
-httpget_LDFLAGS = -static
+httpget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Another harness for test_http.sh, this one going to libfetch directly:
 # what it does -- stop reading a response part-way -- is precisely what
 # aept_download() never does.
 partialget_SOURCES = partialget.c
-partialget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS)
+partialget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 partialget_LDADD = $(top_builddir)/src/libaept.la
-partialget_LDFLAGS = -static
+partialget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # A harness for test_cancel.sh and test_timeout.sh.  Links the library
 # rather than individual modules, for the same reason httpget does:
 # aept_download() is not part of the ABI.
 stallclient_SOURCES = stallclient.c
-stallclient_CFLAGS = -D_GNU_SOURCE
+stallclient_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 stallclient_LDADD = $(top_builddir)/src/libaept.la
-stallclient_LDFLAGS = -static
+stallclient_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Also a harness, driven by test_threads.sh.
 threadrace_SOURCES = threadrace.c
-threadrace_CFLAGS = -D_GNU_SOURCE
+threadrace_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 threadrace_LDADD = $(top_builddir)/src/libaept.la $(PTHREAD_LIBS)
-threadrace_LDFLAGS = -static
+threadrace_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # archive.c is #included by the test, so only its dependencies are listed
 # here; util.c and msg.c supply the allocators and logging it calls into.
@@ -51,7 +51,8 @@ test_archive_path_SOURCES = \
     test_archive_path.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS)
+test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
+test_archive_path_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_archive_path_LDADD = $(ARCHIVE_LIBS)
 
 test_script_SOURCES = \
@@ -59,21 +60,24 @@ test_script_SOURCES = \
     $(top_srcdir)/src/script.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_script_CFLAGS = -D_GNU_SOURCE
+test_script_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_script_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 test_config_root_SOURCES = \
     test_config_root.c \
     $(top_srcdir)/src/config.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_config_root_CFLAGS = -D_GNU_SOURCE
+test_config_root_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_config_root_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 test_archive_open_SOURCES = \
     test_archive_open.c \
     $(top_srcdir)/src/archive.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS)
+test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
+test_archive_open_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_archive_open_LDADD = $(ARCHIVE_LIBS)
 
 test_clearsign_SOURCES = \
@@ -81,7 +85,8 @@ test_clearsign_SOURCES = \
     $(top_srcdir)/src/clearsign.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_clearsign_CFLAGS = -D_GNU_SOURCE
+test_clearsign_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 # trigger.c is #included by the test, so only its dependencies are
 # listed here.
@@ -89,7 +94,8 @@ test_trigger_entries_SOURCES = \
     test_trigger_entries.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_trigger_entries_CFLAGS = -D_GNU_SOURCE
+test_trigger_entries_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_trigger_entries_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 # validator.c reads and writes the record beside an index; nothing in it
 # reaches the network, so only the allocators and logging come with it.
@@ -98,21 +104,22 @@ test_validator_SOURCES = \
     $(top_srcdir)/src/validator.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/msg.c
-test_validator_CFLAGS = -D_GNU_SOURCE
+test_validator_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_validator_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 # Links the library rather than individual modules: aept_download()
 # pulls in libfetch and its OpenSSL dependency.
 test_ssl_env_SOURCES = test_ssl_env.c
-test_ssl_env_CFLAGS = -D_GNU_SOURCE
+test_ssl_env_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_ssl_env_LDADD = $(top_builddir)/src/libaept.la
-test_ssl_env_LDFLAGS = -static
+test_ssl_env_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Links the library for the same reason test_ssl_env does, and needs the
 # OpenSSL headers because libfetch/common.h includes them directly.
 test_no_proxy_SOURCES = test_no_proxy.c
-test_no_proxy_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS)
+test_no_proxy_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 test_no_proxy_LDADD = $(top_builddir)/src/libaept.la
-test_no_proxy_LDFLAGS = -static
+test_no_proxy_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
@@ -136,7 +143,8 @@ dist_check_SCRIPTS = \
     test_signal_resume.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
-    dribbleserver.py libaept.abi abi-declarations.sh
+    dribbleserver.py libaept.abi abi-declarations.sh \
+    coverage-report.py coverage.tiers coverage.baseline
 
 TEST_EXTENSIONS = .sh
 
@@ -155,5 +163,15 @@ AM_TESTS_ENVIRONMENT = \
     NM='$(NM)'; export NM; \
     ABI_INCLUDEDIR='$(abs_top_srcdir)/include'; export ABI_INCLUDEDIR; \
     CC='$(CC)'; export CC;
+
+# A coverage build is not ABI-representative: libgcov's runtime symbols
+# (__gcov_dump, __gcov_master, __gcov_var, ...) and mangle_path come out
+# of libgcov.a, which is not compiled with -fvisibility=hidden, so they
+# land in the dynamic symbol table.  test_abi_symbols.sh is right to
+# object and skips itself on this rather than being weakened to tolerate
+# it -- the ABI is checked by every ordinary build.
+if COVERAGE
+AM_TESTS_ENVIRONMENT += AEPT_COVERAGE=1; export AEPT_COVERAGE;
+endif
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)

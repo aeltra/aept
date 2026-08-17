@@ -1,0 +1,71 @@
+# coverage.tiers - which tier each source file is in, and what it owes.
+#
+# Copyright (C) 2026 Tobias Koch
+# SPDX-License-Identifier: MIT
+#
+# Read by coverage-report.py.  Every file under src/ that produces
+# coverage data must appear here and every entry must exist in the tree,
+# or the report refuses to run -- adding a source file is meant to force
+# the decision about which tier it lands in, because that is what decides
+# how much coverage it owes.
+#
+#   tier <name> target=<pct> [floor=<pct>] [cap] [label=<text>]
+#
+#     target   where the tier is meant to end up
+#     floor    per-file hard gate, checked per file and never as a tier
+#              average -- an average lets one file rot while another
+#              carries it
+#     cap      the target is a ceiling rather than a floor: effort past it
+#              is effort not spent on a tier that matters more
+#
+# The tiers are ordered by what a missed bug costs, not by how easy the
+# lines are to reach.  Weighted by size they come to 81%, which is where
+# the project's headline "80%" comes from; see TASK.md.
+
+# Runs as root against bytes a remote server chose.  The one tier with a
+# per-file gate, because these are the files where an average must not be
+# allowed to hide a regression.
+tier security     target=90 floor=85 label=security-critical
+
+# Decides whether a half-applied operation leaves a root that later
+# commands can still reason about.
+tier transaction  target=85 label=transaction
+
+# Consumer-facing, but its failures are visible rather than silent.
+tier plumbing     target=80 label=plumbing/API
+
+# Argument parsing and help text -- the lowest risk in the tree.  Capped,
+# not floored: 60% is both the target and the point to stop.
+tier cli          target=60 cap label=CLI
+
+file src/archive.c              security
+file src/clash.c                security
+file src/clearsign.c            security
+file src/download.c             security
+file src/index.c                security
+file src/update.c               security
+file src/validator.c            security
+file src/verify.c               security
+
+file src/autoremove.c           transaction
+file src/conffile.c             transaction
+file src/install.c              transaction
+file src/owner_index.c          transaction
+file src/pin.c                  transaction
+file src/remove.c               transaction
+file src/script.c               transaction
+file src/solver.c               transaction
+file src/status.c               transaction
+file src/trigger.c              transaction
+
+file src/api.c                  plumbing
+file src/clean.c                plumbing
+file src/config.c               plumbing
+file src/msg.c                  plumbing
+file src/util.c                 plumbing
+file src/libfetch/common.c      plumbing
+file src/libfetch/common.h      plumbing
+file src/libfetch/fetch.c       plumbing
+file src/libfetch/http.c        plumbing
+
+file src/main.c                 cli

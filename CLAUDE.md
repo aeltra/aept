@@ -13,6 +13,8 @@ make check VERBOSE=1 # ... dumping failing output to the console
 make distcheck       # VPATH build from the release tarball + suite
 make clean           # remove build artifacts
 make format          # clang-format the files you changed (see Coding Conventions)
+make coverage        # gcov report (needs --enable-coverage; see Coverage)
+make coverage-check  # the ratchet CI runs
 ```
 
 Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv + libsolvext
@@ -137,7 +139,14 @@ The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
 - OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`, `aept_asprintf()`
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
-- License: MIT; file headers include SPDX and copyright
+- License: MIT; file headers include SPDX and copyright. **Generated files are
+  the exception**: `tests/libaept.abi` and `tests/coverage.baseline` carry
+  `SPDX-FileCopyrightText: NONE` beside the licence instead of a copyright line,
+  because neither holds anything to own — one is extracted from the headers by
+  `make abi-update`, the other is measurements of the tree, and a measurement is
+  a fact rather than an expression of one. Both still name the licence, so a
+  scanner has an answer for a file that ships in the tarball. Do not "fix" those
+  back to a copyright line; the reasoning is in each file's header
 
 ## Testing
 
@@ -201,6 +210,72 @@ setarch $(uname -m) -R /tmp/threadrace_tsan 20 <root-a> <root-b> <url>
 the ASLR settings on current kernels. Build the roots the way
 `test_threads.sh` does. Do not add a TSan build to `make check` — it needs its
 own build of everything.
+
+**Coverage.** Like the TSan build, a measurement build of its own:
+
+```bash
+./configure --enable-coverage   # in its own build directory, not this one
+make coverage                   # report, whatever the suite did
+make coverage-check             # the gate: nothing regressed
+make coverage-update            # re-bless tests/coverage.baseline
+make coverage-clean             # drop accumulated counters
+```
+
+`tests/coverage-report.py` runs `gcov` and sums it — no lcov and no gcovr, since
+`gcov` comes with the compiler that is already required and python3 is already a
+test dependency. `tests/coverage.tiers` assigns every file under `src/` to a
+risk tier and records what that tier owes; adding a source file without adding
+it there is an error rather than a silent omission, because which tier it lands
+in is what decides how much coverage it owes. `TASK.md` holds the plan and the
+reasoning behind the tiers.
+
+`make coverage-check` is a **ratchet against `tests/coverage.baseline`**, not a
+gate against the tier targets — most tiers are well short of target, and a check
+that is red from the first day is a check that gets ignored. It fails when a file
+or tier drops more than two points below its recorded figure, and when a file
+slips back under a per-file floor it had *already reached*; a file that has never
+reached its floor is reported as owed. So it passes today and tightens by itself.
+
+Four things about the measurement, each of which has cost a wrong number:
+
+- **A coverage build needs its own build directory.** A `CFLAGS` change does not
+  force a recompile, so pointing `--enable-coverage` at an existing tree leaves
+  it uninstrumented and reports zeroes — or worse, something stale.
+- **`test_abi_symbols.sh` skips itself** under coverage, via `AEPT_COVERAGE=1`
+  from `AM_TESTS_ENVIRONMENT`. libgcov's runtime (`__gcov_dump`, `__gcov_master`,
+  …) and `mangle_path` come out of `libgcov.a`, which is not built with
+  `-fvisibility=hidden`, so they reach the dynamic symbol table and the "exported
+  set is exactly what `AEPT_API` marks" rule is genuinely broken. The rule is
+  right and the violation is real, so the test skips rather than learning to
+  ignore a class of symbol — an exception carried there would also hide a real
+  internal that escaped. Every ordinary build still checks it.
+- **libtool compiles every object twice** — non-PIC into `src/`, PIC into
+  `src/.libs/` — and the two carry *different* counters: the PIC copy accumulates
+  from the `aept` binary through the shared library, the non-PIC copy from the
+  statically linked test harnesses. Both are real and both must be summed. Run
+  naively, gcov overwrites one with the other and `remove.c` reports **0.0%**
+  when it is at 70.0%. The aggregator gives each object its own output directory.
+- **Anything downstream of a `fork()` that leaves by `_exit()` is invisible**,
+  because the counters are never flushed. `util.c`'s child paths
+  (`unshare_and_map_user`, `write_map_file`, `child_err`) read as unentered
+  however hard `test_offline_root_tmp.sh` exercises them. Do not chase those
+  lines, and **do not add a `__gcov_dump()` to production code** to make them
+  appear.
+- **The number is not bit-reproducible, and gcov counters accumulate.** The
+  three targets clear `.gcda` before running, because without that a second run
+  reports the union of both and the figure only ever climbs — which would let
+  the baseline creep up until a single fresh run looked like a regression. What
+  is left after that is honest jitter: `install.c` moves by a line and two
+  branches between clean runs (0.15 points on the file, 0.05 on its tier),
+  presumably a path whose execution depends on timing, since `test_threads.sh`
+  drives five contexts at once. Both are far inside the two-point slack. Do not
+  chase a one-line difference between two runs; do look again if a tier moves by
+  more than it.
+
+Branch coverage is reported beside lines and never gated. It runs ~9 points
+below, and the gap sits where the error handling is — a tier whose lines climb
+while its branches do not is a tier whose new tests assert success and nothing
+else.
 
 ## Architecture
 
