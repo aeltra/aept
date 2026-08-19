@@ -233,6 +233,14 @@ run by Automake's harness.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
+- `tests/test_python.sh` drives the cffi bindings against the built
+  `libaept.so` and holds `_cdef.py` against `tests/libaept.abi` (both
+  directions; the three CLI-only exports allowlisted).  It builds a
+  regular-package shim before importing: the repo's `aeltra/` is a
+  namespace package, and a machine with the Aeltra tooling installed has a
+  *regular* `aeltra` in dist-packages that shadows every namespace portion
+  regardless of `PYTHONPATH` — without the shim the test would silently
+  test the installed bindings.
 - `httpget`, `partialget`, `httpstub.py`, `stallclient` and `threadrace` are
   harnesses driven by shell tests, not tests themselves: they are in
   `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS` never

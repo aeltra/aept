@@ -33,8 +33,8 @@
 # tier <name>       lines <hit>/<total> branches <hit>/<total>
 # file <path>       lines <hit>/<total> branches <hit>/<total>
 tier security               lines   874/980 branches   432/557
-tier transaction            lines 1913/2349 branches  932/1421
-tier plumbing               lines 1551/2293 branches  823/1431
+tier transaction            lines 1926/2349 branches  940/1421
+tier plumbing               lines 1760/2293 branches  905/1431
 tier cli                    lines   328/706 branches   139/342
 
 file src/archive.c          lines   326/366 branches   161/201
@@ -50,12 +50,12 @@ file src/conffile.c         lines   175/198 branches     62/89
 file src/install.c          lines   511/672 branches   270/438
 file src/owner_index.c      lines   110/119 branches     49/78
 file src/pin.c              lines    64/107 branches     32/58
-file src/remove.c           lines   151/177 branches    75/108
+file src/remove.c           lines   154/177 branches    76/108
 file src/script.c           lines     28/30 branches     18/22
-file src/solver.c           lines   244/305 branches   117/178
+file src/solver.c           lines   254/305 branches   124/178
 file src/status.c           lines   206/269 branches   102/152
 file src/trigger.c          lines   327/358 branches   163/226
-file src/api.c              lines   273/521 branches   108/276
+file src/api.c              lines   474/521 branches   187/276
 file src/clean.c            lines     16/20 branches     11/14
 file src/config.c           lines   176/233 branches    61/116
 file src/libfetch/common.c  lines   306/461 branches   157/291
@@ -63,6 +63,6 @@ file src/libfetch/common.h  lines       6/6 branches       2/4
 file src/libfetch/fetch.c   lines    83/136 branches     51/90
 file src/libfetch/http.c    lines   397/511 branches   257/377
 file src/libfetch/pctdecode.c lines     18/19 branches     19/22
-file src/msg.c              lines    82/108 branches     46/66
-file src/util.c             lines   194/278 branches   111/175
+file src/msg.c              lines    90/108 branches     48/66
+file src/util.c             lines   194/278 branches   112/175
 file src/main.c             lines   328/706 branches   139/342

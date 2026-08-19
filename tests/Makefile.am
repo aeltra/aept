@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize test_auto_flags
+    test_no_proxy test_validator test_url_sanitize test_auto_flags test_api
 
 check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
 
@@ -122,6 +122,13 @@ test_url_sanitize_SOURCES = \
 test_url_sanitize_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_url_sanitize_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+# The public API against a hand-written root; links the library the way
+# a consumer does.
+test_api_SOURCES = test_api.c
+test_api_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_api_LDADD = $(top_builddir)/src/libaept.la
+test_api_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
 # Links the library rather than individual modules: status.c's database
 # half pulls in the solver and through it libsolv.
 test_auto_flags_SOURCES = test_auto_flags.c
@@ -158,6 +165,7 @@ dist_check_SCRIPTS = \
     test_clean.sh \
     test_mark.sh \
     test_pin.sh \
+    test_python.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
