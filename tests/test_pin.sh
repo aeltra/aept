@@ -127,4 +127,55 @@ grep -q '^tool ' "$pin_file" 2>/dev/null \
     && fail "the pin outlived the package it was for"
 note "removal takes the pin with it"
 
+# ── --reinstall by name goes through the repository ──────────────────
+#
+# The local-file --reinstall in test_upgrade.sh never enters
+# do_reinstall(): a path on the command line becomes a solver job, and
+# do_reinstall() exists for the *named* form -- resolve the repository
+# copy, fetch it (the cache here), and reinstall over what is on disk.
+
+aept_run "$root" install --non-interactive tool >/dev/null 2>&1 \
+    || fail "installing tool by name failed"
+[ "$(version_of tool)" = "2.0" ] || fail "expected 2.0 installed"
+rm -f "$root/usr/share/tool/v"
+
+out=$(aept_run "$root" install --non-interactive --reinstall tool 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "--reinstall by name exited $rc:
+$out"
+[ -f "$root/usr/share/tool/v" ] || fail "--reinstall by name did not restore the payload"
+grep -q '^2$' "$root/usr/share/tool/v" || fail "the restored payload is wrong"
+[ "$(version_of tool)" = "2.0" ] || fail "the version changed across the reinstall"
+note "--reinstall by name: resolved from the repo, payload restored"
+
+# A package installed from a local file, absent from every repository:
+# the solve succeeds (it is already installed), and do_reinstall() is
+# the one that discovers there is nothing to fetch it from.
+mkdir -p "$work/lo/usr/share/localonly"
+printf 'lo\n' > "$work/lo/usr/share/localonly/v"
+make_pkg_tree "$work/localonly_1.0.aeltra" localonly 1.0 "" "$work/lo"
+aept_run "$root" install --non-interactive "$work/localonly_1.0.aeltra" >/dev/null 2>&1 \
+    || fail "installing localonly failed"
+
+out=$(aept_run "$root" install --non-interactive --reinstall localonly 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "--reinstall of a repo-less package exited $rc:
+$out"
+printf '%s\n' "$out" | grep -q "not found in any repository" \
+    || fail "the repo-less package was not warned about:
+$out"
+note "--reinstall with no repository copy warns and moves on"
+
+# --reinstall of something not installed is just an install: the
+# transaction carries it, and do_reinstall skips what the transaction
+# already did.
+aept_run "$root" remove --non-interactive tool >/dev/null 2>&1 \
+    || fail "removing tool for the fresh-install case failed"
+out=$(aept_run "$root" install --non-interactive --reinstall tool 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "--reinstall of an absent package exited $rc:
+$out"
+[ "$(version_of tool)" = "2.0" ] || fail "the fresh install under --reinstall did not land"
+note "--reinstall of an absent package installs it once, not twice"
+
 exit 0

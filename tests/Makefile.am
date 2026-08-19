@@ -10,7 +10,7 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
-    test_url_parse test_config_values
+    test_url_parse test_config_values test_verify
 
 check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient tlsget
 
@@ -147,6 +147,15 @@ test_config_values_SOURCES = \
 test_config_values_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_config_values_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+test_verify_SOURCES = \
+    test_verify.c \
+    $(top_srcdir)/src/verify.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_verify_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_verify_LDFLAGS = $(COVERAGE_LDFLAGS)
+
 # The public API against a hand-written root; links the library the way
 # a consumer does.
 test_api_SOURCES = test_api.c
@@ -193,6 +202,7 @@ dist_check_SCRIPTS = \
     test_python.sh \
     test_tls_reject.sh \
     test_confirm.sh \
+    test_cli_smoke.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \

@@ -129,31 +129,6 @@ int aept_pin_remove(struct aept_ctx *ctx, const char *name)
     return 0;
 }
 
-char *aept_pin_lookup(struct aept_ctx *ctx, const char *name)
-{
-    FILE *fp;
-    char buf[512];
-
-    fp = fopen(ctx->config.pin_file, "r");
-    if (!fp)
-        return NULL;
-
-    while (fgets(buf, sizeof(buf), fp)) {
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-        char pkg_name[256], pkg_version[256];
-        if (sscanf(buf, "%255s %255s", pkg_name, pkg_version) == 2 && strcmp(pkg_name, name) == 0) {
-            fclose(fp);
-            return aept_strdup(pkg_version);
-        }
-    }
-
-    fclose(fp);
-    return NULL;
-}
-
 int aept_pin_load_into_solver(struct aept_ctx *ctx)
 {
     FILE *fp;

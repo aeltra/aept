@@ -181,6 +181,34 @@ int main(void)
 
         unlink(msg_path);
         unlink(sig_path);
+
+        /* ── write failures leave no half-pair behind ────────────── *
+         *
+         * The pair is what verification consumes; a message written
+         * without its signature would sit there looking like an index
+         * that lost its proof.  So the msg is unlinked when the sig
+         * fails -- and a failure to even open the destination is an
+         * error, not a truncated file.
+         */
+
+        test_int_eq(aept_clearsign_write(&cs, "/nonexistent-dir/m", sig_path), -1,
+                    "an unwritable message path is an error");
+
+        test_int_eq(aept_clearsign_write(&cs, msg_path, "/nonexistent-dir/s"), -1,
+                    "an unwritable signature path is an error");
+        test_int_eq(access(msg_path, F_OK), -1,
+                    "and the already-written message is unlinked -- no half-pair");
+
+        /* /dev/full makes the flush fail, driving the fwrite/fclose
+         * error branches.  Not universal, so its absence skips rather
+         * than fails. */
+        if (access("/dev/full", W_OK) == 0) {
+            test_int_eq(aept_clearsign_write(&cs, "/dev/full", sig_path), -1,
+                        "a full destination is an error, not a truncated file");
+        } else {
+            test_ok(1, "no /dev/full here; the ENOSPC branch stays untested");
+        }
+
         rmdir(dir);
         free(msg_path);
         free(sig_path);
