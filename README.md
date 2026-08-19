@@ -81,7 +81,7 @@ manual (see below).
 
 ## Library and Python bindings
 
-`libaept` exposes the same operations as a C API: 31 functions declared
+`libaept` exposes the same operations as a C API: 32 functions declared
 in [`include/aept/aept.h`](include/aept/aept.h), versioned as
 `libaept.so.0`. All other symbols are hidden, and the exported set —
 full declarations, not just names — is checked against a committed
