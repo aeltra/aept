@@ -56,10 +56,11 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 #   any interface removed or changed             major++,  minor = revision = 0
 #
 # That last line renames the soname, so old binaries refuse to load the
-# new library rather than dying on a missing symbol.  0:1:0 is where
-# aept_set_network_timeout() and aept_last_error() put us: added, nothing
+# new library rather than dying on a missing symbol.  0:2:0 is where
+# aept_triggers() and AEPT_ERR_TRIGGER put us (0:1:0 was
+# aept_set_network_timeout() and aept_last_error()): added, nothing
 # removed, so callers built against libaept.so.0 keep working unrebuilt.
-libaept_la_LDFLAGS = -version-number 0:1:0 $(COVERAGE_LDFLAGS)
+libaept_la_LDFLAGS = -version-number 0:2:0 $(COVERAGE_LDFLAGS)
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS) \

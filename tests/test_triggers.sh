@@ -149,23 +149,142 @@ grep -q '^watcher: /usr/share/data$' "$log" \
 $(cat "$log")"
 note "removing a package fires the triggers watching what it touched"
 
-# ── a failing trigger script is an error, not a failed transaction ───
+# ── a failing trigger: exit 2, recorded, visible in the status ───────
 #
-# Pinned as observed: the transaction's work is already done when the
-# triggers run, so a script failure is reported loudly but does not
-# turn a completed install into a reported failure.
+# The transaction's work is done, so it is not reported as failed --
+# but it is not reported as clean either.  Exit 2 says "succeeded, a
+# trigger is owed", the owed directories are on record, and the
+# package's status says so.
+
+info=$root/var/lib/aept/info
 
 mkdir -p "$work/bw/usr/share/badtrig"
 printf 'b\n' > "$work/bw/usr/share/badtrig/marker"
-mk_trig_pkg badtrig_1.0.aeltra badtrig 1.0 "/usr/share/data" 'exit 1' "$work/bw"
+mk_trig_pkg badtrig_1.0.aeltra badtrig 1.0 "/usr/share/data" \
+    '[ -f /ok ] || exit 1
+echo "badtrig: $*" >> /trigger.log' "$work/bw"
 
 out=$(aept_run "$root" install --non-interactive "$work/badtrig_1.0.aeltra" 2>&1)
 rc=$?
-[ "$rc" -eq 0 ] || fail "a failing trigger failed the whole install (exit $rc):
+[ "$rc" -eq 2 ] || fail "a failing trigger should exit 2, got $rc:
 $out"
 printf '%s\n' "$out" | grep -q "trigger script for badtrig failed" \
     || fail "the trigger failure was not reported:
 $out"
-note "a failing trigger is reported and the transaction still succeeds"
+grep -q '^/usr/share/data$' "$info/badtrig.triggers-pending" \
+    || fail "the owed directory is not on record:
+$(cat "$info/badtrig.triggers-pending" 2>/dev/null)"
+grep -q 'Status: install ok triggers-pending' "$info/badtrig.control" \
+    || fail "the status does not say triggers-pending:
+$(grep Status "$info/badtrig.control")"
+aept_run "$root" list --installed 2>/dev/null | grep -q '^badtrig ' \
+    || fail "badtrig is not listed as installed despite the completed transaction"
+note "failing trigger: exit 2, directory recorded, status triggers-pending"
+
+# ── every following transaction retries -- and reports again ─────────
+
+mkdir -p "$work/u1/opt/u1"
+printf 'u\n' > "$work/u1/opt/u1/file"
+make_pkg_tree "$work/unrel1_1.0.aeltra" unrel1 1.0 "" "$work/u1"
+
+out=$(aept_run "$root" install --non-interactive "$work/unrel1_1.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 2 ] || fail "an unrelated transaction should have retried and exited 2, got $rc:
+$out"
+[ -f "$info/badtrig.triggers-pending" ] || fail "the record vanished without a success"
+note "an unrelated transaction retries the pending trigger, still exit 2"
+
+# ── a successful retry clears the record and the status ──────────────
+
+: > "$log"
+touch "$root/ok"
+mkdir -p "$work/u2/opt/u2"
+printf 'u\n' > "$work/u2/opt/u2/file"
+make_pkg_tree "$work/unrel2_1.0.aeltra" unrel2 1.0 "" "$work/u2"
+
+out=$(aept_run "$root" install --non-interactive "$work/unrel2_1.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the transaction after the fix exited $rc:
+$out"
+grep -q '^badtrig: /usr/share/data$' "$log" \
+    || fail "the retry did not hand over the recorded directory:
+$(cat "$log")"
+[ ! -f "$info/badtrig.triggers-pending" ] || fail "the record survived the success"
+grep -q 'Status: install ok installed' "$info/badtrig.control" \
+    || fail "the status was not restored to installed:
+$(grep Status "$info/badtrig.control")"
+note "successful retry: recorded directory delivered, record and status cleared"
+
+# ── aept triggers retries on demand ──────────────────────────────────
+
+mkdir -p "$work/b2/usr/share/badtrig2"
+printf 'b\n' > "$work/b2/usr/share/badtrig2/marker"
+mk_trig_pkg badtrig2_1.0.aeltra badtrig2 1.0 "/usr/share/data" \
+    '[ -f /ok2 ] || exit 1
+echo "badtrig2: $*" >> /trigger.log' "$work/b2"
+
+out=$(aept_run "$root" install --non-interactive "$work/badtrig2_1.0.aeltra" 2>&1)
+[ "$?" -eq 2 ] || fail "installing badtrig2 should exit 2:
+$out"
+
+out=$(aept_run "$root" triggers 2>&1)
+rc=$?
+[ "$rc" -eq 1 ] || fail "aept triggers with a still-failing script should exit 1, got $rc:
+$out"
+
+: > "$log"
+touch "$root/ok2"
+out=$(aept_run "$root" triggers 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "aept triggers after the fix exited $rc:
+$out"
+grep -q '^badtrig2: /usr/share/data$' "$log" \
+    || fail "aept triggers did not run the pending script:
+$(cat "$log")"
+[ ! -f "$info/badtrig2.triggers-pending" ] || fail "aept triggers left the record behind"
+note "aept triggers: exit 1 while owed, exit 0 and cleared once the script runs"
+
+# ── removing the watcher takes its record with it ────────────────────
+
+mkdir -p "$work/b3/usr/share/badtrig3"
+printf 'b\n' > "$work/b3/usr/share/badtrig3/marker"
+mk_trig_pkg badtrig3_1.0.aeltra badtrig3 1.0 "/usr/share/data" 'exit 1' "$work/b3"
+
+out=$(aept_run "$root" install --non-interactive "$work/badtrig3_1.0.aeltra" 2>&1)
+[ "$?" -eq 2 ] || fail "installing badtrig3 should exit 2:
+$out"
+[ -f "$info/badtrig3.triggers-pending" ] || fail "no record for badtrig3"
+
+out=$(aept_run "$root" remove --non-interactive badtrig3 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "removing badtrig3 exited $rc:
+$out"
+[ ! -f "$info/badtrig3.triggers-pending" ] \
+    || fail "the record outlived the package it belongs to"
+note "removal clears the pending record"
+
+# ── an upgrade keeps the record and retries with the new script ──────
+
+mkdir -p "$work/b4/usr/share/badtrig4"
+printf 'b\n' > "$work/b4/usr/share/badtrig4/marker"
+mk_trig_pkg badtrig4_1.0.aeltra badtrig4 1.0 "/usr/share/data" 'exit 1' "$work/b4"
+
+out=$(aept_run "$root" install --non-interactive "$work/badtrig4_1.0.aeltra" 2>&1)
+[ "$?" -eq 2 ] || fail "installing badtrig4 1.0 should exit 2:
+$out"
+
+: > "$log"
+mk_trig_pkg badtrig4_2.0.aeltra badtrig4 2.0 "/usr/share/data" \
+    'echo "badtrig4-v2: $*" >> /trigger.log' "$work/b4"
+
+out=$(aept_run "$root" install --non-interactive "$work/badtrig4_2.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "upgrading badtrig4 exited $rc:
+$out"
+grep -q '^badtrig4-v2: .*\/usr\/share\/data' "$log" \
+    || fail "the new version's script was not owed the recorded directory:
+$(cat "$log")"
+[ ! -f "$info/badtrig4.triggers-pending" ] || fail "the record survived the successful retry"
+note "upgrade: record kept, retried with the new script, cleared on success"
 
 exit 0

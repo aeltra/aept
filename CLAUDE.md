@@ -98,7 +98,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
-exports **34** symbols: the 31 in `aept.h`, plus `aept_log()`,
+exports **35** symbols: the 32 in `aept.h`, plus `aept_log()`,
 `aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
 `libaept` like any other consumer. Before this it exported 139, including every
 internal helper, and `src/libfetch/` stayed hidden only because its names
@@ -107,7 +107,7 @@ link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
 hidden visibility does not apply.
 
 **The ABI baseline.** `tests/libaept.abi` records the ABI as *declarations*,
-not as names — 45 interfaces: the 34 `AEPT_API` functions, plus every type and
+not as names — 46 interfaces: the 35 `AEPT_API` functions, plus every type and
 enum in `aept.h`. `tests/test_abi_symbols.sh` checks it, and
 `tests/abi-declarations.sh` extracts the current one by preprocessing the
 headers with `-DAEPT_API=AEPT_EXPORT` (everything from `aept.h`, since it is
@@ -372,7 +372,7 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 - **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
 - **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
-- **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction.
+- **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction. **A failing trigger script never fails the completed transaction, but it never vanishes either**: the matched directories are written to `{name}.triggers-pending` *before* the script runs — so a failure, a crash and a Ctrl-C all leave the same record — and the package's `Status:` is set to `triggers-pending` (restored, and the record removed, on success; the side file is authoritative, the Status line derived from it). Every later transaction retries the record merged with anything newly matched, and `aept triggers` retries on demand. The status feed for libsolv normalizes `triggers-pending` to `installed`, like `unpacked`: the files are on disk and clash detection must see them. The CLI reports the state as **exit 2** ("transaction succeeded, a trigger is owed") via `AEPT_ERR_TRIGGER` in `aept_last_error()`; embedders and the Python bindings read the same channel. The pending scan collects names before running anything — the scripts rewrite files in `info_dir`, and mutating a directory mid-`readdir()` can hand entries back forever. Removal deletes the record with the other info files; the upgrade-side `remove_info_files` deliberately keeps it, so the retry runs the *new* version's script.
 - **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.
 - **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.

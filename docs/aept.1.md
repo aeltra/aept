@@ -279,6 +279,14 @@ optional glob pattern filters by package name.
 
 Remove all cached package files from the cache directory.
 
+## triggers
+
+Retry trigger scripts whose earlier run failed. A failed trigger is
+recorded per package (see **TRIGGERS**) and normally retried at the end
+of the next transaction; this command runs the pending scripts on their
+own. Exits **0** when every pending script ran clean or none was
+pending, **1** when any failed again.
+
 ## owns \[options\] \<path\>
 
 Find which installed package owns a file. Searches the *.list* files in
@@ -463,16 +471,26 @@ Triggers are deferred: they do not run during individual package
 operations. Instead, all directories touched by installs, upgrades, and
 removals are collected throughout the transaction. After every package
 operation has completed (including maintainer scripts), **aept** matches
-the collected directories against the aggregated trigger index and runs
-each matching trigger script once.
+the collected directories against the declared trigger interests and
+runs each matching trigger script once.
 
-## Trigger index
+A failing trigger script does not undo or fail the transaction: the
+packages are already installed or removed, and the status database
+already records that truthfully. Instead the failure is persisted -- the
+directories the script was called with are written to
+*pkg.triggers-pending* in the info directory **before** the script runs
+(so a crash leaves the same record a failure does), and the package's
+status is set to *triggers-pending*. The record is retried, merged with
+any newly touched directories, at the end of every following transaction
+and by **aept triggers**; it is removed when the script succeeds, and
+the status returns to *installed*. The transaction's exit status is
+**2** in this case (see **EXIT STATUS**).
 
-When a package with a *triggers* file is installed or removed, **aept**
-automatically rebuilds *triggers-index* in the info directory. This file
-aggregates all trigger interests and has the format:
+## Trigger interests
 
-    <pattern>	<package>
+Trigger interests are read directly from the *pkg.triggers* files in the
+info directory at the end of each transaction; there is no aggregated
+index file on disk.
 
 The index is an implementation detail and should not be edited by hand.
 
@@ -522,8 +540,9 @@ inspect packages:
 >
 > - *pkg.trigger* — trigger script
 >
-> - *triggers-index* — aggregated trigger interest index (rebuilt
->   automatically)
+> - *pkg.triggers-pending* — directories owed to a trigger script whose
+>   last run failed; retried on the next transaction or by **aept
+>   triggers**
 
 */var/lib/aept/lists/*
 
@@ -550,10 +569,12 @@ inspect packages:
 
 # EXIT STATUS
 
-**0** on success, **1** on error. When **aept** is terminated by a
-signal (such as **SIGINT** from Ctrl-C), it re-raises the signal under
-the default disposition so the parent process sees the conventional
-**128+N** exit status.
+**0** on success, **1** on error. **2** when the transaction itself
+succeeded but one or more trigger scripts failed -- the failure is
+recorded and retried on the next transaction or by **aept triggers**.
+When **aept** is terminated by a signal (such as **SIGINT** from
+Ctrl-C), it re-raises the signal under the default disposition so the
+parent process sees the conventional **128+N** exit status.
 
 # AUTHORS
 

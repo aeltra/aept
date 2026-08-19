@@ -135,12 +135,31 @@ static void usage_main(FILE *out)
             "  pin <pkgs...>       Pin packages to a specific version\n"
             "  unpin <pkgs...>     Remove version pins\n"
             "  clean               Remove cached package files\n"
+            "  triggers            Retry trigger scripts that failed earlier\n"
             "  files <pkg>         List files of an installed package\n"
             "  owns <path>         Find which package owns a file\n"
             "  print-architecture  Show configured architectures\n"
             "\n"
             "Run 'aept <command> --help' for command-specific options.\n",
             DEFAULT_CONF);
+}
+
+/*
+ * The exit status a completed transaction earns.  2 is deliberate and
+ * documented: the transaction's own work succeeded, but a trigger
+ * script failed -- recorded on disk and retried by the next
+ * transaction or `aept triggers` -- and a caller scripting aept gets
+ * to tell that apart from both success and failure.
+ */
+#define EXIT_TRIGGER_FAILED 2
+
+static int transaction_exit(aept_ctx_t *ctx, int r)
+{
+    if (r != 0)
+        return 1;
+    if (aept_last_error(ctx) == AEPT_ERR_TRIGGER)
+        return EXIT_TRIGGER_FAILED;
+    return 0;
 }
 
 static void usage_update(FILE *out)
@@ -361,6 +380,11 @@ static struct option remove_options[] = {
 
 /* upgrade reuses install_options */
 
+static struct option triggers_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {NULL,   0,           NULL, 0  },
+};
+
 static struct option clean_options[] = {
     {"help", no_argument, NULL, 'h'},
     {NULL,   0,           NULL, 0  }
@@ -447,7 +471,7 @@ static int cmd_install(int argc, char *argv[])
     int allow_downgrade = 0, reinstall = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
     int keep_going = 0;
-    int opt, r;
+    int opt, r, rc;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
@@ -542,15 +566,16 @@ static int cmd_install(int argc, char *argv[])
                      n_locals > 0 ? local_paths : NULL, n_locals);
     free(pkg_names);
     free(local_paths);
+    rc = transaction_exit(ctx, r);
     aept_cleanup(ctx);
-    return r != 0 ? 1 : 0;
+    return rc;
 }
 
 static int cmd_autoremove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
     int keep_going = 0;
-    int opt, r;
+    int opt, r, rc;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fnh", autoremove_options, NULL)) != -1) {
@@ -592,15 +617,16 @@ static int cmd_autoremove(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
 
     r = aept_autoremove(ctx);
+    rc = transaction_exit(ctx, r);
     aept_cleanup(ctx);
-    return r != 0 ? 1 : 0;
+    return rc;
 }
 
 static int cmd_remove(int argc, char *argv[])
 {
     int force_depends = 0, noaction = 0, purge = 0, non_interactive = 0;
     int keep_going = 0;
-    int opt, r;
+    int opt, r, rc;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fnh", remove_options, NULL)) != -1) {
@@ -647,8 +673,9 @@ static int cmd_remove(int argc, char *argv[])
     aept_set_flag(ctx, AEPT_FLAG_KEEP_GOING, keep_going);
 
     r = aept_remove(ctx, (const char **)&argv[optind], argc - optind);
+    rc = transaction_exit(ctx, r);
     aept_cleanup(ctx);
-    return r != 0 ? 1 : 0;
+    return rc;
 }
 
 static int cmd_upgrade(int argc, char *argv[])
@@ -657,7 +684,7 @@ static int cmd_upgrade(int argc, char *argv[])
     int allow_downgrade = 0, no_cache = 0;
     int force_confnew = 0, force_confold = 0, non_interactive = 0;
     int keep_going = 0;
-    int opt, r;
+    int opt, r, rc;
 
     optind = 1;
     while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
@@ -719,8 +746,9 @@ static int cmd_upgrade(int argc, char *argv[])
         aept_set_flag(ctx, AEPT_FLAG_FORCE_CONFOLD, 1);
 
     r = aept_upgrade(ctx);
+    rc = transaction_exit(ctx, r);
     aept_cleanup(ctx);
-    return r != 0 ? 1 : 0;
+    return rc;
 }
 
 static int cmd_clean(int argc, char *argv[])
@@ -744,6 +772,40 @@ static int cmd_clean(int argc, char *argv[])
         return 1;
 
     r = aept_clean(ctx);
+    aept_cleanup(ctx);
+    return r != 0 ? 1 : 0;
+}
+
+static void usage_triggers(FILE *out)
+{
+    fprintf(out, "Usage: aept triggers\n"
+                 "\n"
+                 "Retry trigger scripts whose earlier run failed.  Failures are\n"
+                 "recorded per package and normally retried by the next\n"
+                 "transaction; this runs them on their own.\n");
+}
+
+static int cmd_triggers(int argc, char *argv[])
+{
+    int opt, r;
+
+    optind = 1;
+    while ((opt = getopt_long(argc, argv, "h", triggers_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h':
+            usage_triggers(stdout);
+            return 0;
+        default:
+            usage_triggers(stderr);
+            return 1;
+        }
+    }
+
+    aept_ctx_t *ctx = init_aept();
+    if (!ctx)
+        return 1;
+
+    r = aept_triggers(ctx);
     aept_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
@@ -1251,6 +1313,8 @@ int main(int argc, char *argv[])
         rc = cmd_upgrade(sub_argc, sub_argv);
     else if (strcmp(command, "clean") == 0)
         rc = cmd_clean(sub_argc, sub_argv);
+    else if (strcmp(command, "triggers") == 0)
+        rc = cmd_triggers(sub_argc, sub_argv);
     else if (strcmp(command, "list") == 0)
         rc = cmd_list(sub_argc, sub_argv);
     else if (strcmp(command, "show") == 0)

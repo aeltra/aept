@@ -39,7 +39,7 @@
 # The 31 in aept.h, plus the three the CLI needs because it links libaept
 # like any other consumer: aept_log(), aept_malloc(), aept_asprintf().
 
-enum:AEPT_ERR_NONE: enum { AEPT_ERR_NONE = 0, AEPT_ERR_GENERAL, AEPT_ERR_TIMEOUT, };
+enum:AEPT_ERR_NONE: enum { AEPT_ERR_NONE = 0, AEPT_ERR_GENERAL, AEPT_ERR_TIMEOUT, AEPT_ERR_TRIGGER, };
 enum:AEPT_FLAG_FORCE_DEPENDS: enum { AEPT_FLAG_FORCE_DEPENDS, AEPT_FLAG_DOWNLOAD_ONLY, AEPT_FLAG_NOACTION, AEPT_FLAG_ALLOW_DOWNGRADE, AEPT_FLAG_REINSTALL, AEPT_FLAG_NO_CACHE, AEPT_FLAG_FORCE_CONFNEW, AEPT_FLAG_FORCE_CONFOLD, AEPT_FLAG_PURGE, AEPT_FLAG_NON_INTERACTIVE, AEPT_FLAG_CHECK_SIGNATURE, AEPT_FLAG_IGNORE_UID, AEPT_FLAG_KEEP_GOING, };
 enum:AEPT_LOG_ERROR: enum { AEPT_LOG_ERROR = 0, AEPT_LOG_WARNING = 1, AEPT_LOG_INFO = 2, AEPT_LOG_DEBUG = 3, };
 func:aept_architectures: AEPT_EXPORT int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
@@ -73,6 +73,7 @@ func:aept_set_network_timeout: AEPT_EXPORT void aept_set_network_timeout(aept_ct
 func:aept_set_offline_root: AEPT_EXPORT void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 func:aept_set_verbosity: AEPT_EXPORT void aept_set_verbosity(aept_ctx_t *ctx, int level);
 func:aept_show: AEPT_EXPORT int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
+func:aept_triggers: AEPT_EXPORT int aept_triggers(aept_ctx_t *ctx);
 func:aept_unpin: AEPT_EXPORT int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
 func:aept_update: AEPT_EXPORT int aept_update(aept_ctx_t *ctx);
 func:aept_upgrade: AEPT_EXPORT int aept_upgrade(aept_ctx_t *ctx);

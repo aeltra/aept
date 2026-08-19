@@ -32,6 +32,7 @@
 #include "aept/remove.h"
 #include "aept/solver.h"
 #include "aept/status.h"
+#include "aept/trigger.h"
 #include "aept/update.h"
 #include "aept/util.h"
 
@@ -292,6 +293,21 @@ int aept_autoremove(aept_ctx_t *ctx)
 
     aept_config_unlock(ctx);
     return r;
+}
+
+int aept_triggers(aept_ctx_t *ctx)
+{
+    int failures;
+
+    if (aept_config_validate(&ctx->config) < 0)
+        return -1;
+    if (aept_config_lock(ctx) < 0)
+        return -1;
+
+    failures = aept_trigger_retry_pending(ctx);
+
+    aept_config_unlock(ctx);
+    return failures > 0 ? -1 : 0;
 }
 
 int aept_clean(aept_ctx_t *ctx)

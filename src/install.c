@@ -426,7 +426,10 @@ cleanup:
  * missing because this runs *after* the conffile resolve step in
  * do_upgrade_package(), which has already written the new version's
  * hashes.  Adding it here would delete them again.  Stale hashes are
- * dropped at the resolve step instead.
+ * dropped at the resolve step instead.  "triggers-pending" is missing
+ * on purpose too: the directories a failed trigger is owed are still
+ * stale after the upgrade, and the retry should run the new version's
+ * script -- only removal clears the record.
  */
 static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
@@ -820,6 +823,7 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Tra
 int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     const char **local_paths, int local_count)
 {
+    int trigger_failures = 0;
     Transaction *trans;
     Pool *pool;
     Id *local_ids = NULL;
@@ -1159,7 +1163,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     aept_fileset_free(&installed_files);
 
     /* Fire triggers for directories modified during the transaction */
-    aept_trigger_run_all(ctx, &tctx);
+    trigger_failures = aept_trigger_run_all(ctx, &tctx);
     aept_trigger_ctx_free(&tctx);
 
     /* Reinstall phase — download and reinstall requested packages
@@ -1191,5 +1195,13 @@ download_cleanup:
 out:
     free(local_ids);
     aept_solver_fini(ctx);
+
+    /* A trigger failure never turns a completed transaction into a
+     * reported failure -- the packages installed and the record is on
+     * disk for a retry -- but it must not vanish either: last_error
+     * lets the caller (and through it the CLI's exit status) see it. */
+    if (r == 0 && trigger_failures > 0)
+        ctx->last_error = AEPT_ERR_TRIGGER;
+
     return r;
 }

@@ -75,6 +75,12 @@ enum {
     AEPT_ERR_NONE = 0,
     AEPT_ERR_GENERAL,
     AEPT_ERR_TIMEOUT,
+    /* The operation succeeded, but one or more trigger scripts
+     * failed.  The failure is recorded in the status area and retried
+     * on the next transaction or by aept_triggers(); reported here
+     * because the call itself returns 0 -- the transaction's own work
+     * is complete and pretending otherwise would be the lie. */
+    AEPT_ERR_TRIGGER,
 };
 
 /* Why the most recent call on this context failed.  Meaningful
@@ -145,6 +151,12 @@ AEPT_API int aept_upgrade(aept_ctx_t *ctx);
 AEPT_API int aept_remove(aept_ctx_t *ctx, const char **names, int count);
 AEPT_API int aept_autoremove(aept_ctx_t *ctx);
 AEPT_API int aept_clean(aept_ctx_t *ctx);
+
+/* Retry trigger scripts whose earlier run failed (recorded per package
+ * as {info_dir}/{name}.triggers-pending).  Returns 0 when every
+ * pending trigger ran clean or none was pending, -1 when any failed
+ * again -- for this call the trigger IS the operation. */
+AEPT_API int aept_triggers(aept_ctx_t *ctx);
 
 AEPT_API int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
 AEPT_API int aept_unpin(aept_ctx_t *ctx, const char **names, int count);

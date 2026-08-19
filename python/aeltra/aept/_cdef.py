@@ -26,6 +26,7 @@ enum {
     AEPT_ERR_NONE,
     AEPT_ERR_GENERAL,
     AEPT_ERR_TIMEOUT,
+    AEPT_ERR_TRIGGER,
 };
 
 int  aept_last_error(aept_ctx_t *ctx);
@@ -88,6 +89,7 @@ int aept_upgrade(aept_ctx_t *ctx);
 int aept_remove(aept_ctx_t *ctx, const char **names, int count);
 int aept_autoremove(aept_ctx_t *ctx);
 int aept_clean(aept_ctx_t *ctx);
+int aept_triggers(aept_ctx_t *ctx);
 
 int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
 int aept_unpin(aept_ctx_t *ctx, const char **names, int count);

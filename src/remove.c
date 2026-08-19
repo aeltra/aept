@@ -163,8 +163,8 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *pr
 
 static void remove_info_files(struct aept_ctx *ctx, const char *name)
 {
-    const char *exts[] = {"list",  "control", "conffiles", "preinst",  "postinst",
-                          "prerm", "postrm",  "trigger",   "triggers", NULL};
+    const char *exts[] = {"list",   "control", "conffiles", "preinst",          "postinst", "prerm",
+                          "postrm", "trigger", "triggers",  "triggers-pending", NULL};
 
     for (int i = 0; exts[i]; i++) {
         char *path = NULL;
@@ -310,7 +310,8 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
         }
     }
 
-    aept_trigger_run_all(ctx, &tctx);
+    if (aept_trigger_run_all(ctx, &tctx) > 0 && !had_error)
+        ctx->last_error = AEPT_ERR_TRIGGER;
     r = had_error ? -1 : 0;
 
 trigger_cleanup:

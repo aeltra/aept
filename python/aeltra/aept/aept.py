@@ -148,6 +148,13 @@ class Aept:
         self._confirm_cb_handle = None
         self._pending_exc = None
 
+    def _triggers_ok(self) -> bool:
+        """False when the last transaction left a failed trigger behind.
+
+        The transaction itself succeeded -- the failure is recorded on
+        disk and retried by the next transaction or triggers()."""
+        return lib.aept_last_error(self._ctx) != lib.AEPT_ERR_TRIGGER
+
     def _call(self, rc, msg="libaept error"):
         """Check for pending callback exceptions, then the C return code."""
         exc_info = self._pending_exc
@@ -277,26 +284,38 @@ class Aept:
         self._call(lib.aept_update(self._ctx), "aept_update() failed")
 
     def install(self, names: Optional[List[str]] = None,
-                local_paths: Optional[List[str]] = None):
+                local_paths: Optional[List[str]] = None) -> bool:
+        """Install packages.  Returns False when the transaction
+        succeeded but a trigger script failed (recorded and retried
+        later); raises on an actual failure."""
         c_names, ka1, n_names = str_list_to_c(names or [])
         c_paths, ka2, n_paths = str_list_to_c(local_paths or [])
         self._call(lib.aept_install(self._ctx, c_names, n_names,
                                     c_paths, n_paths),
                "aept_install() failed")
+        return self._triggers_ok()
 
-    def upgrade(self):
+    def upgrade(self) -> bool:
         self._call(lib.aept_upgrade(self._ctx), "aept_upgrade() failed")
+        return self._triggers_ok()
 
-    def remove(self, names: List[str]):
+    def remove(self, names: List[str]) -> bool:
         c_names, ka, count = str_list_to_c(names)
         self._call(lib.aept_remove(self._ctx, c_names, count),
                    "aept_remove() failed")
+        return self._triggers_ok()
 
-    def autoremove(self):
+    def autoremove(self) -> bool:
         self._call(lib.aept_autoremove(self._ctx), "aept_autoremove() failed")
+        return self._triggers_ok()
 
     def clean(self):
         self._call(lib.aept_clean(self._ctx), "aept_clean() failed")
+
+    def triggers(self):
+        """Retry trigger scripts whose earlier run failed.  Here the
+        trigger is the operation, so a script failing again raises."""
+        self._call(lib.aept_triggers(self._ctx), "aept_triggers() failed")
 
     def pin(self, specs: List[str]):
         c_specs, ka, count = str_list_to_c(specs)

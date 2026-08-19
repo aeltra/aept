@@ -20,6 +20,7 @@
 
 static const char unpacked_status[] = "Status: install ok unpacked";
 static const char installed_status[] = "Status: install ok installed";
+static const char triggers_pending_status[] = "Status: install ok triggers-pending";
 
 /* Read a file into a malloc'd NUL-terminated buffer.  Returns NULL on
  * error.  Sets *out_len to the content length on success. */
@@ -96,8 +97,13 @@ int aept_status_load(struct aept_ctx *ctx)
             const char *eol = strchr(p, '\n');
             size_t llen = eol ? (size_t)(eol - p) : strlen(p);
 
-            if (llen == sizeof(unpacked_status) - 1 &&
-                strncmp(p, unpacked_status, sizeof(unpacked_status) - 1) == 0) {
+            if ((llen == sizeof(unpacked_status) - 1 &&
+                 strncmp(p, unpacked_status, sizeof(unpacked_status) - 1) == 0) ||
+                (llen == sizeof(triggers_pending_status) - 1 &&
+                 strncmp(p, triggers_pending_status, sizeof(triggers_pending_status) - 1) == 0)) {
+                /* Both states describe a package whose files are on
+                 * disk, and the solver (clash detection above all)
+                 * must see it as present. */
                 fputs(installed_status, mem);
                 found_status = 1;
             } else {
@@ -339,4 +345,119 @@ int aept_status_load_auto_set(struct aept_ctx *ctx, aept_fileset_t *set)
     fclose(fp);
     aept_fileset_sort(set);
     return 0;
+}
+
+/*
+ * The current state word of a package's Status line -- "installed",
+ * "unpacked", "triggers-pending" -- copied into buf.  Returns 0 when a
+ * Status line was found, -1 otherwise (no .control, no Status line).
+ */
+int aept_status_get_state(struct aept_ctx *ctx, const char *name, char *buf, size_t buflen)
+{
+    char *path = NULL;
+    FILE *fp;
+    char line[1024];
+    int r = -1;
+
+    aept_asprintf(&path, "%s/%s.control", ctx->config.info_dir, name);
+    fp = fopen(path, "r");
+    free(path);
+
+    if (!fp)
+        return -1;
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (aept_fgets_is_truncated(line, sizeof(line))) {
+            aept_fgets_drain_line(fp);
+            continue;
+        }
+        if (strncmp(line, "Status:", 7) != 0)
+            continue;
+
+        /* "Status: install ok <state>" -- the state is the third word.
+         * The newline goes first, or the scan below never ends: it is
+         * neither a separator nor part of a word. */
+        line[strcspn(line, "\n")] = '\0';
+        const char *p = line + 7;
+        int word = 0;
+        while (*p) {
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (!*p)
+                break;
+            const char *start = p;
+            while (*p && *p != ' ' && *p != '\t')
+                p++;
+            if (++word == 3) {
+                size_t len = (size_t)(p - start);
+                if (len >= buflen)
+                    len = buflen - 1;
+                memcpy(buf, start, len);
+                buf[len] = '\0';
+                r = 0;
+            }
+        }
+        break;
+    }
+
+    fclose(fp);
+    return r;
+}
+
+/*
+ * Rewrite a package's Status line to the given state, leaving the rest
+ * of the .control untouched.  Written aside and renamed, like every
+ * other file whose half-written form would be read back as the truth.
+ */
+int aept_status_set_state(struct aept_ctx *ctx, const char *name, const char *state)
+{
+    char *path = NULL;
+    char *tmp_path = NULL;
+    FILE *in, *out;
+    char line[4096];
+    int found = 0;
+    int r = -1;
+
+    aept_asprintf(&path, "%s/%s.control", ctx->config.info_dir, name);
+    in = fopen(path, "r");
+    if (!in) {
+        free(path);
+        return -1;
+    }
+
+    aept_asprintf(&tmp_path, "%s.tmp", path);
+    out = fopen(tmp_path, "w");
+    if (!out) {
+        fclose(in);
+        free(path);
+        free(tmp_path);
+        return -1;
+    }
+
+    while (fgets(line, sizeof(line), in)) {
+        if (!found && strncmp(line, "Status:", 7) == 0) {
+            fprintf(out, "Status: install ok %s\n", state);
+            found = 1;
+        } else {
+            fputs(line, out);
+        }
+    }
+    if (!found)
+        fprintf(out, "Status: install ok %s\n", state);
+
+    fclose(in);
+
+    if (ferror(out) || fclose(out) != 0) {
+        aept_log_error("failed to write '%s'", tmp_path);
+        unlink(tmp_path);
+    } else if (rename(tmp_path, path) < 0) {
+        aept_log_error("cannot rename '%s': %s", tmp_path, strerror(errno));
+        unlink(tmp_path);
+    } else {
+        r = 0;
+    }
+
+    free(path);
+    free(tmp_path);
+    return r;
 }

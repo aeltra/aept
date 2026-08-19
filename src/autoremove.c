@@ -180,7 +180,8 @@ int aept_op_autoremove(struct aept_ctx *ctx)
         }
     }
 
-    aept_trigger_run_all(ctx, &tctx);
+    if (aept_trigger_run_all(ctx, &tctx) > 0 && !had_error)
+        ctx->last_error = AEPT_ERR_TRIGGER;
     r = had_error ? -1 : 0;
 
 out_trigger:

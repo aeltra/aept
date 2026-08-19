@@ -14,8 +14,31 @@
  * load_trigger_entries() is a file-scope helper in trigger.c.  Pull the
  * translation unit in directly rather than widening the internal API.
  */
+
 #include "trigger.c"
 
+/*
+ * trigger.c now records failures through status.c, which would drag
+ * the solver and libsolv into this parser-only test.  The paths that
+ * call these are never reached here; the stubs only satisfy the
+ * linker.
+ */
+int aept_status_get_state(struct aept_ctx *ctx, const char *name, char *buf, size_t buflen)
+{
+    (void)ctx;
+    (void)name;
+    (void)buf;
+    (void)buflen;
+    return -1;
+}
+
+int aept_status_set_state(struct aept_ctx *ctx, const char *name, const char *state)
+{
+    (void)ctx;
+    (void)name;
+    (void)state;
+    return 0;
+}
 #include "test.h"
 
 /*

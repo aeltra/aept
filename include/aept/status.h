@@ -36,4 +36,11 @@ int aept_status_clear_auto(struct aept_ctx *ctx);
 /* Load the set of auto-installed package names into a fileset. */
 int aept_status_load_auto_set(struct aept_ctx *ctx, aept_fileset_t *set);
 
+/* The state word of a package's Status line ("installed", "unpacked",
+ * "triggers-pending") into buf; 0 when found, -1 otherwise. */
+int aept_status_get_state(struct aept_ctx *ctx, const char *name, char *buf, size_t buflen);
+
+/* Rewrite the Status line to the given state, everything else kept. */
+int aept_status_set_state(struct aept_ctx *ctx, const char *name, const char *state);
+
 #endif

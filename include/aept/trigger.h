@@ -37,6 +37,15 @@ int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx
 /* Fire all pending triggers after transaction completes.
  * Scans the .triggers files in info_dir directly to find interested
  * packages. */
+/* Run every matching trigger, retry pending records, and return the
+ * number of scripts that failed.  A failure is persisted to
+ * {name}.triggers-pending (and the Status line set to
+ * "triggers-pending") before the script runs, so a crash leaves the
+ * same record a failure does; success removes it. */
 int aept_trigger_run_all(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx);
+
+/* Retry pending records only -- the `aept triggers` command.  Returns
+ * the number of scripts that failed. */
+int aept_trigger_retry_pending(struct aept_ctx *ctx);
 
 #endif
