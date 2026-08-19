@@ -9,9 +9,10 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize test_auto_flags test_api
+    test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
+    test_url_parse test_config_values
 
-check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
+check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient tlsget
 
 noinst_HEADERS = test.h
 
@@ -30,6 +31,14 @@ partialget_SOURCES = partialget.c
 partialget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 partialget_LDADD = $(top_builddir)/src/libaept.la
 partialget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
+# A harness for test_tls_reject.sh, going to libfetch directly: it
+# prints the error *classification*, which aept_download() flattens
+# into a log line.
+tlsget_SOURCES = tlsget.c
+tlsget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
+tlsget_LDADD = $(top_builddir)/src/libaept.la
+tlsget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # A harness for test_cancel.sh and test_timeout.sh.  Links the library
 # rather than individual modules, for the same reason httpget does:
@@ -122,6 +131,22 @@ test_url_sanitize_SOURCES = \
 test_url_sanitize_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_url_sanitize_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+# The URL parser on its edges; links the library for libfetch, and
+# needs the OpenSSL headers because common.h includes them directly.
+test_url_parse_SOURCES = test_url_parse.c
+test_url_parse_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
+test_url_parse_LDADD = $(top_builddir)/src/libaept.la
+test_url_parse_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
+test_config_values_SOURCES = \
+    test_config_values.c \
+    $(top_srcdir)/src/config.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_config_values_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_config_values_LDFLAGS = $(COVERAGE_LDFLAGS)
+
 # The public API against a hand-written root; links the library the way
 # a consumer does.
 test_api_SOURCES = test_api.c
@@ -166,6 +191,8 @@ dist_check_SCRIPTS = \
     test_mark.sh \
     test_pin.sh \
     test_python.sh \
+    test_tls_reject.sh \
+    test_confirm.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
@@ -186,7 +213,7 @@ dist_check_SCRIPTS = \
     test_signal_resume.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
-    dribbleserver.py libaept.abi abi-declarations.sh \
+    dribbleserver.py tlsserver.py libaept.abi abi-declarations.sh \
     coverage-report.py coverage.tiers coverage.baseline
 
 TEST_EXTENSIONS = .sh
@@ -202,6 +229,7 @@ AM_TESTS_ENVIRONMENT = \
     PARTIALGET='$(abs_builddir)/partialget'; export PARTIALGET; \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
     STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
+    TLSGET='$(abs_builddir)/tlsget'; export TLSGET; \
     LIBAEPT_SO='$(abs_top_builddir)/src/.libs/libaept.so'; export LIBAEPT_SO; \
     NM='$(NM)'; export NM; \
     ABI_INCLUDEDIR='$(abs_top_srcdir)/include'; export ABI_INCLUDEDIR; \

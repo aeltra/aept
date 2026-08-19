@@ -19,7 +19,9 @@ import signal
 import sys
 import time
 
-PROMPT = b"[default=N] ?"
+# The conffile prompt by default; a test driving a different prompt
+# (the transaction confirm) overrides it via $PTY_PROMPT.
+PROMPT = os.environ.get("PTY_PROMPT", "[default=N] ?").encode()
 TIMEOUT = 60.0
 
 responses, command = sys.argv[1].split(","), sys.argv[sys.argv.index("--") + 1:]
