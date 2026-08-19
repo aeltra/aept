@@ -212,7 +212,8 @@ run by Automake's harness.
   `make_pkg_script`, `make_pkg_tree`, `packages_stanza`, `add_repo`,
   `new_root`, `provision_shell`, `aept_run`, `make_keypair`,
   `make_inpackages`, `http_serve`, `http_stub`, `cond_serve`,
-  `dribble_serve`) and `skip` (exit 77) when a tool is missing rather than
+  `stall_serve`, `dribble_serve`, `tls_serve`) and `skip` (exit 77) when a
+  tool is missing rather than
   failing. A bare `new_root` has no `/bin/sh`, so maintainer and trigger
   scripts die at exec (255) — deliberate in the tests that only need
   "non-zero"; a test that needs a script to *run* calls `provision_shell`,
@@ -230,6 +231,10 @@ run by Automake's harness.
   its trailer — so the client spends the transfer waiting in `poll()` and a
   signal has somewhere to land. A server answering at loopback speed opens no
   such window, and the test would pass without ever exercising anything.
+  `tls_serve` starts `tlsserver.py`, which serves a directory over HTTPS
+  with the certificate it is given: the rejection tests hand it one that
+  nothing trusts, and `test_tls_verify.sh` one signed by a CA the test
+  minted itself and injected through `tlsget -C`.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
@@ -241,12 +246,14 @@ run by Automake's harness.
   *regular* `aeltra` in dist-packages that shadows every namespace portion
   regardless of `PYTHONPATH` — without the shim the test would silently
   test the installed bindings.
-- `httpget`, `partialget`, `tlsget`, `httpstub.py`, `stallclient` and `threadrace` are
-  harnesses driven by shell tests, not tests themselves: they are in
-  `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS` never
-  runs them directly. `partialget` is the one that goes to libfetch directly
-  rather than through `aept_download()`, because what it does — stop reading a
-  response part-way — is precisely what `aept_download()` never does.
+- `httpget`, `partialget`, `rawget`, `tlsget`, `httpstub.py`, `stallclient` and
+  `threadrace` are harnesses driven by shell tests, not tests themselves: they
+  are in `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS`
+  never runs them directly. `partialget`, `rawget` and `tlsget` go to libfetch
+  directly rather than through `aept_download()`, each for something it cannot
+  express: stopping a response part-way, passing flags aept never does (verbose
+  and its error-body drain, the address-family pins, no-redirect), and reading
+  the TLS error classification — plus, via `-C`, trusting a test-minted CA.
 - **`make` does not build `check_PROGRAMS`.** Running `./tests/test_foo` or a
   shell test after a plain `make` runs the *previous* binary, so a revert probe
   can come out green on a fix that is no longer there. This has now happened
@@ -286,8 +293,8 @@ make coverage-clean             # drop accumulated counters
 test dependency. `tests/coverage.tiers` assigns every file under `src/` to a
 risk tier and records what that tier owes; adding a source file without adding
 it there is an error rather than a silent omission, because which tier it lands
-in is what decides how much coverage it owes. `TASK.md` holds the plan and the
-reasoning behind the tiers.
+in is what decides how much coverage it owes. The reasoning behind each tier
+is in `tests/coverage.tiers` itself.
 
 `make coverage-check` is a **ratchet against `tests/coverage.baseline`**, not a
 gate against the tier targets — it was built when most tiers were well short of

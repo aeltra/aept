@@ -130,12 +130,12 @@ struct libfetch_ctx *libfetch_ctx_new(int global_limit, int per_host_limit);
 void libfetch_ctx_free(struct libfetch_ctx *);
 
 /*
- * Select the client certificate, taking precedence over the
- * SSL_CLIENT_{CERT,KEY}_FILE environment variables.  Either argument
- * may be NULL: a NULL cert_file falls back to the environment, and a
- * NULL key_file means the certificate file also contains the key.
- * The strings are not copied and must outlive the fetch calls made
- * with them.
+ * Select the client certificate.  Either argument may be NULL: a NULL
+ * cert_file falls back to the compile-time CLIENT_CERT_FILE, if any --
+ * upstream's SSL_CLIENT_{CERT,KEY}_FILE environment variables are gone
+ * -- and a NULL key_file means the certificate file also contains the
+ * key.  The strings are not copied and must outlive the fetch calls
+ * made with them.
  *
  * The selection belongs to the context, and so does the connection
  * cache: a connection opened while presenting one certificate is never

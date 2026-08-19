@@ -20,7 +20,7 @@
 #
 # The tiers are ordered by what a missed bug costs, not by how easy the
 # lines are to reach.  Weighted by size they come to 81%, which is where
-# the project's headline "80%" comes from; see TASK.md.
+# the project's headline "80%" comes from.
 
 # Runs as root against bytes a remote server chose.  The one tier with a
 # per-file gate, because these are the files where an average must not be
