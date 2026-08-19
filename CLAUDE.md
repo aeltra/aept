@@ -293,7 +293,7 @@ reasoning behind the tiers.
 gate against the tier targets — it was built when most tiers were well short of
 target, and a check that is red from the first day is a check that gets ignored.
 The coverage push has since carried **every tier to its target** (security
-90.2, transaction 85.0, plumbing 80.2, CLI 76.8 against a 60 cap; 83.2%
+91.2, transaction 85.6, plumbing 82.9, CLI 78.0 against a 60 cap; 84.6%
 overall) and **every security-tier file over its 85% floor**, so the floors are
 all hard gates now and the baseline is the high-water mark. The rule is
 unchanged: a file or tier dropping more than two points below its recorded
@@ -335,9 +335,9 @@ Four things about the measurement, each of which has cost a wrong number:
   chase a one-line difference between two runs; do look again if a tier moves by
   more than it.
 
-Branch coverage is reported beside lines and never gated. It runs well below
-lines (~14 points as of the coverage push's end: 83.2 vs 69.2), and the gap
-sits where the error handling is — a tier whose lines climb while its
+Branch coverage is reported beside lines and never gated. It runs below
+lines (~13 points after the targeted branch push on the HTTP, update and
+install paths: 84.6 vs 72.0), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture

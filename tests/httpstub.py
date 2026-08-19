@@ -226,6 +226,115 @@ class Handler(socketserver.BaseRequestHandler):
             send(b"HTTP/1.1 200 OK\r\n\r\n")
             send(b"body without a content length\n")
             return False
+        elif path == "/badstatus":
+            # A status line that does not begin with "HTTP" at all.
+            send(b"XTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nno")
+            return False
+        elif path == "/badversion":
+            # A major version this client does not speak.
+            send(b"HTTP/2.0 200 OK\r\nContent-Length: 2\r\n\r\nno")
+            return False
+        elif path == "/badminor":
+            # ... and a minor version it does not speak either.
+            send(b"HTTP/1.9 200 OK\r\nContent-Length: 2\r\n\r\nno")
+            return False
+        elif path == "/badcode":
+            # A reply code that is not three digits.
+            send(b"HTTP/1.1 2x0 Strange\r\nContent-Length: 2\r\n\r\nno")
+            return False
+        elif path == "/noversion":
+            # No version at all, NCSA 1.5.1-style.  The parser tolerates
+            # this deliberately, so it must keep working.
+            send(b"HTTP 200 OK\r\nContent-Length: 15\r\n"
+                 b"Connection: close\r\n\r\nversionless ok\n")
+            return False
+        elif path == "/chunkext":
+            # A chunk-size line carrying a chunk extension.  RFC 9112
+            # allows it, and the parser must stop at the semicolon
+            # rather than reject the line.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            send(b"6;name=value\r\nfirst-\r\n0\r\n\r\n")
+        elif path == "/chunklf":
+            # A chunk-size line ended by a bare LF: the size is followed
+            # by the line's end and nothing else.  Two digits, because
+            # the parser insists on at least two characters before the
+            # LF -- a CR's worth of slack -- and "6\n" is refused.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            send(b"06\nfirst-\r\n0\r\n\r\n")
+        elif path == "/chunkemptyhdr":
+            # An empty line where a chunk size belongs.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            send(b"\r\nfirst-\r\n0\r\n\r\n")
+            return False
+        elif path == "/chunknotrailer":
+            # The chunk's data arrives whole, but the CRLF that closes
+            # it never does: the server hangs up between the two.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            send(b"6\r\nfirst-")
+            return False
+        elif path == "/chunkclen":
+            # Both framings at once.  The chunked framing governs (RFC
+            # 9112 6.3); the Content-Length names the payload size, so
+            # a client that counts it down must still find the end of
+            # the body where the terminating chunk says.
+            send(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n"
+                 b"Content-Length: 19\r\n\r\n")
+            send(b"6\r\nfirst-\r\n7\r\nsecond-\r\n6\r\nthird\n\r\n0\r\n\r\n")
+        elif path == "/see303":
+            send(response("303 See Other", b"", ["Location: /ok"]))
+        elif path == "/range416":
+            # A complaint about a Range header that was never sent.
+            send(response("416 Range Not Satisfiable", b"nope\n"))
+        elif path == "/proxy407":
+            # A proxy demanding credentials when the client has already
+            # sent everything it has.
+            send(response("407 Proxy Authentication Required", b"nope\n"))
+        elif path == "/error500":
+            send(response("500 Internal Server Error", b"boom\n"))
+        elif path == "/oklocation":
+            # Location on a 200 is not a redirect and must be ignored.
+            send(response("200 OK", b"stayed here\n", ["Location: /notfound"]))
+        elif path == "/twolocations":
+            # Two Location headers; the last one wins and the first
+            # must not leak.
+            send(response("302 Found", b"",
+                          ["Location: /notfound", "Location: /ok"]))
+        elif path == "/movedabs":
+            # An absolute URL in Location, not just a path.
+            port = self.server.server_address[1]
+            send(response("302 Found", b"",
+                          ["Location: http://127.0.0.1:%d/ok" % port]))
+        elif path == "/movedcreds":
+            # A Location that carries its own credentials; they must be
+            # used for the redirected request.
+            port = self.server.server_address[1]
+            send(response("302 Found", b"",
+                          ["Location: http://user:pass@127.0.0.1:%d/auth"
+                           % port]))
+        elif path == "/movedbad":
+            # A Location that does not parse as a URL.
+            send(response("302 Found", b"", ["Location: http://["]))
+        elif path == "/movednoloc":
+            # A redirect with nowhere to go.
+            send(response("302 Found", b"went away\n"))
+        elif path == "/longheader":
+            # A header line well past the 1 KiB the line reader starts
+            # with, so the buffer has to grow mid-line.
+            send(response("200 OK", b"padded ok\n",
+                          ["X-Padding: " + "x" * 2000]))
+        elif path == "/bigetag":
+            # A validator too long to store.  It must be dropped, not
+            # truncated: a truncated validator could never match.
+            send(response("200 OK", b"tagged ok\n",
+                          ['ETag: "%s"' % ("e" * 300)]))
+        elif path == "/truncated512":
+            # Promises 1000 bytes and delivers exactly 512 -- one full
+            # read for a caller using a 512-byte buffer -- so the
+            # failure surfaces on the *next* read, when nothing has
+            # been handed over yet.
+            send(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n")
+            send(b"T" * 512)
+            return False
         else:
             send(response("404 Not Found", b"unknown path\n"))
 

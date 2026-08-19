@@ -88,6 +88,12 @@ int main(void)
     check("10.0.0.0/0", "11.1.2.3", 0, "a zero prefix length is rejected");
     check("10.0.0.0/999", "10.1.2.3", 0, "an absurd prefix length is rejected");
     check("10.0.0.0/-1", "10.1.2.3", 0, "a negative prefix length is rejected");
+    check("240.0.0.0/4", "10.1.2.3", 0, "a prefix shorter than a byte compares its bits");
+    check("0.0.0.0/4", "10.1.2.3", 1, "... and matches when they agree");
+    check("10.0.0.0/8", "2001:db8::1", 0, "a v4 block does not match a v6 address");
+    check("2001:db8::/8", "10.1.2.3", 0, "a v6 block does not match a v4 address");
+    check("10.1.2.3", "10.1.2.3", 1, "a bare address entry matches itself, as a name");
+    check("999.1.2.0/8", "10.1.2.3", 0, "a block that is not an address matches nothing");
 
     /* The lowercase spelling is honoured when the uppercase one is not
      * set -- and only then. */

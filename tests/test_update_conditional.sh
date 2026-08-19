@@ -232,4 +232,69 @@ case $(last_req) in
 esac
 note "a 304 answering no conditional request is refused"
 
+# ── a missing kept file forfeits revalidation ────────────────────────
+#
+# "Unchanged" keeps what is on disk, so a conditional request is only
+# honest while everything it would keep is still there.  With the
+# signature gone, a 304 would leave the source unverifiable; the next
+# request must go out unconditional and fetch the whole object.
+
+log=$work/cond-lost.log
+cond_serve "$repo" both "$log" || skip "could not start the local HTTP server"
+
+setup_root "$root"
+out=$(aept_run "$root" update 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the update before the loss exited $rc:
+$out"
+
+rm -f "$list.sig"
+
+out=$(aept_run "$root" update 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the update after the loss exited $rc:
+$out"
+case $(last_req) in
+    "REQ /InPackages.gz 200 inm=- ims=-") ;;
+    *) fail "with the signature missing the request was still conditional: $(last_req)" ;;
+esac
+[ -f "$list.sig" ] || fail "the full re-fetch did not restore the signature"
+note "a missing signature file makes the next request unconditional"
+
+cond_stop
+
+# ── the uncompressed path revalidates too ────────────────────────────
+#
+# A bare "src" source fetches "Packages" with no decompression step, so
+# its 304 handling is a third code path beside InPackages.gz and
+# Packages.gz.
+
+cp "$work/Packages" "$repo/Packages"
+
+log=$work/cond-bare.log
+cond_serve "$repo" both "$log" || skip "could not start the local HTTP server"
+
+rm -rf "$root"
+new_root "$root"
+echo "src testrepo http://127.0.0.1:$COND_PORT" >> "$root/etc/aept/aept.conf"
+
+out=$(aept_run "$root" update 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the first uncompressed update exited $rc:
+$out"
+cmp -s "$list" "$work/Packages" || fail "the uncompressed path stored a wrong index"
+
+out=$(aept_run "$root" update 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the second uncompressed update exited $rc:
+$out"
+case $(last_req) in
+    "REQ /Packages 304 inm="*) ;;
+    *) fail "the uncompressed path did not revalidate: $(last_req)" ;;
+esac
+cmp -s "$list" "$work/Packages" || fail "the uncompressed index did not survive the 304"
+note "a bare src source revalidates its Packages the same way"
+
+cond_stop
+
 exit 0

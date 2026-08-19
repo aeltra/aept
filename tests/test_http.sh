@@ -362,4 +362,178 @@ body_is_file "$out" 'hello from ok
 '
 note "\$FETCH_BIND_ADDRESS no longer chooses the local address"
 
+# ── malformed status lines ───────────────────────────────────────────
+#
+# Everything the reply parser can be handed that is not a status line
+# it accepts: a token that is not "HTTP", a version this client does
+# not speak, a reply code that is not three digits.  Each is a protocol
+# error, not a status to be interpreted.
+
+for path in /badstatus /badversion /badminor /badcode; do
+    expect_fail "$path"
+    [ -e "$out" ] && fail "$path: a body arrived through a bad status line"
+done
+note "a malformed status line is a protocol error, whatever is malformed"
+
+# A missing version is the one malformation that is tolerated, because
+# servers that old really existed and the parser keeps a branch for
+# them.
+expect_ok /noversion
+body_is /noversion 'versionless ok
+'
+note "a status line with no HTTP version at all is still accepted"
+
+# ── chunk framing variants ───────────────────────────────────────────
+
+expect_ok /chunkext
+body_is /chunkext 'first-'
+note "a chunk extension is skipped, not rejected"
+
+expect_ok /chunklf
+body_is /chunklf 'first-'
+note "a two-digit chunk-size line ended by a bare LF is accepted"
+
+expect_ok /chunkclen
+body_is /chunkclen 'first-second-third
+'
+note "chunked framing governs when Content-Length is also present"
+
+expect_fail /chunkemptyhdr
+[ -e "$out" ] && fail "/chunkemptyhdr: a body was accepted through an empty chunk header"
+note "an empty line where a chunk size belongs is a protocol error"
+
+expect_fail /chunknotrailer
+[ -e "$out" ] && fail "/chunknotrailer: a chunk whose closing CRLF never came was accepted"
+note "a stream ending between chunk data and its CRLF fails"
+
+# ── more statuses ────────────────────────────────────────────────────
+
+expect_ok /see303
+body_is /see303 'hello from ok
+'
+note "a 303 is followed like the other redirects"
+
+expect_fail /range416
+[ -e "$out" ] && fail "/range416: a body arrived through a 416"
+note "a 416 to a request that sent no Range header is refused"
+
+expect_fail /proxy407
+note "a 407 is an error, not an invitation to retry"
+
+expect_fail /error500
+[ -e "$out" ] && fail "/error500: an error body was kept as a download"
+note "a 500 fails and leaves no output file"
+
+# ── Location, in every wrong place ───────────────────────────────────
+
+expect_ok /oklocation
+body_is /oklocation 'stayed here
+'
+note "a Location header on a 200 is ignored, not followed"
+
+expect_ok /twolocations
+body_is /twolocations 'hello from ok
+'
+note "of two Location headers the last wins, and the first does not leak"
+
+expect_ok /movedabs
+body_is /movedabs 'hello from ok
+'
+note "an absolute URL in Location is followed"
+
+expect_ok /movedcreds
+body_is /movedcreds 'authorised
+'
+note "credentials carried by a Location are used for the redirected request"
+
+expect_fail /movedbad
+note "a Location that does not parse fails the transfer"
+
+expect_fail /movednoloc
+[ -e "$out" ] && fail "/movednoloc: a redirect with no Location produced a body"
+note "a redirect without a Location has nowhere to go and fails"
+
+# ── oversized header values ──────────────────────────────────────────
+
+expect_ok /longheader
+body_is /longheader 'padded ok
+'
+note "a 2 KiB header line grows the line buffer instead of breaking it"
+
+expect_ok /bigetag
+body_is /bigetag 'tagged ok
+'
+note "a validator too long to store is dropped without harming the body"
+
+# ── failures of the caller's own making ──────────────────────────────
+#
+# aept_download() has failure paths of its own before and after the
+# network: a URL that does not parse, and a destination that cannot be
+# created.
+
+rm -f "$out"
+if timeout 60 "$HTTPGET" "http://[" "$out" >/dev/null 2>&1; then
+    fail "a URL that does not parse was reported as a success"
+fi
+[ -e "$out" ] && fail "a file appeared for an unparsable URL"
+note "an unparsable URL fails cleanly"
+
+if timeout 60 "$HTTPGET" "$base/ok" "$work/no/such/dir/out" >/dev/null 2>&1; then
+    fail "a destination in a missing directory was reported as a success"
+fi
+note "an uncreatable destination fails cleanly"
+
+# ── the flags aept never passes ──────────────────────────────────────
+#
+# aept_download() always calls libfetch with no flags, so the verbose
+# path and the address-family selectors are reachable only through the
+# rawget harness, which passes them explicitly.
+
+if [ -n "${RAWGET:-}" ] && [ -x "$RAWGET" ]; then
+    # Verbose is also what makes an HTTP error return its body stream
+    # to be drained, and a drained error body ends at the end of its
+    # response -- so the connection is reusable.  Without the flag the
+    # error turns back before the body and the connection is dropped.
+    http_stub_stop
+    http_stub "$work/count5" "$work/stub5.log" || skip "could not restart the stub"
+    base="http://127.0.0.1:$STUB_PORT"
+
+    verdicts=$(timeout 60 "$RAWGET" v "$base/notfound" "$work/d1" \
+        "$base/ok" "$work/d2" 2>/dev/null)
+    printf '%s' "$verdicts" | tr '\n' ' ' | grep -q '^fail ok' \
+        || fail "verbose: expected the 404 to fail and the follow-up to succeed:
+$verdicts"
+    body_is_file "$work/d2" 'hello from ok
+'
+    conns=$(cat "$work/count5")
+    [ "$conns" -eq 1 ] \
+        || fail "a drained error body should leave the connection reusable:
+$conns connections for two requests"
+    note "verbose drains an error body and keeps its connection reusable"
+
+    # The 'A' flag forbids following a redirect, so one is an error.
+    timeout 60 "$RAWGET" A "$base/moved301" "$work/d3" >/dev/null 2>&1 \
+        && fail "the A flag still followed a redirect"
+    note "the A flag turns a redirect into a failure"
+
+    # '4' pins the lookup to IPv4, which the loopback address is; '6'
+    # pins it to IPv6, which it is not.
+    timeout 60 "$RAWGET" 4 "$base/ok" "$work/d4" >/dev/null 2>&1 \
+        || fail "the 4 flag broke an IPv4 fetch"
+    body_is_file "$work/d4" 'hello from ok
+'
+    timeout 60 "$RAWGET" 6 "$base/ok" "$work/d5" >/dev/null 2>&1 \
+        && fail "the 6 flag resolved an IPv4 literal anyway"
+    note "the address-family flags pin the lookup"
+
+    # A body cut off exactly at the harness's 512-byte read: the
+    # failure surfaces on a read that has nothing yet to hand over.
+    timeout 60 "$RAWGET" - "$base/truncated512" "$work/d6" >/dev/null 2>&1 \
+        && fail "a body truncated on a read boundary was accepted"
+    [ -e "$work/d6" ] && fail "/truncated512: a partial body was left behind"
+    note "a truncation landing exactly on a read boundary still fails"
+else
+    note "rawget is not built, so the flag cases are skipped"
+fi
+
 exit 0

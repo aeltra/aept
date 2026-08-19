@@ -10,9 +10,9 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
-    test_url_parse test_config_values test_verify
+    test_url_parse test_config_values test_verify test_fetch_internals
 
-check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient tlsget
+check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
 
 noinst_HEADERS = test.h
 
@@ -31,6 +31,14 @@ partialget_SOURCES = partialget.c
 partialget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 partialget_LDADD = $(top_builddir)/src/libaept.la
 partialget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
+# And another, passing libfetch flags aept_download() never does -- the
+# verbose path and its error-body drain, the address-family selectors
+# and the no-redirect flag are reachable only through it.
+rawget_SOURCES = rawget.c
+rawget_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
+rawget_LDADD = $(top_builddir)/src/libaept.la
+rawget_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # A harness for test_tls_reject.sh, going to libfetch directly: it
 # prints the error *classification*, which aept_download() flattens
@@ -184,6 +192,13 @@ test_no_proxy_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 test_no_proxy_LDADD = $(top_builddir)/src/libaept.la
 test_no_proxy_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
+# The fork's pure helpers and the connection cache; links the library
+# for the same reasons, OpenSSL headers included.
+test_fetch_internals_SOURCES = test_fetch_internals.c
+test_fetch_internals_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
+test_fetch_internals_LDADD = $(top_builddir)/src/libaept.la
+test_fetch_internals_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
 # Integration tests drive the built binary against a throwaway offline
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
 dist_check_SCRIPTS = \
@@ -206,6 +221,8 @@ dist_check_SCRIPTS = \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
+    test_update_failures.sh \
+    test_install_options.sh \
     test_signature_reject.sh \
     test_update_conditional.sh \
     test_redact_credentials.sh \
@@ -237,6 +254,7 @@ AM_TESTS_ENVIRONMENT = \
     srcdir='$(abs_srcdir)'; export srcdir; \
     HTTPGET='$(abs_builddir)/httpget'; export HTTPGET; \
     PARTIALGET='$(abs_builddir)/partialget'; export PARTIALGET; \
+    RAWGET='$(abs_builddir)/rawget'; export RAWGET; \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
     STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
     TLSGET='$(abs_builddir)/tlsget'; export TLSGET; \
