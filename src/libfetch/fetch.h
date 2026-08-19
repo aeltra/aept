@@ -145,6 +145,22 @@ void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_
                                      const char *key_file);
 
 /*
+ * Replace the trust store for this context's TLS peer verification
+ * with the named CA file; NULL keeps the system store.
+ *
+ * This exists for the test suite and nothing else: it is what lets a
+ * test mint a CA, sign a server certificate with it, and so reach the
+ * verified side of TLS -- the hostname check above all -- which the
+ * system trust store puts beyond any test's reach.  Nothing in aept
+ * calls it: the trust store aept verifies against is the system's,
+ * deliberately not configurable, and no environment variable or
+ * configuration option leads here.  The symbol is hidden from the
+ * shared object like the rest of the fork; only a caller linking the
+ * static archive -- the test harnesses -- can name it.
+ */
+void libfetch_set_ca_file(struct libfetch_ctx *ctx, const char *ca_file);
+
+/*
  * Seconds a single wait may take before the transfer is abandoned with
  * LIBFETCH_ERR_TIMEOUT; 0 waits indefinitely.
  *

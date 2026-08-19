@@ -1,10 +1,10 @@
 #!/bin/sh
 # test_tls_reject.sh - the server side of TLS verification: a
 # certificate the client does not trust must end the fetch, classified
-# as exactly that.  The trust store is the system's and deliberately
-# not configurable, so the testable rejection is the untrusted chain;
-# the hostname check needs a *trusted* certificate with the wrong name,
-# which no test can mint without the system's keys.
+# as exactly that.  These fetches verify against the system store, so
+# the rejection tested here is the untrusted chain; the hostname check
+# needs a *trusted* certificate with the wrong name, which
+# test_tls_verify.sh mints through the harness-only CA seam.
 #
 # Copyright (C) 2026 Tobias Koch
 # SPDX-License-Identifier: MIT

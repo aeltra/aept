@@ -293,7 +293,7 @@ reasoning behind the tiers.
 gate against the tier targets — it was built when most tiers were well short of
 target, and a check that is red from the first day is a check that gets ignored.
 The coverage push has since carried **every tier to its target** (security
-91.2, transaction 85.6, plumbing 82.9, CLI 78.0 against a 60 cap; 84.6%
+91.2, transaction 85.6, plumbing 84.3, CLI 78.0 against a 60 cap; 85.1%
 overall) and **every security-tier file over its 85% floor**, so the floors are
 all hard gates now and the baseline is the high-water mark. The rule is
 unchanged: a file or tier dropping more than two points below its recorded
@@ -337,7 +337,7 @@ Four things about the measurement, each of which has cost a wrong number:
 
 Branch coverage is reported beside lines and never gated. It runs below
 lines (~13 points after the targeted branch push on the HTTP, update and
-install paths: 84.6 vs 72.0), and the gap sits where the error handling is — a tier whose lines climb while its
+install paths: 85.1 vs 72.5), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
@@ -353,6 +353,7 @@ Downloading used to be the exception, because libfetch kept its state in process
 Two escapes, in order of importance: a caller *must not* have to send a signal to get control back, because a signal acts on the whole process — hence `option network_timeout` (default 120s, `0` disables), an **idle** timeout re-armed on every wait, so a slow transfer completes and only a silent one is cut off. It reports `AEPT_ERR_TIMEOUT` via `aept_last_error()`, which the Python bindings turn into `AeptTimeout`. And a signal *must still* work for the CLI's Ctrl-C. `tests/test_timeout.sh` and `tests/test_cancel.sh` hold both down, the latter covering `SA_RESTART` explicitly. One wait is beyond reach: `getaddrinfo(3)` retries internally on EINTR, so an unreachable nameserver blocks for as long as `resolv.conf` allows — about ten seconds by default — neither bounded nor interruptible.
 
 **TLS verification is not configurable, by design.** Peer verification is `SSL_VERIFY_PEER` and the `X509_check_host()` hostname check is unconditional; upstream's `SSL_NO_VERIFY_HOSTNAME` escape hatch is gone. The client certificate comes only from `aept_config` via `libfetch_set_client_certificate()` — upstream's `SSL_CLIENT_{CERT,KEY}_FILE` fallback is gone too, so a stray environment variable cannot make aept authenticate as somebody else. The trust store is loaded by naming `X509_get_default_cert_file()` and `X509_get_default_cert_dir()` explicitly rather than by calling `SSL_CTX_set_default_verify_paths()`, **because the latter resolves the store through `$SSL_CERT_FILE`/`$SSL_CERT_DIR`** — one variable replaces every trusted CA with the attacker's own, and it returns success either way. Verified: with `SSL_CERT_FILE` pointed at a self-signed CA, `set_default_verify_paths()` yields a store containing exactly that CA and nothing else.
+One seam exists, for the test suite and nothing else: `libfetch_set_ca_file()` replaces the trust store for a context, which is what lets `tests/test_tls_verify.sh` mint its own CA and reach the *verified* side of TLS — above all the `X509_check_host()` rejection, which needs a trusted chain for the wrong name that no test could otherwise produce. Nothing in aept calls it, no configuration option or environment variable leads to it, and the symbol is hidden from the shared object like the rest of the fork; only the statically linked harnesses (`tlsget -C`) can name it. Do not wire it to config or the environment — the test's own "without `-C` the same server is refused" assertion exists to catch exactly that.
 
 `tests/test_threads.sh` drives five contexts at once — two listing, one downloading, two cycling a package through install and remove — so the solver, archive extraction, the status database, the owner index and triggers all run concurrently. The same harness is clean under ThreadSanitizer (below).
 

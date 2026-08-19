@@ -34,7 +34,7 @@
 # file <path>       lines <hit>/<total> branches <hit>/<total>
 tier security               lines   894/980 branches   451/557
 tier transaction            lines 1997/2334 branches  993/1411
-tier plumbing               lines 1901/2293 branches 1034/1431
+tier plumbing               lines 1937/2299 branches 1055/1435
 tier cli                    lines   551/706 branches   216/342
 
 file src/archive.c          lines   326/366 branches   161/201
@@ -55,13 +55,13 @@ file src/script.c           lines     28/30 branches     18/22
 file src/solver.c           lines   266/305 branches   134/178
 file src/status.c           lines   206/269 branches   102/152
 file src/trigger.c          lines   328/358 branches   164/226
-file src/api.c              lines   474/521 branches   187/276
+file src/api.c              lines   474/521 branches   188/276
 file src/clean.c            lines     16/20 branches     11/14
 file src/config.c           lines   190/233 branches    73/116
-file src/libfetch/common.c  lines   365/461 branches   209/291
+file src/libfetch/common.c  lines   401/467 branches   228/295
 file src/libfetch/common.h  lines       6/6 branches       3/4
 file src/libfetch/fetch.c   lines   110/136 branches     71/90
-file src/libfetch/http.c    lines   424/511 branches   295/377
+file src/libfetch/http.c    lines   424/511 branches   296/377
 file src/libfetch/pctdecode.c lines     19/19 branches     20/22
 file src/msg.c              lines   103/108 branches     53/66
 file src/util.c             lines   194/278 branches   112/175

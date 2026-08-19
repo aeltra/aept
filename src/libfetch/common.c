@@ -63,6 +63,11 @@ void libfetch_set_client_certificate(struct libfetch_ctx *ctx, const char *cert_
     ctx->ssl_client_key_file = key_file;
 }
 
+void libfetch_set_ca_file(struct libfetch_ctx *ctx, const char *ca_file)
+{
+    ctx->ssl_ca_file = ca_file;
+}
+
 void libfetch_set_timeout(struct libfetch_ctx *ctx, int seconds)
 {
     ctx->timeout = seconds > 0 ? seconds : 0;
@@ -422,12 +427,16 @@ void libfetch_cache_put(struct libfetch_ctx *ctx, libfetch_conn_t *conn,
  * naming them explicitly gets the same store without the override.
  */
 /* Returns 0 on success, -1 on error, per the project convention. */
-static int libfetch_ssl_setup_peer_verification(SSL_CTX *ctx, int verbose)
+static int libfetch_ssl_setup_peer_verification(struct libfetch_ctx *fctx, SSL_CTX *ctx,
+                                                int verbose)
 {
-    const char *ca_file = NULL;
+    /* The test seam first: a caller that set a CA file wants the
+     * handshake verified against exactly that.  NULL -- every caller
+     * in aept -- leaves the system store in charge. */
+    const char *ca_file = fctx->ssl_ca_file;
 
 #ifdef CA_CERT_FILE
-    if (access(CA_CERT_FILE, R_OK) == 0) {
+    if (!ca_file && access(CA_CERT_FILE, R_OK) == 0) {
         ca_file = CA_CERT_FILE;
 #ifdef CA_CRL_FILE
         if (access(CA_CRL_FILE, R_OK) == 0) {
@@ -578,7 +587,7 @@ int libfetch_ssl(struct libfetch_ctx *fctx, libfetch_conn_t *conn, const struct 
         goto err;
     SSL_CTX_set_mode(conn->ssl_ctx, SSL_MODE_AUTO_RETRY);
 
-    if (libfetch_ssl_setup_peer_verification(conn->ssl_ctx, verbose) < 0)
+    if (libfetch_ssl_setup_peer_verification(fctx, conn->ssl_ctx, verbose) < 0)
         goto err;
     if (libfetch_ssl_setup_client_certificate(fctx, conn->ssl_ctx, verbose) < 0)
         goto err;

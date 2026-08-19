@@ -332,6 +332,32 @@ cond_stop() {
     COND_PID=
 }
 
+# tls_serve <dir> <certfile> <keyfile> <logfile> — start tlsserver.py,
+# which serves the directory over HTTPS with the given certificate.
+# Sets TLS_PORT and TLS_PID.
+tls_serve() {
+    python3 -u "${srcdir:-.}/tlsserver.py" "$1" "$2" "$3" > "$4" 2>&1 &
+    TLS_PID=$!
+
+    _tries=0
+    while [ "$_tries" -lt 100 ]; do
+        TLS_PORT=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' "$4" | head -1)
+        if [ -n "$TLS_PORT" ]; then
+            return 0
+        fi
+        kill -0 "$TLS_PID" 2>/dev/null || return 1
+        _tries=$((_tries + 1))
+        sleep 0.1
+    done
+
+    return 1
+}
+
+tls_stop() {
+    [ -n "${TLS_PID:-}" ] && kill "$TLS_PID" 2>/dev/null
+    TLS_PID=
+}
+
 # stall_serve <logfile> — start stallserver.py, which accepts a
 # connection and then never says anything.  Sets STALL_PORT and
 # STALL_PID.

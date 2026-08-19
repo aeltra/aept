@@ -66,6 +66,7 @@ struct libfetch_ctx {
     int timeout; /* seconds per wait; 0 waits indefinitely */
     const char *ssl_client_cert_file;
     const char *ssl_client_key_file;
+    const char *ssl_ca_file; /* test seam; NULL means the system store */
 };
 
 #if defined(__GNUC__) && __GNUC__ >= 3

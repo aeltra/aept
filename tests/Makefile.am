@@ -216,6 +216,7 @@ dist_check_SCRIPTS = \
     test_pin.sh \
     test_python.sh \
     test_tls_reject.sh \
+    test_tls_verify.sh \
     test_confirm.sh \
     test_cli_smoke.sh \
     test_offline_root_tmp.sh \
