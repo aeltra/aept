@@ -209,7 +209,8 @@ run by Automake's harness.
 - Tests that log expected errors install a quiet context — see
   `silence_logging()` in `test_clearsign.c` — so a passing run stays clean.
 - Shell tests source `tests/aeptlib.sh` (`make_pkg`, `make_pkg_conffile`,
-  `new_root`, `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`,
+  `make_pkg_script`, `make_pkg_tree`, `packages_stanza`, `new_root`,
+  `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`, `http_stub`,
   `cond_serve`, `dribble_serve`) and `skip` (exit 77) when a tool is missing
   rather than failing.
 - libfetch is built without `file.c`, so HTTP/HTTPS are the only transports.
