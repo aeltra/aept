@@ -164,11 +164,16 @@ make_pkg_tree() {
     rm -rf "$_d"
 }
 
-# packages_stanza <name> <version> <aeltra-file> — emit one Packages entry.
+# packages_stanza <name> <version> <aeltra-file> [extra] — emit one
+# Packages entry.  The solver resolves from this stanza, not from the
+# control inside the package, so dependency fields ("Depends: lib")
+# must be given here to exist at resolution time.
 packages_stanza() {
-    printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \
+    printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\n' \
         "$1" "$2" "$(basename "$3")" "$(wc -c < "$3")" \
         "$(sha256sum "$3" | cut -d' ' -f1)"
+    [ -n "${4:-}" ] && printf '%s\n' "$4"
+    printf 'Description: aept test fixture\n\n'
 }
 
 # add_repo <root> <name> <url-dir> — register a source and create an

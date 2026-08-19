@@ -372,6 +372,17 @@ int aept_solver_resolve_install(struct aept_ctx *ctx, const char **names, int co
     Queue job;
     int i, r;
 
+    /*
+     * The whatprovides index must exist before the job is built, not
+     * only before it is solved: the pin branch below walks
+     * FOR_PROVIDES to find the pinned version, and libsolv's lookup
+     * dereferences an index that does not exist yet -- the segfault
+     * that sat here until the first test ever pinned a version.
+     * do_solve() creates it again after the commandline repo is
+     * final, which is cheap and keeps that path self-sufficient.
+     */
+    pool_createwhatprovides(pool);
+
     queue_init(&job);
 
     /*

@@ -359,7 +359,7 @@ A consequence worth knowing: the cache limits (4 connections, 2 per host) are no
 
 **Key subsystems:**
 
-- **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos.
+- **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
 - **archive.c** — Two-level extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.

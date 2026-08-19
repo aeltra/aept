@@ -154,6 +154,10 @@ dist_check_SCRIPTS = \
     test_upgrade.sh \
     test_install_rollback.sh \
     test_triggers.sh \
+    test_autoremove.sh \
+    test_clean.sh \
+    test_mark.sh \
+    test_pin.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
