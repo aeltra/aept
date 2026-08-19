@@ -241,7 +241,7 @@ run by Automake's harness.
   *regular* `aeltra` in dist-packages that shadows every namespace portion
   regardless of `PYTHONPATH` — without the shim the test would silently
   test the installed bindings.
-- `httpget`, `partialget`, `httpstub.py`, `stallclient` and `threadrace` are
+- `httpget`, `partialget`, `tlsget`, `httpstub.py`, `stallclient` and `threadrace` are
   harnesses driven by shell tests, not tests themselves: they are in
   `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS` never
   runs them directly. `partialget` is the one that goes to libfetch directly
@@ -290,11 +290,14 @@ in is what decides how much coverage it owes. `TASK.md` holds the plan and the
 reasoning behind the tiers.
 
 `make coverage-check` is a **ratchet against `tests/coverage.baseline`**, not a
-gate against the tier targets — most tiers are well short of target, and a check
-that is red from the first day is a check that gets ignored. It fails when a file
-or tier drops more than two points below its recorded figure, and when a file
-slips back under a per-file floor it had *already reached*; a file that has never
-reached its floor is reported as owed. So it passes today and tightens by itself.
+gate against the tier targets — it was built when most tiers were well short of
+target, and a check that is red from the first day is a check that gets ignored.
+The coverage push has since carried **every tier to its target** (security
+90.2, transaction 85.0, plumbing 80.2, CLI 76.8 against a 60 cap; 83.2%
+overall) and **every security-tier file over its 85% floor**, so the floors are
+all hard gates now and the baseline is the high-water mark. The rule is
+unchanged: a file or tier dropping more than two points below its recorded
+figure fails, and so does a file slipping back under a floor it has reached.
 
 Four things about the measurement, each of which has cost a wrong number:
 
@@ -332,10 +335,10 @@ Four things about the measurement, each of which has cost a wrong number:
   chase a one-line difference between two runs; do look again if a tier moves by
   more than it.
 
-Branch coverage is reported beside lines and never gated. It runs ~9 points
-below, and the gap sits where the error handling is — a tier whose lines climb
-while its branches do not is a tier whose new tests assert success and nothing
-else.
+Branch coverage is reported beside lines and never gated. It runs well below
+lines (~14 points as of the coverage push's end: 83.2 vs 69.2), and the gap
+sits where the error handling is — a tier whose lines climb while its
+branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
 
