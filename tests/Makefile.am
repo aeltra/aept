@@ -140,9 +140,13 @@ test_no_proxy_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 # root; they skip themselves (exit 77) when aept or ar/tar are missing.
 dist_check_SCRIPTS = \
     test_install_failure.sh \
+    test_install_from_repo.sh \
+    test_package_checksum.sh \
+    test_file_clash.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
+    test_signature_reject.sh \
     test_update_conditional.sh \
     test_redact_credentials.sh \
     test_index_freshness.sh \

@@ -653,23 +653,6 @@ int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes)
     return stream_entry(ar->ar, stream, max_bytes);
 }
 
-int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename, FILE *stream)
-{
-    for (;;) {
-        struct archive_entry *entry = next_header(ar->ar, NULL);
-        if (!entry)
-            return -1;
-
-        /* No prefix here, so the only other outcome is JOIN_SKIP for an
-         * entry that names nothing — which cannot be the file wanted. */
-        if (rewrite_pathname(entry, NULL) != JOIN_OK)
-            continue;
-
-        if (strcmp(archive_entry_pathname(entry), filename) == 0)
-            return stream_entry(ar->ar, stream, 0);
-    }
-}
-
 void aept_ar_file_list_init(aept_ar_file_list_t *fl)
 {
     fl->entries = NULL;
@@ -757,51 +740,6 @@ int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *s
                         aept_ar_file_list_t *recorded)
 {
     return do_extract_all(ar->ar, prefix, ar->extract_flags, size, conffiles, cf_suffix, recorded);
-}
-
-int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected, const char *prefix)
-{
-    int flags = ar->extract_flags & ~ARCHIVE_EXTRACT_NO_OVERWRITE;
-    int ret = -1;
-
-    struct archive *disk = new_disk_writer(flags);
-    if (!disk)
-        return -1;
-
-    for (;;) {
-        int eof;
-        struct archive_entry *entry = next_header(ar->ar, &eof);
-        if (eof)
-            break;
-        if (!entry)
-            goto cleanup;
-
-        if (!fileset_contains_entry(selected, archive_entry_pathname(entry)))
-            continue;
-
-        int joined = rewrite_all_paths(entry, prefix);
-        if (joined == JOIN_SKIP)
-            continue;
-        if (joined != JOIN_OK)
-            goto cleanup;
-
-        aept_log_debug("extracting conffile '%s'", archive_entry_pathname(entry));
-
-        int r = archive_read_extract2(ar->ar, entry, disk);
-        if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
-                           archive_error_string(ar->ar));
-            goto cleanup;
-        }
-        if (r == ARCHIVE_WARN)
-            aept_log_debug("warning extracting '%s': %s", archive_entry_pathname(entry),
-                           archive_error_string(ar->ar));
-    }
-
-    ret = 0;
-cleanup:
-    archive_write_free(disk);
-    return ret;
 }
 
 void aept_ar_close(struct aept_ar *ar)

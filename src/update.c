@@ -192,14 +192,44 @@ static int fetch_signed_index(struct aept_ctx *ctx, aept_source_t *src, const ch
         return -1;
     }
 
-    r = aept_clearsign_write(&cs, list_path, sig_path);
-    free(buf);
+    /*
+     * Written aside, verified there, and only then renamed into place.
+     * The index already on disk was verified when it was stored, and a
+     * rejected replacement must not cost the client its last good copy:
+     * verifying in place would wipe it, which turns "freeze the client"
+     * -- the strongest attack a bad signature affords -- into "break
+     * the client".  The validator on disk stays untouched for the same
+     * reason: it describes the index that survives, not the document
+     * that was refused.
+     */
+    {
+        char *new_list = NULL;
+        char *new_sig = NULL;
 
-    if (r == 0 && aept_verify_signature(ctx, list_path, sig_path) < 0) {
-        unlink(list_path);
-        unlink(sig_path);
-        unlink(val_path);
-        r = -1;
+        aept_asprintf(&new_list, "%s.%d", list_path, (int)getpid());
+        aept_asprintf(&new_sig, "%s.%d", sig_path, (int)getpid());
+
+        r = aept_clearsign_write(&cs, new_list, new_sig);
+        free(buf);
+
+        if (r == 0 && aept_verify_signature(ctx, new_list, new_sig) < 0)
+            r = -1;
+
+        /* The signature first: it is never read again once the index
+         * is in place, so a crash between the two renames leaves a
+         * stale .sig beside a good index rather than the reverse. */
+        if (r == 0 && (rename(new_sig, sig_path) != 0 || rename(new_list, list_path) != 0)) {
+            aept_log_error("cannot move the verified index for '%s' into place: %s", src->name,
+                           strerror(errno));
+            r = -1;
+        }
+
+        if (r != 0) {
+            unlink(new_list);
+            unlink(new_sig);
+        }
+        free(new_list);
+        free(new_sig);
     }
 
     /* Last, and only here: a validator recorded for an index that was

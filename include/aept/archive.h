@@ -31,9 +31,6 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename);
  * max_bytes have been written.  max_bytes == 0 disables the limit. */
 int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes);
 
-/* Extract a named file from the archive to a stream. */
-int aept_ar_extract_file_to_stream(struct aept_ar *ar, const char *filename, FILE *stream);
-
 typedef struct {
     char *path;        /* archive path, e.g. "./usr/bin/foo" */
     char *link_target; /* NULL if not a symlink */
@@ -63,10 +60,6 @@ int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream);
 int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *size,
                         aept_fileset_t *conffiles, const char *cf_suffix,
                         aept_ar_file_list_t *recorded);
-
-/* Extract only files whose paths are in the given set.
- * Clears NO_OVERWRITE so that existing files are replaced. */
-int aept_ar_extract_selected(struct aept_ar *ar, aept_fileset_t *selected, const char *prefix);
 
 /* List non-directory file paths from an IPK's data archive.
  * Fills out with archive paths (e.g. "./usr/bin/foo") and symlink

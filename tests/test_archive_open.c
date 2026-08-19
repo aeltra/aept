@@ -72,7 +72,7 @@ static void *make_targz(const char *name, const char *content, size_t *out_len)
 {
     struct archive *a = archive_write_new();
     struct archive_entry *e;
-    size_t cap = 65536;
+    size_t cap = 640 * 1024;
     void *buf = aept_malloc(cap);
     size_t used = 0;
 
@@ -244,6 +244,164 @@ int main(void)
 
         unlink(path);
         free(path);
+    }
+
+    /* ── a truncated inner tar fails extraction, loudly ──────────── *
+     *
+     * The stream opens -- gzip needs only its header to be recognised
+     * -- so the failure has to be caught during extraction, and it
+     * must be reported as one: a partial extraction reported as
+     * success would enter the status database as an installed package.
+     */
+    {
+        static char big[256 * 1024];
+        size_t big_len;
+        void *bigdata;
+        char *exdir;
+        unsigned int x = 12345;
+        size_t i;
+
+        /* Incompressible bytes, so the gzip stream is about as long as
+         * the payload and a cut at half lands *inside* the entry data:
+         * the header parses, the extraction dies.  Compressible
+         * content shrinks to a few dozen bytes and the cut falls
+         * before the first header, which only exercises the open. */
+        for (i = 0; i < sizeof(big) - 1; i++) {
+            x = x * 1103515245 + 12345;
+            big[i] = (char)(' ' + (x >> 16) % 90);
+        }
+        big[sizeof(big) - 1] = '\0';
+        bigdata = make_targz("usr/bin/big", big, &big_len);
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    bigdata, big_len / 2        },
+        };
+
+        path = fixture_path("truncdata.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("truncdata.d");
+        mkdir(exdir, 0755);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), -1,
+                        "extracting a truncated data.tar fails");
+            aept_ar_close(ar);
+        } else {
+            test_ok(1, "a truncated data.tar already fails to open");
+        }
+
+        unlink(path);
+        free(path);
+        path = fixture_path("truncdata.d/usr/bin/big");
+        unlink(path);
+        free(path);
+        path = fixture_path("truncdata.d/usr/bin");
+        rmdir(path);
+        free(path);
+        path = fixture_path("truncdata.d/usr");
+        rmdir(path);
+        free(path);
+        rmdir(exdir);
+        free(exdir);
+        free(bigdata);
+    }
+
+    /* ── a zero-length member is an *empty* archive, by design ───── *
+     *
+     * archive_read_support_format_empty() is registered deliberately,
+     * so a package whose data member holds nothing installs as a
+     * package with no files rather than failing.  Pinned here so the
+     * choice cannot drift silently.
+     */
+    {
+        char *exdir;
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    "",      0                  },
+        };
+
+        path = fixture_path("emptydata.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("emptydata.d");
+        mkdir(exdir, 0755);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        test_ok(ar != NULL, "a zero-length data.tar member opens as empty");
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), 0,
+                        "and extracts nothing, successfully");
+            aept_ar_close(ar);
+        }
+
+        rmdir(exdir);
+        free(exdir);
+        unlink(path);
+        free(path);
+    }
+
+    /* ── a duplicated member: the first one is the archive ───────── *
+     *
+     * The ar container has no rule against two members sharing a
+     * name.  Pinned down here: the reader takes the first, so bytes
+     * appended after it cannot override what the front of the file
+     * says -- the same direction every parser in aept leans
+     * (clearsign.c splits at the *last* marker for its own reasons,
+     * and documents them).
+     */
+    {
+        size_t first_len, second_len;
+        void *first = make_targz("usr/bin/t", "first\n", &first_len);
+        void *second = make_targz("usr/bin/t", "second\n", &second_len);
+        char *exdir, *payload;
+        FILE *fp;
+        char got[16] = "";
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    first,   first_len          },
+            {"data.tar.gz",    second,  second_len         },
+        };
+
+        path = fixture_path("dupdata.aeltra");
+        write_ar(path, m, 4);
+        exdir = fixture_path("dupdata.d");
+        mkdir(exdir, 0755);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        test_ok(ar != NULL, "a container with a duplicated member opens");
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), 0, "and extracts");
+            aept_ar_close(ar);
+        }
+        unlink(path);
+        free(path);
+
+        payload = fixture_path("dupdata.d/usr/bin/t");
+        fp = fopen(payload, "r");
+        if (fp) {
+            if (!fgets(got, sizeof(got), fp))
+                got[0] = '\0';
+            fclose(fp);
+        }
+        test_str_eq(got, "first\n", "the first member wins, not the last");
+
+        unlink(payload);
+        free(payload);
+        path = fixture_path("dupdata.d/usr/bin");
+        rmdir(path);
+        free(path);
+        path = fixture_path("dupdata.d/usr");
+        rmdir(path);
+        free(path);
+        rmdir(exdir);
+        free(exdir);
+        free(first);
+        free(second);
     }
 
     free(ctrl);

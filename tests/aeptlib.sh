@@ -128,6 +128,42 @@ make_pkg_script() {
     rm -rf "$_d"
 }
 
+# make_pkg_tree <out.aeltra> <name> <version> <extra-control> <payload-dir>
+#
+# Like make_pkg, but the data archive ships the given directory tree
+# verbatim -- symlinks included -- and extra control fields ("Replaces:
+# other", "Depends: lib"; empty for none) are appended to the control
+# stanza.  make_pkg's fixed usr/bin/<name> payload cannot express a
+# clash, which needs two packages shipping the *same* path.
+make_pkg_tree() {
+    _out=$1 _name=$2 _ver=$3 _extra=$4 _tree=$5
+
+    case $_out in
+        /*) ;;
+         *) _out=$PWD/$_out ;;
+    esac
+    rm -f "$_out"
+
+    _d=$(mktemp -d) || fail "mktemp failed"
+    mkdir -p "$_d/c"
+
+    {
+        printf 'Package: %s\nVersion: %s\nArchitecture: all\nMaintainer: t <t@example.invalid>\n' \
+            "$_name" "$_ver"
+        [ -n "$_extra" ] && printf '%s\n' "$_extra"
+        printf 'Description: aept test fixture\n'
+    } > "$_d/c/control"
+
+    tar czf "$_d/control.tar.gz" -C "$_d/c" control || fail "tar control"
+    tar czf "$_d/data.tar.gz"    -C "$_tree" .      || fail "tar data"
+    printf '2.0\n' > "$_d/debian-binary"
+
+    ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
+        || fail "ar failed for $_out"
+
+    rm -rf "$_d"
+}
+
 # packages_stanza <name> <version> <aeltra-file> — emit one Packages entry.
 packages_stanza() {
     printf 'Package: %s\nVersion: %s\nArchitecture: all\nFilename: %s\nSize: %s\nSHA256: %s\nDescription: aept test fixture\n\n' \
