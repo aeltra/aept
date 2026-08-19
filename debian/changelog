@@ -1,3 +1,40 @@
+aept (0.2.0-1) unstable; urgency=medium
+
+  * New: failed trigger scripts are persisted and retried. The owed
+    directories are recorded per package before the script runs, the
+    package status is set to triggers-pending, and every later
+    transaction (or the new "aept triggers" command) retries until the
+    script succeeds. A transaction that succeeds but leaves a failed
+    trigger exits 2, distinct from success (0) and failure (1).
+  * New: libaept 0:2:0 - aept_triggers() and AEPT_ERR_TRIGGER added,
+    nothing removed or changed; existing consumers keep working
+    unrebuilt. Python bindings updated accordingly; transaction methods
+    now return False when a trigger is owed.
+  * Changed: installing an older package file now requires
+    --allow-downgrade, matching the by-name behaviour. Previously an
+    explicit local file downgraded silently.
+  * Changed: credentials in source URLs are split off at config-parse
+    time and reunited only when the request is built. They no longer
+    appear in any log message or state file, and a raw '@' in a
+    password now works.
+  * Fixed: a rejected index update (bad signature, tampered envelope)
+    no longer destroys the previously verified index. The new index is
+    verified aside and renamed into place only on success.
+  * Fixed: a segfault when installing a package by name while a version
+    pin for it existed.
+  * Fixed: the manual page no longer documents the removed
+    triggers-index file, and documents the new trigger failure
+    semantics, exit status 2, and the triggers command.
+  * Packaging: usign added to Build-Depends (test-only, <!nocheck>);
+    debian/copyright now enumerates the BSD-licensed libfetch fork;
+    NOTICE carries the OpenSSL license for statically linked builds.
+  * Tests: suite grown from 26 to 49 tests, covering the full
+    update-install-verify chain, transactions, triggers, pins, the
+    public API, the Python bindings, TLS rejection and the CLI. Line
+    coverage 57% -> 83%.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Wed, 19 Aug 2026 17:25:20 +0300
+
 aept (0.1.0-1) unstable; urgency=low
 
   * Initial release.
