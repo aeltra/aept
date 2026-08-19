@@ -71,7 +71,9 @@ installed package.
 	input is not a terminal.
 
 *--allow-downgrade*
-	Allow the solver to downgrade installed packages.
+	Allow installed packages to be downgraded. Without it a downgrade
+	is refused, whether the older version was resolved from a
+	repository or handed over as a local package file.
 
 *--no-cache*
 	Download, install, and immediately delete each package instead of

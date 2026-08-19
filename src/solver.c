@@ -429,8 +429,33 @@ int aept_solver_resolve_install(struct aept_ctx *ctx, const char **names, int co
             }
         }
 
-        for (i = 0; i < local_count; i++)
+        for (i = 0; i < local_count; i++) {
+            /*
+             * An explicit solvable is carried out by libsolv whatever
+             * SOLVER_FLAG_ALLOW_DOWNGRADE says -- the flag gates the
+             * solver's own choices, and this is not one.  So the gate
+             * has to be here: a local file older than what is
+             * installed is refused unless the flag was given, or a
+             * sideloaded package silently reintroduces whatever the
+             * newer version fixed.  Same-version is not affected; that
+             * is the "already installed" path in install.c.
+             */
+            if (!ctx->config.allow_downgrade) {
+                Solvable *sv = pool_id2solvable(pool, local_ids[i]);
+                const char *sv_name = pool_id2str(pool, sv->name);
+                const char *sv_evr = pool_id2str(pool, sv->evr);
+                const char *inst_evr = aept_solver_installed_version(s, sv_name);
+
+                if (inst_evr && pool_evrcmp_str(pool, sv_evr, inst_evr, EVRCMP_COMPARE) < 0) {
+                    aept_log_error("'%s' is a downgrade: %s is installed, the file carries %s "
+                                   "(use --allow-downgrade)",
+                                   sv_name, inst_evr, sv_evr);
+                    queue_free(&job);
+                    return -1;
+                }
+            }
             queue_push2(&job, SOLVER_INSTALL | SOLVER_SOLVABLE, local_ids[i]);
+        }
     }
 
     r = do_solve(ctx, &job, count > 0 || local_count > 0);

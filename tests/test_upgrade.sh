@@ -56,25 +56,36 @@ grep -q 'new-only' "$info/tool.list" \
     || fail "the .list does not name the new file"
 note "1.0 -> 2.0: dropped file deleted, new file landed, list rewritten"
 
-# ── an explicit local file downgrades, dpkg-style ────────────────────
+# ── a downgrade needs --allow-downgrade, local file or not ───────────
 #
-# Pinned as observed: handing aept a specific .aeltra is an explicit
-# SOLVER_INSTALL job on that exact solvable, which libsolv honours
-# regardless of SOLVER_FLAG_ALLOW_DOWNGRADE -- the flag gates the
-# solver's own choices (by-name and upgrade resolution), not a package
-# the user pointed at.  Same reading of intent as `dpkg -i older.deb`;
-# apt would ask for --allow-downgrades here.  If that divergence is
-# ever unwanted, this is the assertion to flip.
+# An explicit .aeltra becomes a SOLVER_INSTALL job on that exact
+# solvable, which libsolv carries out whatever
+# SOLVER_FLAG_ALLOW_DOWNGRADE says -- so solver.c gates local files
+# itself before building the job.  apt's reading, not dpkg's: the
+# likeliest sideload of an older file is an accident, and a silent
+# downgrade reintroduces whatever the newer version fixed.
 
 out=$(aept_run "$root" install --non-interactive "$work/tool_1.0.aeltra" 2>&1)
 rc=$?
-[ "$rc" -eq 0 ] || fail "the explicit downgrade exited $rc:
+[ "$rc" -ne 0 ] || fail "a plain install downgraded 2.0:
+$out"
+printf '%s\n' "$out" | grep -q "allow-downgrade" \
+    || fail "the refusal does not name the flag that overrides it:
+$out"
+[ "$(version_of tool)" = "2.0" ] || fail "the refusal still changed the version"
+grep -q 'tool 2.0' "$root/usr/bin/tool" || fail "the refusal still touched the payload"
+note "without --allow-downgrade the older file is refused, naming the way out"
+
+out=$(aept_run "$root" install --non-interactive --allow-downgrade \
+    "$work/tool_1.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "the downgrade with the flag exited $rc:
 $out"
 [ "$(version_of tool)" = "1.0" ] || fail "not downgraded: $(version_of tool)"
 grep -q 'tool 1.0' "$root/usr/bin/tool" || fail "the payload was not downgraded"
 [ -f "$root/usr/share/tool/old-only" ] || fail "1.0's file did not come back"
 [ ! -f "$root/usr/share/tool/new-only" ] || fail "2.0's file survived the downgrade"
-note "an explicit local file downgrades, and the file sets swap accordingly"
+note "--allow-downgrade: back to 1.0, file sets swapped accordingly"
 
 # ── --reinstall restores a damaged install of the same version ───────
 
