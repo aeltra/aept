@@ -186,6 +186,27 @@ new_root() {
         > "$1/etc/aept/aept.conf"
 }
 
+# provision_shell <root> — put a runnable /bin/sh inside an offline
+# root, so maintainer and trigger scripts can actually execute there
+# instead of dying at exec (the bare new_root has no shell, by design).
+# Copies the host's dash/sh and whatever libraries ldd names, at their
+# own absolute paths.  Returns 1 when no candidate works; callers skip.
+provision_shell() {
+    _r=$1
+    _sh=$(command -v dash || command -v sh) || return 1
+
+    mkdir -p "$_r/bin"
+    cp "$_sh" "$_r/bin/sh" || return 1
+
+    for _lib in $(ldd "$_sh" 2>/dev/null | grep -o '/[^ ]*' | grep '\.so'); do
+        [ -e "$_lib" ] || continue
+        mkdir -p "$_r$(dirname "$_lib")"
+        cp "$_lib" "$_r$_lib" || return 1
+    done
+
+    return 0
+}
+
 # ── signed repository fixtures ───────────────────────────────────────
 
 # make_keypair <dir> — generate a usign keypair and a trust store holding

@@ -209,10 +209,14 @@ run by Automake's harness.
 - Tests that log expected errors install a quiet context — see
   `silence_logging()` in `test_clearsign.c` — so a passing run stays clean.
 - Shell tests source `tests/aeptlib.sh` (`make_pkg`, `make_pkg_conffile`,
-  `make_pkg_script`, `make_pkg_tree`, `packages_stanza`, `new_root`,
-  `aept_run`, `make_keypair`, `make_inpackages`, `http_serve`, `http_stub`,
-  `cond_serve`, `dribble_serve`) and `skip` (exit 77) when a tool is missing
-  rather than failing.
+  `make_pkg_script`, `make_pkg_tree`, `packages_stanza`, `add_repo`,
+  `new_root`, `provision_shell`, `aept_run`, `make_keypair`,
+  `make_inpackages`, `http_serve`, `http_stub`, `cond_serve`,
+  `dribble_serve`) and `skip` (exit 77) when a tool is missing rather than
+  failing. A bare `new_root` has no `/bin/sh`, so maintainer and trigger
+  scripts die at exec (255) — deliberate in the tests that only need
+  "non-zero"; a test that needs a script to *run* calls `provision_shell`,
+  which copies dash and its libraries into the root, and skips if it cannot.
 - libfetch is built without `file.c`, so HTTP/HTTPS are the only transports.
   Tests needing a real fetch serve over loopback via `http_serve`. `cond_serve`
   starts `condserver.py` instead when the test is about revalidation: it emits

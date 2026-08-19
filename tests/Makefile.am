@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize
+    test_no_proxy test_validator test_url_sanitize test_auto_flags
 
 check_PROGRAMS = $(unit_tests) httpget partialget threadrace stallclient
 
@@ -122,6 +122,13 @@ test_url_sanitize_SOURCES = \
 test_url_sanitize_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_url_sanitize_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+# Links the library rather than individual modules: status.c's database
+# half pulls in the solver and through it libsolv.
+test_auto_flags_SOURCES = test_auto_flags.c
+test_auto_flags_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_auto_flags_LDADD = $(top_builddir)/src/libaept.la
+test_auto_flags_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
 # Links the library rather than individual modules: aept_download()
 # pulls in libfetch and its OpenSSL dependency.
 test_ssl_env_SOURCES = test_ssl_env.c
@@ -143,6 +150,10 @@ dist_check_SCRIPTS = \
     test_install_from_repo.sh \
     test_package_checksum.sh \
     test_file_clash.sh \
+    test_remove.sh \
+    test_upgrade.sh \
+    test_install_rollback.sh \
+    test_triggers.sh \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
