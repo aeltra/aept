@@ -232,6 +232,8 @@ case $(last_req) in
 esac
 note "a 304 answering no conditional request is refused"
 
+cond_stop
+
 # ── a missing kept file forfeits revalidation ────────────────────────
 #
 # "Unchanged" keeps what is on disk, so a conditional request is only
