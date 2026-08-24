@@ -11,8 +11,15 @@
 # to find the end of $(shell ...), so an unbalanced one in the script
 # breaks the parse of this file.  [^,]* skips over AC_INIT's first
 # argument instead.
+# The comparison below is a prefix check rather than equality because
+# the build server rewrites the changelog version, appending its own
+# stamp and revision -- 0.2.0-1 arrives as something like
+# 0.2.0-1+260824100003-3db1, and stripping a single revision suffix no
+# longer recovers the upstream version.  Requiring the changelog version
+# to be the upstream version followed by a hyphen accepts all of those
+# while still failing 0.2.10-1 against 0.2.1.
 UPSTREAM_VERSION := $(shell sed -n 's/^AC_INIT[^,]*, *\[\([^]]*\)\].*/\1/p' configure.ac)
-CHANGELOG_VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://' -e 's/-[^-]*$$//')
+CHANGELOG_VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://')
 
 # The library major from -version-number is the soname, and so the name of
 # the binary package that ships it.  debian/libaept0.install installs
@@ -29,8 +36,10 @@ SONAME_MAJOR := $(shell sed -n 's/^libaept_la_LDFLAGS *= *-version-number *\([0-
 override_dh_auto_configure:
 	@test -n "$(UPSTREAM_VERSION)" \
 	    || { echo "debian/rules: could not read AC_INIT from configure.ac" >&2; exit 1; }
-	@test "$(UPSTREAM_VERSION)" = "$(CHANGELOG_VERSION)" \
-	    || { echo "debian/rules: version mismatch -- configure.ac says $(UPSTREAM_VERSION), debian/changelog says $(CHANGELOG_VERSION)" >&2; exit 1; }
+	@case "$(CHANGELOG_VERSION)" in \
+	    "$(UPSTREAM_VERSION)"|"$(UPSTREAM_VERSION)-"*) ;; \
+	    *) echo "debian/rules: version mismatch -- configure.ac says $(UPSTREAM_VERSION), which is not the base of debian/changelog's $(CHANGELOG_VERSION)" >&2; exit 1 ;; \
+	esac
 	@test -n "$(SONAME_MAJOR)" \
 	    || { echo "debian/rules: could not read -version-number from src/Makefile.am" >&2; exit 1; }
 	@grep -q "^Package: libaept$(SONAME_MAJOR)\$$" debian/control \
