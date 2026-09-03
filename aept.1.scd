@@ -6,7 +6,7 @@ aept - Aeltra Package Tool
 
 # SYNOPSIS
 
-*aept* [-c <file>] [-o <dir>] [-v] <command> [options] [args...]
+*aept* [-c <file>] [-o <dir>] [-C <dir>] [-v] <command> [options] [args...]
 
 # DESCRIPTION
 
@@ -23,6 +23,14 @@ performed by usign.
 
 *-o*, *--offline-root* <dir>
 	Use _dir_ as the package root directory. See *OFFLINE ROOT*.
+
+*-C*, *--cache-dir* <dir>
+	Override the cache directory, replacing whatever the config file
+	specified. Unlike *option cache_dir* in the config file, this value
+	is treated as a host path and is *not* prefixed with the offline
+	root. This is the "CLI is literal" rule: paths that come from the
+	caller are host-absolute; paths that come from a config file living
+	inside a target are relative to that target.
 
 *-v*, *--verbose*
 	Increase verbosity. Can be specified multiple times.
@@ -374,6 +382,11 @@ option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 (unless *--conf* is given explicitly) and all state directories (lists, cache,
 info, status, tmp, lock, auto-installed, pinned-packages) are automatically
 prefixed with the offline root path.
+
+The exception is *--cache-dir* on the command line: an override given there
+is used verbatim, as a host path, and skips the offline-root prefixing that
+*option cache_dir* in the config file would receive. See the "CLI is literal"
+note on *--cache-dir* under *GLOBAL OPTIONS*.
 
 Prefixing _tmp_dir_ is required, not merely tidy: control archives are
 unpacked into it and their maintainer scripts are then run after chroot()ing

@@ -123,6 +123,12 @@ void aept_set_offline_root(aept_ctx_t *ctx, const char *path)
     ctx->config.offline_root = path ? aept_strdup(path) : NULL;
 }
 
+void aept_set_cache_dir(aept_ctx_t *ctx, const char *path)
+{
+    free(ctx->config.cache_dir);
+    ctx->config.cache_dir = path ? aept_strdup(path) : NULL;
+}
+
 void aept_set_verbosity(aept_ctx_t *ctx, int level)
 {
     ctx->config.verbosity = level;

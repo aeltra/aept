@@ -52,6 +52,17 @@ AEPT_API void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
 /*
+ * Override the cache directory verbatim, replacing whatever the config
+ * file (or its default) specified.  Unlike the *option cache_dir*
+ * directive in the config file, the value passed here is *not*
+ * prefixed with the offline root -- this is the "CLI is literal" rule:
+ * paths that come from the caller are host-absolute, paths that come
+ * from a config file living inside a target are relative to that
+ * target.  Pass NULL to clear a prior override.
+ */
+AEPT_API void aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
+
+/*
  * Seconds a single network wait may take before the transfer is
  * abandoned; 0 waits indefinitely.  Defaults to 120, and to whatever
  * `option network_timeout` says once a config file is loaded.

@@ -36,7 +36,7 @@
 # must be exactly what AEPT_API marks in include/aept/, so neither a
 # leaked internal nor a declared-but-missing function can pass.
 #
-# The 31 in aept.h, plus the three the CLI needs because it links libaept
+# The 32 in aept.h, plus the three the CLI needs because it links libaept
 # like any other consumer: aept_log(), aept_malloc(), aept_asprintf().
 
 enum:AEPT_ERR_NONE: enum { AEPT_ERR_NONE = 0, AEPT_ERR_GENERAL, AEPT_ERR_TIMEOUT, AEPT_ERR_TRIGGER, };
@@ -65,6 +65,7 @@ func:aept_pin: AEPT_EXPORT int aept_pin(aept_ctx_t *ctx, const char **specs, int
 func:aept_pkg_info_free: AEPT_EXPORT void aept_pkg_info_free(aept_pkg_info_t *info);
 func:aept_pkg_list_free: AEPT_EXPORT void aept_pkg_list_free(aept_pkg_list_t *list);
 func:aept_remove: AEPT_EXPORT int aept_remove(aept_ctx_t *ctx, const char **names, int count);
+func:aept_set_cache_dir: AEPT_EXPORT void aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
 func:aept_set_confirm_fn: AEPT_EXPORT void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
 func:aept_set_display_fn: AEPT_EXPORT void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);
 func:aept_set_flag: AEPT_EXPORT void aept_set_flag(aept_ctx_t *ctx, int flag, int value);

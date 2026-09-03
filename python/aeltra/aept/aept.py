@@ -176,6 +176,15 @@ class Aept:
     def set_offline_root(self, path: Optional[str]):
         lib.aept_set_offline_root(self._ctx, str_to_c(path))
 
+    def set_cache_dir(self, path: Optional[str]):
+        """Override the cache directory verbatim.
+
+        Unlike ``option cache_dir`` in the config file, the value passed
+        here is not prefixed with the offline root -- it is treated as a
+        host path.  Pass ``None`` to clear a prior override.
+        """
+        lib.aept_set_cache_dir(self._ctx, str_to_c(path))
+
     def set_verbosity(self, level: int):
         lib.aept_set_verbosity(self._ctx, int(level))
 

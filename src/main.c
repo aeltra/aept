@@ -20,6 +20,7 @@
 
 static const char *conf_file = DEFAULT_CONF;
 static const char *offline_root;
+static const char *cache_dir_override;
 static int conf_explicit;
 static int verbose_count;
 
@@ -99,6 +100,15 @@ static aept_ctx_t *init_aept(void)
     if (cf != conf_file)
         free((char *)cf);
 
+    /*
+     * A --cache-dir on the command line replaces whatever the config
+     * said, verbatim.  It is applied AFTER aept_load_config() so the
+     * offline-root prefixing done by that call does not touch it: the
+     * CLI value is a host path and must remain literal.
+     */
+    if (cache_dir_override)
+        aept_set_cache_dir(ctx, cache_dir_override);
+
     aept_set_verbosity(ctx, AEPT_LOG_INFO + verbose_count);
 
     if (!offline_root && access("/etc/aeltra_version", F_OK) != 0) {
@@ -115,11 +125,13 @@ static aept_ctx_t *init_aept(void)
 static void usage_main(FILE *out)
 {
     fprintf(out,
-            "Usage: aept [-c <file>] [-o <dir>] [-v] <command> [options] [args...]\n"
+            "Usage: aept [-c <file>] [-o <dir>] [-C <dir>] [-v] <command> [options] [args...]\n"
             "\n"
             "Global options:\n"
             "  -c, --conf <file>         Configuration file (default: %s)\n"
             "  -o, --offline-root <dir>  Use <dir> as the package root\n"
+            "  -C, --cache-dir <dir>     Override the cache directory (host path,\n"
+            "                            not prefixed with the offline root)\n"
             "  -v, --verbose             Increase verbosity\n"
             "  -h, --help                Show this help\n"
             "\n"
@@ -1257,6 +1269,7 @@ static int cmd_print_architecture(int argc, char *argv[])
 static struct option global_options[] = {
     {"conf",         required_argument, NULL, 'c'},
     {"offline-root", required_argument, NULL, 'o'},
+    {"cache-dir",    required_argument, NULL, 'C'},
     {"verbose",      no_argument,       NULL, 'v'},
     {"help",         no_argument,       NULL, 'h'},
     {NULL,           0,                 NULL, 0  }
@@ -1271,7 +1284,7 @@ int main(int argc, char *argv[])
 
     setup_signals();
 
-    while ((opt = getopt_long(argc, argv, "+c:o:vh", global_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "+c:o:C:vh", global_options, NULL)) != -1) {
         switch (opt) {
         case 'c':
             conf_file = optarg;
@@ -1279,6 +1292,9 @@ int main(int argc, char *argv[])
             break;
         case 'o':
             offline_root = optarg;
+            break;
+        case 'C':
+            cache_dir_override = optarg;
             break;
         case 'v':
             verbose_count++;
