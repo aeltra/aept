@@ -39,13 +39,28 @@ def record_connection():
 
 
 def response(status, body, headers=(), close=False):
+    # Names the connection's fate explicitly.  Apache does this; nginx
+    # and Caddy do not, which is what raw_response() below is for.
     head = ["HTTP/1.1 %s" % status]
     head.extend(headers)
     head.append("Content-Length: %d" % len(body))
-    # libfetch only reuses a connection when the server says so
-    # explicitly; HTTP/1.1's implicit default is not enough for it.
-    # nginx does send this, so it is the realistic case.
     head.append("Connection: %s" % ("close" if close else "keep-alive"))
+    head.append("")
+    head.append("")
+    return "\r\n".join(head).encode("latin-1") + body
+
+
+def raw_response(status, body, headers=(), version="HTTP/1.1"):
+    """A response carrying exactly the headers given.
+
+    No Connection header is added, so the client is left to apply the
+    version's own default.  This is the shape nginx and Caddy actually
+    produce, and the one a client that waits to be told about
+    persistence gets wrong.
+    """
+    head = ["%s %s" % (version, status)]
+    head.extend(headers)
+    head.append("Content-Length: %d" % len(body))
     head.append("")
     head.append("")
     return "\r\n".join(head).encode("latin-1") + body
@@ -145,6 +160,30 @@ class Handler(socketserver.BaseRequestHandler):
             # Same body, but the server declines to keep the connection.
             send(response("200 OK", b"hello from ok\n", close=True))
             return False
+        elif path == "/implicit-ka":
+            # HTTP/1.1 with no Connection header whatsoever -- what
+            # nginx and Caddy send.  The connection is persistent by
+            # RFC 9112 9.3 and the server holds it open accordingly.
+            send(raw_response("200 OK", b"hello from ok\n"))
+        elif path == "/ka-list":
+            # The token arrives in a list, which is legal and which a
+            # whole-field comparison against "keep-alive" misses.
+            send(raw_response("200 OK", b"hello from ok\n",
+                              ["Connection: keep-alive, TE"]))
+        elif path == "/close-list":
+            # "close" in a list, and -- unlike /close -- the connection
+            # is deliberately left open afterwards.  A server that hung
+            # up would produce one connection per request whatever the
+            # client believed; holding it open makes the count report
+            # the client's reading of the header and nothing else.
+            send(raw_response("200 OK", b"hello from ok\n",
+                              ["Connection: TE, close"]))
+        elif path == "/http10":
+            # An HTTP/1.0 reply with no Connection header: the default
+            # there is to close, the opposite of 1.1.  Held open for
+            # the same reason as /close-list.
+            send(raw_response("200 OK", b"hello from ok\n",
+                              version="HTTP/1.0"))
         elif path == "/empty":
             send(response("200 OK", b""))
         elif path == "/binary":

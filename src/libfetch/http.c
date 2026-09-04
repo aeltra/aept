@@ -609,13 +609,20 @@ static int http_get_reply(libfetch_conn_t *conn)
      * just one) that do not send a version number, so we can't rely
      * on finding one, but if we do, insist on it being 1.0 or 1.1.
      * We don't care about the reason phrase.
+     *
+     * The version is recorded rather than merely validated: it decides
+     * whether the connection is persistent by default.  A reply that
+     * omits it is 1.0 by age -- nothing that speaks 1.1 leaves it out
+     * -- so the conservative value is also the correct one.
      */
+    conn->http_minor = 0;
     if (strncmp(conn->buf, "HTTP", 4) != 0)
         return HTTP_PROTOCOL_ERROR;
     p = conn->buf + 4;
     if (*p == '/') {
         if (p[1] != '1' || p[2] != '.' || (p[3] != '0' && p[3] != '1'))
             return HTTP_PROTOCOL_ERROR;
+        conn->http_minor = p[3] - '0';
         p += 4;
     }
     if (*p != ' ' || !isdigit((unsigned char)p[1]) || !isdigit((unsigned char)p[2]) ||
@@ -624,6 +631,37 @@ static int http_get_reply(libfetch_conn_t *conn)
 
     conn->err = (p[1] - '0') * 100 + (p[2] - '0') * 10 + (p[3] - '0');
     return conn->err;
+}
+
+/*
+ * Does a comma-separated header field list the given token?
+ *
+ * Connection is such a list: "keep-alive, TE" and "TE, close" are both
+ * legal and both name two tokens, so comparing the whole field value
+ * against one token misreads every response that sends more than one.
+ * Tokens are case-insensitive and may be surrounded by whitespace.
+ */
+static int http_has_token(const char *hdr, const char *token)
+{
+    size_t len = strlen(token);
+
+    while (*hdr) {
+        const char *end;
+
+        if (*hdr == ',' || isspace((unsigned char)*hdr)) {
+            hdr++;
+            continue;
+        }
+        for (end = hdr; *end && *end != ','; end++)
+            /* nothing */;
+        while (end > hdr && isspace((unsigned char)end[-1]))
+            end--;
+        if ((size_t)(end - hdr) == len && strncasecmp(hdr, token, len) == 0)
+            return 1;
+        hdr = end;
+    }
+
+    return 0;
 }
 
 /*
@@ -1099,6 +1137,16 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             /* fall through so we can get the full error message */
         }
 
+        /*
+         * A persistent connection is HTTP/1.1's default (RFC 9112 9.3),
+         * not something a server has to ask for.  nginx and Caddy send
+         * no Connection header at all on a 1.1 reply, and reading that
+         * silence as "close" cost a fresh name lookup and a fresh
+         * handshake on every single download.  HTTP/1.0 keeps the
+         * opposite default; a Connection header below overrides either.
+         */
+        keep_alive = conn->http_minor >= 1;
+
         /* get headers */
         do {
             switch ((h = http_next_header(conn, &p))) {
@@ -1108,8 +1156,13 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             case hdr_error:
                 goto protocol_error;
             case hdr_connection:
-                /* XXX too weak? */
-                keep_alive = (strcasecmp(p, "keep-alive") == 0);
+                /* "close" wins when a peer names both: it has said the
+                 * connection ends, and holding it open regardless is
+                 * the failure that cannot be recovered from. */
+                if (http_has_token(p, "close"))
+                    keep_alive = 0;
+                else if (http_has_token(p, "keep-alive"))
+                    keep_alive = 1;
                 break;
             case hdr_content_length:
                 clength = libfetch_parseuint(p, &q, 10, OFF_MAX);

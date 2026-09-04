@@ -104,6 +104,7 @@ struct libfetch_conn {
     size_t next_len;            /* size of pending buffer */
     int line_partial;           /* a line was interrupted half-read */
     int err;                    /* last protocol reply code */
+    int http_minor;             /* minor version of that reply */
     SSL *ssl;                   /* SSL handle */
     SSL_CTX *ssl_ctx;           /* SSL context */
     X509 *ssl_cert;             /* server certificate */

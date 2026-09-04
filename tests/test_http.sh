@@ -271,37 +271,73 @@ note "credentials in the proxy URL produce a Proxy-Authorization header"
 
 # ── connection reuse ─────────────────────────────────────────────────
 #
-# The cache only engages when the server says "Connection: keep-alive"
-# explicitly — HTTP/1.1's implicit default is not enough for libfetch.
-# Both halves are pinned, because the fork moves this cache into the
-# per-context object.
+# Persistence is HTTP/1.1's default (RFC 9112 9.3), so what the cache
+# has to engage on is the *absence* of a "Connection: close", not the
+# presence of a "Connection: keep-alive".  libfetch had it the other way
+# round: it waited to be told, and nginx and Caddy — which send no
+# Connection header at all — were handed a fresh name lookup and a fresh
+# handshake for every index and every package.
+#
+# The six cases below are the whole decision: told keep-alive, told
+# close, told nothing over 1.1, told nothing over 1.0, and each token
+# once more inside a list, which is where comparing the whole field
+# value against one token goes wrong in both directions.
+#
+# /close-list and /http10 leave the connection open on the server side
+# on purpose.  A server that hung up would produce one connection per
+# request whatever the client believed, so the count would prove
+# nothing; holding it open makes the count report the client's reading
+# of the reply and nothing else.
 
-: > "$work/count"
-http_stub_stop
-http_stub "$work/count" "$work/stub2.log" || skip "could not restart the stub"
-base="http://127.0.0.1:$STUB_PORT"
+# fetch_thrice <tag> <path> — restart the stub, fetch <path> three times
+# through a single context, and set $conns to the number of connections
+# the server accepted.  Leaves $base pointing at the restarted stub.
+fetch_thrice() {
+    http_stub_stop
+    http_stub "$work/count-$1" "$work/stub-$1.log" \
+        || skip "could not restart the stub"
+    base="http://127.0.0.1:$STUB_PORT"
 
-timeout 60 "$HTTPGET" "$base/ok" "$work/a" "$base/ok" "$work/b" \
-    "$base/ok" "$work/c" >/dev/null 2>&1 \
-    || fail "keep-alive: the three downloads did not all succeed"
+    timeout 60 "$HTTPGET" "$base$2" "$work/a" "$base$2" "$work/b" \
+        "$base$2" "$work/c" >/dev/null 2>&1 \
+        || fail "$1: the three downloads did not all succeed"
 
-conns=$(cat "$work/count")
+    conns=$(cat "$work/count-$1")
+}
+
+fetch_thrice keepalive /ok
 [ "$conns" -eq 1 ] \
     || fail "keep-alive: 3 downloads opened $conns connections, expected 1"
 note "three downloads over keep-alive share one connection"
 
-http_stub_stop
-http_stub "$work/count3" "$work/stub3.log" || skip "could not restart the stub"
-base="http://127.0.0.1:$STUB_PORT"
-
-timeout 60 "$HTTPGET" "$base/close" "$work/a" "$base/close" "$work/b" \
-    "$base/close" "$work/c" >/dev/null 2>&1 \
-    || fail "close: the three downloads did not all succeed"
-
-conns=$(cat "$work/count3")
+fetch_thrice close /close
 [ "$conns" -eq 3 ] \
     || fail "close: 3 downloads opened $conns connections, expected 3"
 note "a server that declines keep-alive gets one connection per download"
+
+fetch_thrice implicit /implicit-ka
+[ "$conns" -eq 1 ] \
+    || fail "an HTTP/1.1 reply with no Connection header is still persistent:
+3 downloads opened $conns connections, expected 1"
+note "HTTP/1.1 persistence is assumed, not waited for"
+
+fetch_thrice kalist /ka-list
+[ "$conns" -eq 1 ] \
+    || fail "\"Connection: keep-alive, TE\" names keep-alive:
+3 downloads opened $conns connections, expected 1"
+note "keep-alive is recognised inside a token list"
+
+fetch_thrice closelist /close-list
+[ "$conns" -eq 3 ] \
+    || fail "\"Connection: TE, close\" names close:
+3 downloads opened $conns connections, expected 3"
+note "close is recognised inside a token list"
+
+fetch_thrice http10 /http10
+[ "$conns" -eq 3 ] \
+    || fail "an HTTP/1.0 reply with no Connection header is not persistent:
+3 downloads opened $conns connections, expected 3"
+note "HTTP/1.0 keeps the opposite default"
 
 # ── contexts do not share connections ────────────────────────────────
 #
