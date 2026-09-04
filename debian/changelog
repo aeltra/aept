@@ -1,3 +1,15 @@
+aept (0.4.0-1) unstable; urgency=medium
+
+  * New: the cache directory can now also be set via the AEPT_CACHE_DIR
+    environment variable, in addition to -C/--cache-dir on the command
+    line. Precedence: --cache-dir > AEPT_CACHE_DIR > option cache_dir >
+    default. This lets a wrapper set the override once and have it
+    apply to aept invocations it does not launch itself -- e.g.
+    bootstrap scripts run against an offline root.
+  * No ABI or Python API change; libaept stays at 0:3:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Fri, 04 Sep 2026 10:28:06 +0300
+
 aept (0.3.1-1) unstable; urgency=medium
 
   * Packaging: the 0.3.0 release left configure.ac at 0.2.0, so the
