@@ -1,3 +1,22 @@
+aept (0.4.1-1) unstable; urgency=medium
+
+  * Fix: the connection cache never engaged against an HTTP/1.1 server
+    that says nothing about persistence -- which is what nginx and
+    Caddy do, since RFC 9112 9.3 makes persistence the default and a
+    server signals it by staying silent. libfetch started from
+    HTTP/1.0's rule and turned reuse on only for an explicit
+    Connection: keep-alive, so every index and every package paid a
+    fresh name lookup and a fresh TLS handshake. The default now comes
+    from the reply's version. Measured over five downloads of one URL:
+    10 connect() calls and 5 DNS queries before, 2 and 1 after.
+  * Fix: Connection is a token list, so "keep-alive, TE" and "TE,
+    close" are both legal and neither was recognised by comparing the
+    whole field value against one token. It is parsed as a list now,
+    with close winning when a peer names both.
+  * No ABI or Python API change; libaept stays at 0:3:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Fri, 04 Sep 2026 19:20:41 +0300
+
 aept (0.4.0-1) unstable; urgency=medium
 
   * New: the cache directory can now also be set via the AEPT_CACHE_DIR
