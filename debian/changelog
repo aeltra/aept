@@ -1,3 +1,16 @@
+aept (0.3.1-1) unstable; urgency=medium
+
+  * Packaging: the 0.3.0 release left configure.ac at 0.2.0, so the
+    version check in debian/rules refused the build and 0.3.0 never
+    produced a package -- which is the check doing its job, since the
+    binary would otherwise have reported aept/0.2.0 as its User-Agent
+    to every repository it fetched from. configure.ac and
+    python/pyproject.toml now carry the release version. No source
+    change otherwise; libaept stays at 0:3:0, which no release ever
+    shipped.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Fri, 04 Sep 2026 09:07:44 +0300
+
 aept (0.3.0-1) unstable; urgency=medium
 
   * New: -C/--cache-dir global option overrides the cache directory
