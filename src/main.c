@@ -131,7 +131,8 @@ static void usage_main(FILE *out)
             "  -c, --conf <file>         Configuration file (default: %s)\n"
             "  -o, --offline-root <dir>  Use <dir> as the package root\n"
             "  -C, --cache-dir <dir>     Override the cache directory (host path,\n"
-            "                            not prefixed with the offline root)\n"
+            "                            not prefixed with the offline root).\n"
+            "                            Also read from AEPT_CACHE_DIR if unset.\n"
             "  -v, --verbose             Increase verbosity\n"
             "  -h, --help                Show this help\n"
             "\n"
@@ -1306,6 +1307,12 @@ int main(int argc, char *argv[])
             usage_main(stderr);
             return 1;
         }
+    }
+
+    if (!cache_dir_override) {
+        const char *env_cache_dir = getenv("AEPT_CACHE_DIR");
+        if (env_cache_dir && *env_cache_dir)
+            cache_dir_override = env_cache_dir;
     }
 
     if (optind >= argc) {

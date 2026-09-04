@@ -32,6 +32,13 @@ performed by usign.
 	caller are host-absolute; paths that come from a config file living
 	inside a target are relative to that target.
 
+	If *--cache-dir* is not given on the command line, the environment
+	variable *AEPT_CACHE_DIR* is consulted. This lets a wrapper set the
+	override once and have it apply to indirectly invoked aept calls
+	(bootstrap or maintainer scripts) whose command lines it does not
+	control. Precedence: *--cache-dir* > *AEPT_CACHE_DIR* > *option
+	cache_dir* > default.
+
 *-v*, *--verbose*
 	Increase verbosity. Can be specified multiple times.
 
@@ -383,10 +390,11 @@ option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 info, status, tmp, lock, auto-installed, pinned-packages) are automatically
 prefixed with the offline root path.
 
-The exception is *--cache-dir* on the command line: an override given there
-is used verbatim, as a host path, and skips the offline-root prefixing that
-*option cache_dir* in the config file would receive. See the "CLI is literal"
-note on *--cache-dir* under *GLOBAL OPTIONS*.
+The exception is *--cache-dir* on the command line (or *AEPT_CACHE_DIR* in
+the environment): an override given there is used verbatim, as a host path,
+and skips the offline-root prefixing that *option cache_dir* in the config
+file would receive. See the "CLI is literal" note on *--cache-dir* under
+*GLOBAL OPTIONS*.
 
 Prefixing _tmp_dir_ is required, not merely tidy: control archives are
 unpacked into it and their maintainer scripts are then run after chroot()ing
