@@ -152,6 +152,23 @@ override_dh_auto_install:
 
 override_dh_auto_clean:
 	rm -rf $(COVERAGE_BUILDDIR)
+# Both trees are VPATH builds, and configure refuses to run against a source
+# directory that is already configured -- it tests for $(srcdir)/config.status
+# and stops with "source directory already configured".  An ordinary in-tree
+# ./configure from day-to-day development leaves exactly that behind, so
+# dpkg-buildpackage in a working tree would fail at dh_auto_configure with an
+# error naming neither the cause nor the fix.
+#
+# Undoing a previous build is what the clean target is for, and
+# dpkg-buildpackage runs "debian/rules clean" before anything else, so it is
+# handled here rather than left to surprise somebody later.  Note this does
+# clear an in-tree development build: after packaging, ./configure && make
+# again.
+	@if test -f config.status; then \
+	    echo "debian/rules: clearing an in-tree configure -- a VPATH build needs an unconfigured source directory"; \
+	    test ! -f Makefile || $(MAKE) distclean >/dev/null 2>&1 || true; \
+	    rm -f config.status; \
+	fi
 	rm -f debian/aept.1
 	rm -rf python/dist/ python/build/ python/aept.egg-info/
 	dh_auto_clean

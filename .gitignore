@@ -11,6 +11,12 @@ Makefile.in
 libtool
 .libs/
 
+# Package build trees.  debian/rules builds both out of tree: the production
+# one because a VPATH build cannot run against a configured source directory,
+# and the instrumented one because coverage needs a build of its own.
+/build/
+/build-coverage/
+
 # Build output (after ./configure && make)
 /config.h
 /config.log
