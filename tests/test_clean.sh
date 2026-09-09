@@ -48,4 +48,43 @@ rc=$?
 $out"
 note "no cache directory: exit 0, no complaint"
 
+# ── clean_cache 0 keeps the cache ────────────────────────────────────
+#
+# The cache a build-box target uses is reached through a symlink and is
+# shared with every other target of the same release, so "clean" inside
+# one of them must not empty it.
+
+printf 'option clean_cache 0\n' >> "$root/etc/aept/aept.conf"
+
+mkdir -p "$cache"
+printf 'cached\n' > "$cache/shared_1.0.aeltra"
+
+out=$(aept_run "$root" clean 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "clean with clean_cache 0 exited $rc:
+$out"
+[ -f "$cache/shared_1.0.aeltra" ] || fail "clean emptied the cache with clean_cache 0"
+printf '%s\n' "$out" | grep -q 'cache cleaning is disabled' \
+    || fail "clean said nothing about the kept cache:
+$out"
+note "clean_cache 0: cache kept, and said so"
+
+# ── inside a build-box target the notice is suppressed ───────────────
+#
+# /etc/target marks a build-box target, where a kept cache is the
+# arrangement working as intended and not worth a line of output.
+
+mkdir -p "$root/etc"
+printf 'TARGET_ID=test\n' > "$root/etc/target"
+
+out=$(aept_run "$root" clean 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "clean inside a target exited $rc:
+$out"
+[ -f "$cache/shared_1.0.aeltra" ] || fail "clean emptied the cache inside a target"
+printf '%s\n' "$out" | grep -q 'cache cleaning is disabled' \
+    && fail "clean reported the kept cache inside a build-box target:
+$out"
+note "inside a target: cache kept, notice suppressed"
+
 exit 0

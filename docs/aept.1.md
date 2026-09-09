@@ -7,8 +7,8 @@ aept - Aeltra Package Tool
 
 # SYNOPSIS
 
-**aept** \[-c \<file\>\] \[-o \<dir\>\] \[-v\] \<command\> \[options\]
-\[args...\]
+**aept** \[-c \<file\>\] \[-o \<dir\>\] \[-C \<dir\>\] \[-v\]
+\<command\> \[options\] \[args...\]
 
 # DESCRIPTION
 
@@ -27,6 +27,22 @@ Signature verification is performed by usign.
 **-o**, **--offline-root** \<dir\>
 
 > Use *dir* as the package root directory. See **OFFLINE ROOT**.
+
+**-C**, **--cache-dir** \<dir\>
+
+> Override the cache directory, replacing whatever the config file
+> specified. Unlike **option cache_dir** in the config file, this value
+> is treated as a host path and is **not** prefixed with the offline
+> root. This is the "CLI is literal" rule: paths that come from the
+> caller are host-absolute; paths that come from a config file living
+> inside a target are relative to that target.
+>
+> If **--cache-dir** is not given on the command line, the environment
+> variable **AEPT_CACHE_DIR** is consulted. This lets a wrapper set the
+> override once and have it apply to indirectly invoked aept calls
+> (bootstrap or maintainer scripts) whose command lines it does not
+> control. Precedence: **--cache-dir** \> **AEPT_CACHE_DIR** \>
+> **option** cache_dir \> default.
 
 **-v**, **--verbose**
 
@@ -340,25 +356,26 @@ Options are set with the **option** directive:
 
 The following keys are recognized:
 
-|                 |                               |                                                                                                                                                                                                                                                         |
-|:----------------|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Key**         | **Default**                   | **Description**                                                                                                                                                                                                                                         |
-| offline_root    | (none)                        | Offline root directory (see **OFFLINE ROOT**)                                                                                                                                                                                                           |
-| info_dir        | /var/lib/aept/info            | Directory for installed package metadata                                                                                                                                                                                                                |
-| lists_dir       | /var/lib/aept/lists           | Directory for downloaded package lists                                                                                                                                                                                                                  |
-| status_file     | /var/lib/aept/status          | Path to the installed-packages database                                                                                                                                                                                                                 |
-| cache_dir       | /var/cache/aept               | Directory for downloaded .aeltra files                                                                                                                                                                                                                  |
-| tmp_dir         | /tmp                          | Temporary directory                                                                                                                                                                                                                                     |
-| lock_file       | /var/lib/aept/lock            | Path to the lock file                                                                                                                                                                                                                                   |
-| usign_keydir    | /etc/aept/usign/trustdb       | Directory containing trusted public keys                                                                                                                                                                                                                |
-| auto_file       | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                                                                                                                       |
-| pin_file        | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                                                                                                                           |
-| check_signature | 1                             | Set to 0 to disable signature verification                                                                                                                                                                                                              |
-| ignore_uid      | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package.                                                                                                      |
-| ssl_client_cert | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                                                                                                                              |
-| ssl_client_key  | (none)                        | Path to the corresponding PEM private key                                                                                                                                                                                                               |
-| allow_downgrade | 0                             | Set to 1 to allow package downgrades                                                                                                                                                                                                                    |
-| network_timeout | 120                           | Seconds a single network wait may take before a transfer is abandoned; 0 waits indefinitely. This is an idle timeout, so a slow download runs to completion and only one where nothing arrives at all is cut off. Name resolution is not covered by it. |
+|                 |                               |                                                                                                                                                                                                                                                          |
+|:----------------|:------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Key**         | **Default**                   | **Description**                                                                                                                                                                                                                                          |
+| offline_root    | (none)                        | Offline root directory (see **OFFLINE ROOT**)                                                                                                                                                                                                            |
+| info_dir        | /var/lib/aept/info            | Directory for installed package metadata                                                                                                                                                                                                                 |
+| lists_dir       | /var/lib/aept/lists           | Directory for downloaded package lists                                                                                                                                                                                                                   |
+| status_file     | /var/lib/aept/status          | Path to the installed-packages database                                                                                                                                                                                                                  |
+| cache_dir       | /var/cache/aept               | Directory for downloaded .aeltra files                                                                                                                                                                                                                   |
+| tmp_dir         | /tmp                          | Temporary directory                                                                                                                                                                                                                                      |
+| lock_file       | /var/lib/aept/lock            | Path to the lock file                                                                                                                                                                                                                                    |
+| usign_keydir    | /etc/aept/usign/trustdb       | Directory containing trusted public keys                                                                                                                                                                                                                 |
+| auto_file       | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                                                                                                                        |
+| pin_file        | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                                                                                                                            |
+| check_signature | 1                             | Set to 0 to disable signature verification                                                                                                                                                                                                               |
+| ignore_uid      | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package.                                                                                                       |
+| ssl_client_cert | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                                                                                                                               |
+| ssl_client_key  | (none)                        | Path to the corresponding PEM private key                                                                                                                                                                                                                |
+| allow_downgrade | 0                             | Set to 1 to allow package downgrades                                                                                                                                                                                                                     |
+| clean_cache     | 1                             | Set to 0 to make **clean** leave the cache directory alone. For a cache shared with something outside this root -- a build-box target reaches a host-side cache through */.pkg-cache* -- emptying it would discard packages other roots are still using. |
+| network_timeout | 120                           | Seconds a single network wait may take before a transfer is abandoned; 0 waits indefinitely. This is an idle timeout, so a slow download runs to completion and only one where nothing arrives at all is cut off. Name resolution is not covered by it.  |
 
 ## Example configuration
 
@@ -382,6 +399,12 @@ When an offline root is set (via **--offline-root** or the
 all state directories (lists, cache, info, status, tmp, lock,
 auto-installed, pinned-packages) are automatically prefixed with the
 offline root path.
+
+The exception is **--cache-dir** on the command line (or
+**AEPT_CACHE_DIR** in the environment): an override given there is used
+verbatim, as a host path, and skips the offline-root prefixing that
+**option cache_dir** in the config file would receive. See the "CLI is
+literal" note on **--cache-dir** under **GLOBAL OPTIONS**.
 
 Prefixing *tmp_dir* is required, not merely tidy: control archives are
 unpacked into it and their maintainer scripts are then run after

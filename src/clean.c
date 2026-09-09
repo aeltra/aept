@@ -13,14 +13,34 @@
 
 #include "aept/internal.h"
 #include "aept/clean.h"
+#include "aept/config.h"
 #include "aept/msg.h"
 #include "aept/util.h"
+
+/* Whether this root is a build-box target.  /etc/target is the file
+ * build-box writes into every one of them, and inside such a target a
+ * kept cache is the arrangement working as designed rather than
+ * anything the user needs telling about. */
+static int is_build_box_target(const struct aept_config *cfg)
+{
+    char *marker = aept_config_root_path(cfg, "/etc/target");
+    int found = aept_file_exists(marker);
+
+    free(marker);
+    return found;
+}
 
 int aept_op_clean(struct aept_ctx *ctx)
 {
     DIR *d;
     struct dirent *ent;
     int errors = 0;
+
+    if (!ctx->config.clean_cache) {
+        if (!is_build_box_target(&ctx->config))
+            aept_log_info("cache cleaning is disabled, keeping '%s'", ctx->config.cache_dir);
+        return 0;
+    }
 
     d = opendir(ctx->config.cache_dir);
     if (!d) {

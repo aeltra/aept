@@ -359,6 +359,12 @@ The following keys are recognized:
 |  allow_downgrade
 :  0
 :  Set to 1 to allow package downgrades
+|  clean_cache
+:  1
+:  Set to 0 to make *clean* leave the cache directory alone. For a
+   cache shared with something outside this root -- a build-box
+   target reaches a host-side cache through _/.pkg-cache_ -- emptying
+   it would discard packages other roots are still using.
 |  network_timeout
 :  120
 :  Seconds a single network wait may take before a transfer is

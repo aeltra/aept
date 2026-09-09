@@ -34,6 +34,7 @@ void aept_config_set_defaults(struct aept_config *cfg)
 
     cfg->check_signature = 1;
     cfg->check_index_expiry = 0;
+    cfg->clean_cache = 1;
     cfg->verbosity = AEPT_INFO;
 
     /*
@@ -167,6 +168,9 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
         return;
     } else if (strcmp(key, "allow_downgrade") == 0) {
         cfg->allow_downgrade = parse_bool(key, value, 0);
+        return;
+    } else if (strcmp(key, "clean_cache") == 0) {
+        cfg->clean_cache = parse_bool(key, value, 1);
         return;
     } else if (strcmp(key, "network_timeout") == 0) {
         cfg->network_timeout = parse_seconds(key, value, AEPT_DEFAULT_NETWORK_TIMEOUT);
