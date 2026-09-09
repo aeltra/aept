@@ -30,8 +30,29 @@ AC_CHECK_LIB([solvext], [repo_add_debpackages], [:],
   [AC_MSG_ERROR([libsolvext library not found])])
 
 # clang-format, for the format targets only.  Not required to build.
-AC_CHECK_PROGS([CLANG_FORMAT], [clang-format], [no])
+#
+# The major is recorded so the format targets can refuse one that is too
+# old.  19 is a floor, not a pin: nothing in .clang-format needs that exact
+# version, and a newer one that formatted this tree differently would fail
+# format-check with a concrete diff rather than drift quietly.  Older ones
+# are refused because they predate settings the file uses.
+#
+# The unversioned binary is preferred, since that is what the build
+# dependency names and it tracks the distribution's default; the versioned
+# one is a fallback for a machine that has it without the metapackage.
+AC_CHECK_PROGS([CLANG_FORMAT], [clang-format clang-format-19], [no])
 AC_SUBST([CLANG_FORMAT])
+
+CLANG_FORMAT_MAJOR=unknown
+if test "$CLANG_FORMAT" != no; then
+    AC_MSG_CHECKING([clang-format major version])
+    CLANG_FORMAT_MAJOR=`$CLANG_FORMAT --version 2>/dev/null | sed -e 's/.*version //' -e 's/\..*//'`
+    if test -z "$CLANG_FORMAT_MAJOR"; then
+        CLANG_FORMAT_MAJOR=unknown
+    fi
+    AC_MSG_RESULT([$CLANG_FORMAT_MAJOR])
+fi
+AC_SUBST([CLANG_FORMAT_MAJOR])
 
 # python3 runs the test servers (condserver.py and friends) and the
 # coverage aggregator.  Not required to build, and the tests that need it
@@ -57,6 +78,23 @@ AC_ARG_ENABLE([coverage],
 if test "$enable_coverage" = yes; then
     COVERAGE_CFLAGS="-O0 -g --coverage"
     COVERAGE_LDFLAGS="--coverage"
+    # ... but per-target CFLAGS alone are not enough to make -O0 stick.
+    # Automake emits "$(target_CFLAGS) $(CFLAGS)", so CFLAGS lands LAST on
+    # every command line, and gcc takes the last -O it is given.  AC_PROG_CC
+    # defaults CFLAGS to "-g -O2" when it is unset, and dpkg-buildpackage
+    # exports an -O2 of its own, so the -O0 above was being overridden in
+    # both the documented developer workflow and the package build: every
+    # compile line read "-O0 -g --coverage -g -O2" and the coverage figures
+    # were measured on an OPTIMISED build.  That is the thing the paragraph
+    # above says must not happen, and it moved the numbers by 2.3 points
+    # overall -- it also moves the denominators, because merged and cloned
+    # basic blocks change which lines are countable at all.
+    #
+    # Only the optimisation level is removed, and only where it stands as
+    # its own word, so everything else the user asked for still reaches the
+    # compiler.  Replacing CFLAGS wholesale would discard their -march, -D
+    # and warning flags along with it.
+    CFLAGS=`echo "$CFLAGS" | sed -e 's/\(^\| \)-O[[0-9a-z]]*/\1/g'`
     if test "$PYTHON" = no; then
         AC_MSG_ERROR([--enable-coverage needs python3 for the aggregator])
     fi

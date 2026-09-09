@@ -1,5 +1,40 @@
 #!/usr/bin/make -f
 
+# DEB_BUILD_GNU_TYPE / DEB_HOST_GNU_TYPE, for the cross-build test below.
+include /usr/share/dpkg/architecture.mk
+
+# Both trees are VPATH builds out of tree.  The production one has to be,
+# not merely may be: configure refuses to run in a source directory that
+# is already configured ("source directory already configured; run make
+# distclean there first"), so an in-tree production build would make the
+# coverage tree below impossible.
+BUILDDIR := build
+COVERAGE_BUILDDIR := build-coverage
+
+# The QA gates run as part of the package build, because for this package
+# the build IS the CI run -- Jenkins builds it on every push.  A gate that
+# lives here is a gate that actually gets pulled, and it is versioned with
+# the code it guards instead of living in a job configuration that is not.
+#
+# Everything extra is skipped when the suite would not run anyway:
+#
+#   nocheck       the user asked not to test.  Then there is no second
+#                 configure, no second compile and no second suite run --
+#                 a nocheck build costs exactly an ordinary build.
+#   cross build   the suite cannot execute host binaries here.  dh_auto_test
+#                 already declines; the coverage tree exists only to run
+#                 the suite, so it would be a compile with nothing to
+#                 measure.
+ifneq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+RUN_CHECKS := no
+CHECKS_SKIPPED := nocheck requested
+else ifneq ($(DEB_BUILD_GNU_TYPE),$(DEB_HOST_GNU_TYPE))
+RUN_CHECKS := no
+CHECKS_SKIPPED := cross build ($(DEB_BUILD_GNU_TYPE) -> $(DEB_HOST_GNU_TYPE))
+else
+RUN_CHECKS := yes
+endif
+
 # The upstream version lives in two places that must agree: AC_INIT in
 # configure.ac, which becomes PACKAGE_VERSION and so the User-Agent the
 # binary reports, and debian/changelog, which is what the .deb claims to
@@ -31,7 +66,7 @@ CHANGELOG_VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*:/
 SONAME_MAJOR := $(shell sed -n 's/^libaept_la_LDFLAGS *= *-version-number *\([0-9][0-9]*\).*/\1/p' src/Makefile.am)
 
 %:
-	dh $@ --with python3
+	dh $@ --with python3 --builddirectory=$(BUILDDIR)
 
 override_dh_auto_configure:
 	@test -n "$(UPSTREAM_VERSION)" \
@@ -46,6 +81,66 @@ override_dh_auto_configure:
 	    || { echo "debian/rules: the library is libaept.so.$(SONAME_MAJOR), but debian/control declares no 'Package: libaept$(SONAME_MAJOR)' -- bumping the major renames the binary package, and debian/libaept*.install, debian/control and python/aeltra/aept/_ffi.py all need to follow" >&2; exit 1; }
 	dh_auto_configure
 
+# Three gates, in increasing cost, and none of them redundant with
+# another:
+#
+#   dh_auto_test    the production tree, built with the flags the .debs
+#                   ship.  This is the correctness gate -- the only run
+#                   that tests the binaries actually packaged, so a bug
+#                   that only appears under optimisation has somewhere to
+#                   show up.  It is also the only run that checks the ABI:
+#                   test_abi_symbols.sh skips itself under coverage,
+#                   because libgcov's runtime reaches the dynamic symbol
+#                   table and genuinely breaks the "exported set is
+#                   exactly what AEPT_API marks" rule.
+#
+#   format-check    clang-format over the tree.  Needs no build of its
+#                   own.  Build-Depends names 19 as a floor rather than a
+#                   pin; a newer formatter that disagreed with the
+#                   committed formatting would fail here with a concrete
+#                   diff, which is a loud failure and a one-commit fix.
+#
+#   coverage-check  a second, instrumented tree.  The figure is produced
+#                   BY running the suite, so this runs the tests a second
+#                   time of necessity -- not a duplicate of the first but
+#                   a different binary answering a different question.
+#                   Roughly 50s serial against 20s parallel, plus the
+#                   instrumented compile.
+#
+# A fresh $(COVERAGE_BUILDDIR) every build also means the .gcda
+# accumulation hazard cannot arise: there are never counters left over
+# from a previous run to be summed into this one.
+# The coverage tree is given its own flags rather than inheriting the
+# ones dpkg-buildpackage exports, because two of those actively break the
+# measurement:
+#
+#   -ffile-prefix-map=<srcdir>=.  rewrites the source path recorded in the
+#       profiles, so the aggregator cannot map a .gcda back to a file under
+#       src/ and every entry reports 0/0.  It merges 114 profiles and
+#       attributes none of them -- a silent zero, not an error.
+#   -O2  would win over the -O0 in COVERAGE_CFLAGS, because automake emits
+#       "$(target_CFLAGS) $(CFLAGS)" and gcc takes the LAST -O it is given.
+#       configure.ac strips the optimisation level out of CFLAGS under
+#       --enable-coverage now, so this half is belt and braces -- but the
+#       flags are replaced wholesale anyway for the reason above, and an
+#       explicit -O0 here documents what the tree is meant to be built at.
+#
+# _FORTIFY_SOURCE in CPPFLAGS also warns at -O0, and the hardening and
+# reproducibility flags are pointless in a tree whose objects are never
+# shipped, so the whole set is replaced rather than filtered.
+override_dh_auto_test:
+ifeq ($(RUN_CHECKS),yes)
+	dh_auto_test
+	$(MAKE) -C $(BUILDDIR) format-check
+	mkdir -p $(COVERAGE_BUILDDIR)
+	cd $(COVERAGE_BUILDDIR) && $(CURDIR)/configure --enable-coverage \
+	    CFLAGS="-O0 -g" CPPFLAGS= LDFLAGS=
+	$(MAKE) -C $(COVERAGE_BUILDDIR)
+	$(MAKE) -C $(COVERAGE_BUILDDIR) coverage-check
+else
+	@echo "debian/rules: skipping checks -- $(CHECKS_SKIPPED)"
+endif
+
 override_dh_auto_build:
 	dh_auto_build
 	scdoc < aept.1.scd > debian/aept.1
@@ -56,6 +151,7 @@ override_dh_auto_install:
 	python3 -m installer --destdir=debian/python3-aept python/dist/aept-*.whl
 
 override_dh_auto_clean:
+	rm -rf $(COVERAGE_BUILDDIR)
 	rm -f debian/aept.1
 	rm -rf python/dist/ python/build/ python/aept.egg-info/
 	dh_auto_clean

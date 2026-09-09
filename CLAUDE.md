@@ -299,18 +299,44 @@ is in `tests/coverage.tiers` itself.
 `make coverage-check` is a **ratchet against `tests/coverage.baseline`**, not a
 gate against the tier targets — it was built when most tiers were well short of
 target, and a check that is red from the first day is a check that gets ignored.
-The coverage push has since carried **every tier to its target** (security
-91.2, transaction 85.6, plumbing 84.3, CLI 78.0 against a 60 cap; 85.1%
-overall) and **every security-tier file over its 85% floor**, so the floors are
-all hard gates now and the baseline is the high-water mark. The rule is
+The figures below are the first ones measured at a real `-O0` (see the
+flag-ordering note further down): plumbing and CLI are over target at 82.0
+and 74.5 against a 60 cap, **security is 89.1 against a 90 target and
+transaction 83.5 against 85** — one and two points short — and 82.7%
+overall. `src/validator.c` at 84.6% is the one security-tier file still
+under its 85% floor, so that floor is reported rather than enforced until
+it is first cleared; every other file's floor is a hard gate. The rule is
 unchanged: a file or tier dropping more than two points below its recorded
 figure fails, and so does a file slipping back under a floor it has reached.
 
-Four things about the measurement, each of which has cost a wrong number:
+Two tiers short of target is not a regression in the tests. It is what the
+tests were always worth: the previous figures (security 91.2, transaction
+85.6, 85.1% overall) were measured on an optimised build and flattered the
+tree by about 2.3 points.
+
+Seven things about the measurement, each of which has cost a wrong number:
 
 - **A coverage build needs its own build directory.** A `CFLAGS` change does not
   force a recompile, so pointing `--enable-coverage` at an existing tree leaves
-  it uninstrumented and reports zeroes — or worse, something stale.
+  it uninstrumented and reports zeroes — or worse, something stale. Note the
+  source directory must *not* itself be configured, or configure refuses the
+  VPATH build ("source directory already configured"); `make distclean` first,
+  or do the ordinary build out of tree as well.
+- **`-O0` has to be forced, not merely requested.** Automake emits
+  `$(target_CFLAGS) $(CFLAGS)`, so `CFLAGS` lands last and gcc takes the last
+  `-O` it is given — and `AC_PROG_CC` defaults `CFLAGS` to `-g -O2`, while
+  `dpkg-buildpackage` exports an `-O2` of its own. Every compile line therefore
+  read `-O0 -g --coverage -g -O2` and the numbers were measured on an optimised
+  build for as long as the target existed. configure.ac now strips the
+  optimisation level out of `CFLAGS` when coverage is enabled. It moved the
+  overall figure by 2.3 points and the per-file denominators as well, since
+  merged and cloned basic blocks change which lines are countable at all.
+- **A package build must not hand the coverage tree its own flags.**
+  `dpkg-buildpackage` exports `-ffile-prefix-map=<srcdir>=.`, which rewrites the
+  source path recorded in each profile so that no `.gcda` maps back to a file
+  under `src/`. The report then merges every profile and attributes none of
+  them: each entry reads `0/0` and nothing errors. `debian/rules` gives the
+  coverage tree `CFLAGS="-O0 -g" CPPFLAGS= LDFLAGS=` for this reason.
 - **`test_abi_symbols.sh` skips itself** under coverage, via `AEPT_COVERAGE=1`
   from `AM_TESTS_ENVIRONMENT`. libgcov's runtime (`__gcov_dump`, `__gcov_master`,
   …) and `mangle_path` come out of `libgcov.a`, which is not built with
@@ -343,8 +369,8 @@ Four things about the measurement, each of which has cost a wrong number:
   more than it.
 
 Branch coverage is reported beside lines and never gated. It runs below
-lines (~13 points after the targeted branch push on the HTTP, update and
-install paths: 85.1 vs 72.5), and the gap sits where the error handling is — a tier whose lines climb while its
+lines (~10 points after the targeted branch push on the HTTP, update and
+install paths: 82.7 vs 72.2), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
