@@ -32,9 +32,10 @@ die() {
 
 usage() {
     cat <<EOF
-usage: $0 [--rebuild] [--shell] [-- CONFIGURE_ARGS...]
+usage: $0 [--rebuild] [--quiet] [--shell] [-- CONFIGURE_ARGS...]
 
   --rebuild   rebuild the container image even if it exists
+  --quiet     print only the summary, not the build and test output
   --shell     drop into a shell in the built tree instead of running the suite
   --          pass the remaining arguments to configure
 EOF
@@ -42,10 +43,12 @@ EOF
 
 REBUILD=no
 SHELL_MODE=no
+QUIET=no
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --rebuild) REBUILD=yes; shift ;;
+        --quiet)   QUIET=yes; shift ;;
         --shell)   SHELL_MODE=yes; shift ;;
         -h|--help) usage; exit 0 ;;
         --)        shift; break ;;
@@ -97,29 +100,65 @@ git ls-files -z --cached --others --exclude-standard \
 # PIPESTATUS, no [[ ]].
 BUILD='
 set -e
+exec 5>&1
+
+# Run a command with its output going to the terminal AND to a log,
+# returning the exit status of that command.  A plain pipe would return
+# the status of tee instead, and ash has no PIPESTATUS: fd 3 carries the
+# status out through the command substitution while fd 5 carries the
+# output to the real stdout.  The log is what the warning count and the
+# failure excerpts are read from afterwards.
+run_tee() {
+    _log=$1
+    shift
+    _rc=$( { { "$@" 2>&1; echo $? >&3; } | tee "$_log" >&5; } 3>&1 )
+    return "$_rc"
+}
+
+quiet() { [ "$QUIET" = yes ]; }
+step() { echo; echo "=== $* ==="; }
+
 mkdir -p /work
 tar -C /work -xf /src.tar
 cd /work
-autoreconf -i >/dev/null
+
+step autoreconf
+if quiet; then autoreconf -i >/dev/null 2>&1; else run_tee /tmp/autoreconf.log autoreconf -i; fi
+
 mkdir -p build
 cd build
-../configure $CONFIGURE_ARGS >/tmp/configure.log 2>&1 || {
-    tail -30 /tmp/configure.log
-    echo "configure failed" >&2
-    exit 1
-}
-make -j"$(nproc)" >/tmp/make.log 2>&1 || {
-    grep -E "error:" /tmp/make.log | head -30
-    echo "build failed" >&2
-    exit 1
-}
+
+step configure $CONFIGURE_ARGS
+if quiet; then
+    ../configure $CONFIGURE_ARGS >/tmp/configure.log 2>&1 || {
+        tail -30 /tmp/configure.log; echo "configure failed" >&2; exit 1; }
+else
+    run_tee /tmp/configure.log ../configure $CONFIGURE_ARGS || {
+        echo "configure failed" >&2; exit 1; }
+fi
+
+step make
+if quiet; then
+    make -j"$(nproc)" >/tmp/make.log 2>&1 || {
+        grep -E "error:" /tmp/make.log | head -30; echo "build failed" >&2; exit 1; }
+else
+    run_tee /tmp/make.log make -j"$(nproc)" || { echo "build failed" >&2; exit 1; }
+fi
+
 warnings=$(grep -c "warning:" /tmp/make.log || true)
+echo
 echo "built against musl: $warnings warnings"
 [ "$warnings" = 0 ] || grep "warning:" /tmp/make.log | head -20
 '
 
 CHECK='
-if make check >/tmp/check.log 2>&1; then rc=0; else rc=$?; fi
+step "make check"
+if quiet; then
+    if make check >/tmp/check.log 2>&1; then rc=0; else rc=$?; fi
+else
+    run_tee /tmp/check.log make check && rc=0 || rc=$?
+fi
+echo
 grep -E "^# (TOTAL|PASS|SKIP|FAIL|ERROR):" /tmp/check.log || true
 skipped=$(grep -E "^SKIP:" /tmp/check.log || true)
 [ -z "$skipped" ] || { echo; echo "$skipped"; }
@@ -153,4 +192,5 @@ fi
 exec docker run --rm $RUN_FLAGS \
     -v "$TARBALL:/src.tar:ro" \
     -e "CONFIGURE_ARGS=$*" \
+    -e "QUIET=$QUIET" \
     "$IMAGE" sh -c "$SCRIPT"
