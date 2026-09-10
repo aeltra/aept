@@ -7,6 +7,7 @@
 #ifndef INTERNAL_H_7BF97F
 #define INTERNAL_H_7BF97F
 
+#include <setjmp.h>
 #include <stdatomic.h>
 
 #include "aept/aept.h"
@@ -101,7 +102,52 @@ struct aept_ctx {
     int use_color;
     int config_loaded;
     int last_error; /* AEPT_ERR_*, meaningful right after a failed call */
+
+    /* Where an allocation failure lands.  See AEPT_OOM_ENTER below. */
+    jmp_buf oom_jmp;
+    int oom_armed;
 };
+
+/*
+ * The out-of-memory escape.
+ *
+ * The allocators cannot return NULL: 182 call sites do not check, and
+ * threading a failure through all of them is a rewrite rather than a
+ * change.  A library must not end its embedder's process either, so a
+ * failure unwinds to the public entry point, which reports
+ * AEPT_ERR_NOMEM through the failure channel it already has.
+ *
+ * The allocators find the context through the thread-local pointer the
+ * log macros already use, so no signature and no exported symbol
+ * changes.
+ *
+ * It does not unwind: longjmp() runs no cleanup, so the abandoned call
+ * leaks what it had taken.  It does not roll back: a failure mid
+ * transaction leaves the partial state exit() left, only the process
+ * survives to run recovery.  It does not nest: only the outermost entry
+ * point arms the jump, and the flag is cleared before returning so an
+ * allocation outside an API call never jumps into a dead frame.
+ *
+ * The jmp_buf lives in the context because a context is used by one
+ * thread at a time.  failval is what the entry point returns when the
+ * jump is taken -- -1 everywhere so far.
+ */
+#define AEPT_OOM_ENTER(ctx, failval)                                                               \
+    int _oom_outermost = !(ctx)->oom_armed;                                                        \
+    if (_oom_outermost) {                                                                          \
+        if (setjmp((ctx)->oom_jmp)) {                                                              \
+            (ctx)->oom_armed = 0;                                                                  \
+            (ctx)->last_error = AEPT_ERR_NOMEM;                                                    \
+            return failval;                                                                        \
+        }                                                                                          \
+        (ctx)->oom_armed = 1;                                                                      \
+    }
+
+#define AEPT_OOM_LEAVE(ctx)                                                                        \
+    do {                                                                                           \
+        if (_oom_outermost)                                                                        \
+            (ctx)->oom_armed = 0;                                                                  \
+    } while (0)
 
 /*
  * Absolute paths to the helpers aept execs.

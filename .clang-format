@@ -21,15 +21,13 @@
 # because the formatter then maintains comment columns -- doing that by hand is
 # what left include/aept/internal.h ragged after a rename.
 #
-# Written against clang-format 19, which is the floor the build depends on;
-# anything newer is accepted.  Nothing here needs that exact version -- what
-# matters is that the formatter agrees with the committed formatting, and
-# "make format-check" is an exact-output comparison, so a version that
-# disagrees fails loudly with a concrete diff rather than drifting quietly.
-# A removed option would likewise be a hard error ("unknown key"), never a
-# silent fall back to a default.  If a newer major ever does disagree, the
-# fix is a tree-wide "make format-all" with it and a commit, listed in
-# .git-blame-ignore-revs like the first one.
+# Written against clang-format 19, the floor the build depends on; newer is
+# accepted.  What matters is not the version but that the formatter agrees
+# with the committed formatting, and "make format-check" compares output
+# exactly, so one that disagrees fails loudly rather than drifting.  (A
+# removed option is a hard error too -- "unknown key", not a silent
+# default.)  If a newer major does disagree, the fix is a tree-wide "make
+# format-all" and a commit listed in .git-blame-ignore-revs.
 ---
 Language: Cpp
 BasedOnStyle: LLVM

@@ -40,7 +40,13 @@
 
 aept_ctx_t *aept_init(void)
 {
-    aept_ctx_t *ctx = aept_malloc(sizeof(*ctx));
+    /* Plain malloc: this is the call that creates the context, so there
+     * is no armed entry point to unwind to yet.  The NULL return is
+     * already part of the API. */
+    aept_ctx_t *ctx = malloc(sizeof(*ctx));
+
+    if (!ctx)
+        return NULL;
     memset(ctx, 0, sizeof(*ctx));
     ctx->lock_fd = -1;
     ctx->use_color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
@@ -79,7 +85,7 @@ void aept_cleanup(aept_ctx_t *ctx)
 
 /* ── Configuration ───────────────────────────────────────────────── */
 
-int aept_load_config(aept_ctx_t *ctx, const char *path)
+static int api_load_config(aept_ctx_t *ctx, const char *path)
 {
     char *root_override = ctx->config.offline_root;
     int r = 0;
@@ -117,16 +123,42 @@ int aept_load_config(aept_ctx_t *ctx, const char *path)
     return 0;
 }
 
-void aept_set_offline_root(aept_ctx_t *ctx, const char *path)
+int aept_load_config(aept_ctx_t *ctx, const char *path)
 {
-    free(ctx->config.offline_root);
-    ctx->config.offline_root = path ? aept_strdup(path) : NULL;
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_load_config(ctx, path);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
 }
 
-void aept_set_cache_dir(aept_ctx_t *ctx, const char *path)
+int aept_set_offline_root(aept_ctx_t *ctx, const char *path)
 {
+    char *copy;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    /* Copy before releasing: a failure unwinds out of here, and freeing
+     * first would leave the field dangling rather than unchanged. */
+    copy = path ? aept_strdup(path) : NULL;
+    free(ctx->config.offline_root);
+    ctx->config.offline_root = copy;
+    AEPT_OOM_LEAVE(ctx);
+    return 0;
+}
+
+int aept_set_cache_dir(aept_ctx_t *ctx, const char *path)
+{
+    char *copy;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    /* Copy before releasing: a failure unwinds out of here, and freeing
+     * first would leave the field dangling rather than unchanged. */
+    copy = path ? aept_strdup(path) : NULL;
     free(ctx->config.cache_dir);
-    ctx->config.cache_dir = path ? aept_strdup(path) : NULL;
+    ctx->config.cache_dir = copy;
+    AEPT_OOM_LEAVE(ctx);
+    return 0;
 }
 
 void aept_set_verbosity(aept_ctx_t *ctx, int level)
@@ -225,7 +257,7 @@ void aept_cancel(aept_ctx_t *ctx)
 
 /* ── Mutating operations ─────────────────────────────────────────── */
 
-int aept_update(aept_ctx_t *ctx)
+static int api_update(aept_ctx_t *ctx)
 {
     int r;
 
@@ -240,8 +272,18 @@ int aept_update(aept_ctx_t *ctx)
     return r;
 }
 
-int aept_install(aept_ctx_t *ctx, const char **names, int name_count, const char **local_paths,
-                 int local_count)
+int aept_update(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_update(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_install(aept_ctx_t *ctx, const char **names, int name_count,
+                       const char **local_paths, int local_count)
 {
     int r;
 
@@ -256,7 +298,18 @@ int aept_install(aept_ctx_t *ctx, const char **names, int name_count, const char
     return r;
 }
 
-int aept_upgrade(aept_ctx_t *ctx)
+int aept_install(aept_ctx_t *ctx, const char **names, int name_count, const char **local_paths,
+                 int local_count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_install(ctx, names, name_count, local_paths, local_count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_upgrade(aept_ctx_t *ctx)
 {
     int r;
 
@@ -271,7 +324,17 @@ int aept_upgrade(aept_ctx_t *ctx)
     return r;
 }
 
-int aept_remove(aept_ctx_t *ctx, const char **names, int count)
+int aept_upgrade(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_upgrade(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_remove(aept_ctx_t *ctx, const char **names, int count)
 {
     int r;
 
@@ -286,7 +349,17 @@ int aept_remove(aept_ctx_t *ctx, const char **names, int count)
     return r;
 }
 
-int aept_autoremove(aept_ctx_t *ctx)
+int aept_remove(aept_ctx_t *ctx, const char **names, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_remove(ctx, names, count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_autoremove(aept_ctx_t *ctx)
 {
     int r;
 
@@ -301,7 +374,17 @@ int aept_autoremove(aept_ctx_t *ctx)
     return r;
 }
 
-int aept_triggers(aept_ctx_t *ctx)
+int aept_autoremove(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_autoremove(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_triggers(aept_ctx_t *ctx)
 {
     int failures;
 
@@ -316,7 +399,17 @@ int aept_triggers(aept_ctx_t *ctx)
     return failures > 0 ? -1 : 0;
 }
 
-int aept_clean(aept_ctx_t *ctx)
+int aept_triggers(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_triggers(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_clean(aept_ctx_t *ctx)
 {
     int r;
 
@@ -331,7 +424,17 @@ int aept_clean(aept_ctx_t *ctx)
     return r;
 }
 
-int aept_pin(aept_ctx_t *ctx, const char **specs, int count)
+int aept_clean(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_clean(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_pin(aept_ctx_t *ctx, const char **specs, int count)
 {
     int i, r = 0;
     int solver_ready = 0;
@@ -377,7 +480,17 @@ int aept_pin(aept_ctx_t *ctx, const char **specs, int count)
     return r;
 }
 
-int aept_unpin(aept_ctx_t *ctx, const char **names, int count)
+int aept_pin(aept_ctx_t *ctx, const char **specs, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_pin(ctx, specs, count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_unpin(aept_ctx_t *ctx, const char **names, int count)
 {
     int i, r = 0;
 
@@ -389,7 +502,17 @@ int aept_unpin(aept_ctx_t *ctx, const char **names, int count)
     return r;
 }
 
-int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
+int aept_unpin(aept_ctx_t *ctx, const char **names, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_unpin(ctx, names, count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_mark_auto(aept_ctx_t *ctx, const char **names, int count)
 {
     int i, r = 0;
 
@@ -408,7 +531,17 @@ int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
     return r;
 }
 
-int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
+int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_mark_auto(ctx, names, count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_mark_manual(aept_ctx_t *ctx, const char **names, int count)
 {
     int i, r = 0;
 
@@ -427,9 +560,29 @@ int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
     return r;
 }
 
-int aept_mark_manual_all(aept_ctx_t *ctx)
+int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_mark_manual(ctx, names, count);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+static int api_mark_manual_all(aept_ctx_t *ctx)
 {
     return aept_status_clear_auto(ctx);
+}
+
+int aept_mark_manual_all(aept_ctx_t *ctx)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_mark_manual_all(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
 }
 
 /* ── Query helpers ───────────────────────────────────────────────── */
@@ -542,8 +695,8 @@ static int cmp_api_list_entry(const void *a, const void *b)
     return strcmp(ea->name, eb->name);
 }
 
-int aept_list(aept_ctx_t *ctx, const char *pattern, int filter_installed, int filter_upgradable,
-              aept_pkg_list_t *out)
+static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
+                    int filter_upgradable, aept_pkg_list_t *out)
 {
     Pool *pool;
     Id p;
@@ -635,6 +788,17 @@ cleanup:
     return r;
 }
 
+int aept_list(aept_ctx_t *ctx, const char *pattern, int filter_installed, int filter_upgradable,
+              aept_pkg_list_t *out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_list(ctx, pattern, filter_installed, filter_upgradable, out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
 void aept_pkg_list_free(aept_pkg_list_t *list)
 {
     int i;
@@ -653,7 +817,7 @@ void aept_pkg_list_free(aept_pkg_list_t *list)
 
 /* ── Query: show ─────────────────────────────────────────────────── */
 
-int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
+static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     Pool *pool;
     Id name_id, p;
@@ -732,6 +896,16 @@ cleanup:
     return r;
 }
 
+int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_show(ctx, name, out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
 void aept_pkg_info_free(aept_pkg_info_t *info)
 {
     if (!info)
@@ -756,7 +930,7 @@ void aept_pkg_info_free(aept_pkg_info_t *info)
 
 /* ── Query: files ────────────────────────────────────────────────── */
 
-int aept_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out)
+static int api_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out)
 {
     char *list_path = NULL;
     FILE *fp;
@@ -812,6 +986,16 @@ int aept_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_
     return 0;
 }
 
+int aept_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_files(ctx, name, paths_out, count_out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
 /* ── Query: owns ─────────────────────────────────────────────────── */
 
 static const char *strip_leading(const char *p)
@@ -831,7 +1015,7 @@ static size_t owns_path_len(const char *p)
     return len;
 }
 
-int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out)
+static int api_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out)
 {
     DIR *dir;
     struct dirent *ent;
@@ -920,9 +1104,19 @@ int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_
     return count > 0 ? 0 : 1;
 }
 
+int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_owns(ctx, path, owners_out, count_out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
 /* ── Query: architectures ────────────────────────────────────────── */
 
-int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
+static int api_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
 {
     int i;
 
@@ -942,4 +1136,14 @@ int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
     }
 
     return 0;
+}
+
+int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_architectures(ctx, archs_out, count_out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
 }

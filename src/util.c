@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,34 +25,45 @@
 #include "aept/msg.h"
 #include "aept/util.h"
 
+/*
+ * Inside a public entry point an allocation failure unwinds there
+ * (AEPT_OOM_ENTER in internal.h) and is reported as AEPT_ERR_NOMEM.
+ * Outside one there is nowhere to unwind to, so it stays fatal: the
+ * CLI's own allocations in main.c, and anything before aept_init().
+ */
+static void oom(void)
+{
+    struct aept_ctx *ctx = aept_log_get_ctx();
+
+    if (ctx && ctx->oom_armed)
+        longjmp(ctx->oom_jmp, 1);
+
+    fprintf(stderr, "aept: out of memory\n");
+    exit(EXIT_FAILURE);
+}
+
 void *aept_malloc(size_t size)
 {
     /* malloc(0) may return NULL on some libc implementations */
     void *p = malloc(size ? size : 1);
-    if (!p) {
-        fprintf(stderr, "aept: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
+    if (!p)
+        oom();
     return p;
 }
 
 void *aept_realloc(void *ptr, size_t size)
 {
     void *p = realloc(ptr, size);
-    if (!p) {
-        fprintf(stderr, "aept: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
+    if (!p)
+        oom();
     return p;
 }
 
 char *aept_strdup(const char *s)
 {
     char *p = strdup(s);
-    if (!p) {
-        fprintf(stderr, "aept: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
+    if (!p)
+        oom();
     return p;
 }
 
@@ -64,10 +76,8 @@ int aept_asprintf(char **strp, const char *fmt, ...)
     r = vasprintf(strp, fmt, ap);
     va_end(ap);
 
-    if (r < 0) {
-        fprintf(stderr, "aept: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
+    if (r < 0)
+        oom();
 
     return r;
 }

@@ -76,8 +76,13 @@ static aept_ctx_t *init_aept(void)
 
     g_ctx = ctx;
 
-    if (offline_root)
-        aept_set_offline_root(ctx, offline_root);
+    /* g_ctx first: handlers are installed before any command runs, so a
+     * SIGINT here would hand aept_cancel() a freed context. */
+    if (offline_root && aept_set_offline_root(ctx, offline_root) < 0) {
+        g_ctx = NULL;
+        aept_cleanup(ctx);
+        return NULL;
+    }
 
     cf = resolve_conf();
 
@@ -106,8 +111,11 @@ static aept_ctx_t *init_aept(void)
      * offline-root prefixing done by that call does not touch it: the
      * CLI value is a host path and must remain literal.
      */
-    if (cache_dir_override)
-        aept_set_cache_dir(ctx, cache_dir_override);
+    if (cache_dir_override && aept_set_cache_dir(ctx, cache_dir_override) < 0) {
+        g_ctx = NULL;
+        aept_cleanup(ctx);
+        return NULL;
+    }
 
     aept_set_verbosity(ctx, AEPT_LOG_INFO + verbose_count);
 

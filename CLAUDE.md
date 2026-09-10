@@ -98,7 +98,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
-exports **35** symbols: the 32 in `aept.h`, plus `aept_log()`,
+exports **36** symbols: the 33 in `aept.h`, plus `aept_log()`,
 `aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
 `libaept` like any other consumer. Before this it exported 139, including every
 internal helper, and `src/libfetch/` stayed hidden only because its names
@@ -126,6 +126,12 @@ in `src/Makefile.am`:
 - **added** → **passes**, with a note. An addition breaks no existing caller.
   It needs `minor++, revision = 0` before release and an `abi-update` so it is
   guarded from then on.
+
+Read the diff before believing the verdict. Appending an enumerator reads as
+**changed**, because the baseline records declarations as text, but is an
+addition: the earlier enumerators keep their values and the enum's size is
+unchanged, so `minor++` and `abi-update`, as `AEPT_ERR_NOMEM` did at `0:4:0`.
+One *inserted* or *renumbered* is a break.
 
 Two further checks hold regardless of the baseline: the exported set must equal
 exactly what `AEPT_API` marks (so neither a leaked internal nor a declared-but-
@@ -183,7 +189,9 @@ The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
 - Autotools config: `#include <config.h>`
 - Functions return 0 on success, -1 on error
 - Error cleanup via `goto cleanup` pattern
-- OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`, `aept_asprintf()`
+- OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`,
+  `aept_asprintf()`. They never return NULL, so no call site checks — see
+  **The out-of-memory escape** for where a failure goes instead
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
 - License: MIT; file headers include SPDX and copyright. **Generated files are
@@ -299,20 +307,18 @@ is in `tests/coverage.tiers` itself.
 `make coverage-check` is a **ratchet against `tests/coverage.baseline`**, not a
 gate against the tier targets — it was built when most tiers were well short of
 target, and a check that is red from the first day is a check that gets ignored.
-The figures below are the first ones measured at a real `-O0` (see the
-flag-ordering note further down): plumbing and CLI are over target at 82.0
-and 74.5 against a 60 cap, **security is 89.1 against a 90 target and
-transaction 83.5 against 85** — one and two points short — and 82.7%
-overall. `src/validator.c` at 84.6% is the one security-tier file still
+The figures are measured at `-O0` (see the flag-ordering note further
+down; an optimised build reads about 2.3 points higher and is wrong).
+Plumbing and CLI are over target at 82.0 and 74.5 against a 60 cap,
+**security is 89.1 against a 90 target and transaction 83.5 against 85** —
+one and two points short — and 82.7% overall. `src/validator.c` at 84.6% is the one security-tier file still
 under its 85% floor, so that floor is reported rather than enforced until
 it is first cleared; every other file's floor is a hard gate. The rule is
 unchanged: a file or tier dropping more than two points below its recorded
 figure fails, and so does a file slipping back under a floor it has reached.
 
-Two tiers short of target is not a regression in the tests. It is what the
-tests were always worth: the previous figures (security 91.2, transaction
-85.6, 85.1% overall) were measured on an optimised build and flattered the
-tree by about 2.3 points.
+The two tiers short of target are short because the measurement is honest,
+not because tests were lost.
 
 Seven things about the measurement, each of which has cost a wrong number:
 
@@ -399,6 +405,38 @@ All three `fork()` sites are async-signal-safe in the child: `aept_system()` and
 Not verified: OpenSSL's self-initialisation, and libsolv/libarchive safety for independent objects. Both are relied upon; neither is tested here.
 
 A consequence worth knowing: the cache limits (4 connections, 2 per host) are now *per context*, not per process, so N contexts can hold up to 4N idle sockets.
+
+**The out-of-memory escape.** The allocators cannot return NULL: 182 call
+sites do not check, and threading a failure through all of them is a rewrite
+rather than a change. But a library must not end its embedder's process
+either, so a failure **unwinds to the public entry point**, which reports
+`AEPT_ERR_NOMEM` through the failure channel it already had. They find the
+context through **the same thread-local pointer the log macros read**, so no
+signature changed. `aept_init()` is the exception and needs no mechanism: it
+creates the context, so there is nothing to unwind to, and its `NULL` return
+was always part of the API.
+
+`aept_set_offline_root()` and `aept_set_cache_dir()` **return `int`** — the
+only setters that do, being the only ones that allocate. `aept_last_error()`
+alone does not serve here: the header documents that field for a call that
+*returned non-zero*, which a `void` function never does, and
+`aept_download()` resets it on every transfer. A failure keeps the previous
+value, so a caller that ignores the result carries on with the path it had.
+
+Only the outermost entry point arms the jump (`AEPT_OOM_ENTER` /
+`AEPT_OOM_LEAVE`), so a nested call cannot overwrite a live `jmp_buf`, and
+the flag is cleared before returning so an allocation outside any API call —
+the CLI's own three in `main.c` — finds nothing armed and stays fatal. It
+**does not unwind** (`longjmp()` runs no cleanup, so the abandoned call
+leaks) and **does not roll back** (a mid-transaction failure leaves the
+partial state `exit()` left, only the process survives to run recovery).
+
+This is why **nothing in `msg.c` may allocate** — it is the path the failure
+is reported along. `tests/test_oom.c` holds the contract down by wrapping the
+allocators (`-Wl,--wrap`) and failing the *n*-th allocation of a call for
+every *n*, which catches a path reporting the failure somewhere other than
+the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
+`calloc()` at `-O2`, and `aept_init()` is that shape.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 

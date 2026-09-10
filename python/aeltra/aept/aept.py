@@ -25,6 +25,20 @@ class AeptTimeout(AeptError):
     """
 
 
+class AeptNoMemory(AeptError, MemoryError):
+    """Raised when libaept could not allocate.
+
+    Inherits from both, so ``except AeptError`` catches every libaept
+    failure and ``except MemoryError`` catches this alongside any other
+    allocation failure.
+
+    The call changed nothing observable, but does not free what it had
+    already taken: libaept unwinds to the entry point rather than ending
+    the process, and C runs no destructors on the way out.  Retrying is
+    reasonable; retrying in a loop is not.
+    """
+
+
 # --- Enums ----------------------------------------------------------------
 
 class Flag(IntEnum):
@@ -162,8 +176,11 @@ class Aept:
             self._pending_exc = None
             raise exc_info[1].with_traceback(exc_info[2])
         if rc == -1:
-            if lib.aept_last_error(self._ctx) == lib.AEPT_ERR_TIMEOUT:
+            err = lib.aept_last_error(self._ctx)
+            if err == lib.AEPT_ERR_TIMEOUT:
                 raise AeptTimeout(msg + ": timed out")
+            if err == lib.AEPT_ERR_NOMEM:
+                raise AeptNoMemory(msg + ": out of memory")
             raise AeptError(msg)
         return rc
 
@@ -174,7 +191,8 @@ class Aept:
                    "aept_load_config() failed")
 
     def set_offline_root(self, path: Optional[str]):
-        lib.aept_set_offline_root(self._ctx, str_to_c(path))
+        self._call(lib.aept_set_offline_root(self._ctx, str_to_c(path)),
+                   "aept_set_offline_root() failed")
 
     def set_cache_dir(self, path: Optional[str]):
         """Override the cache directory verbatim.
@@ -183,7 +201,8 @@ class Aept:
         here is not prefixed with the offline root -- it is treated as a
         host path.  Pass ``None`` to clear a prior override.
         """
-        lib.aept_set_cache_dir(self._ctx, str_to_c(path))
+        self._call(lib.aept_set_cache_dir(self._ctx, str_to_c(path)),
+                   "aept_set_cache_dir() failed")
 
     def set_verbosity(self, level: int):
         lib.aept_set_verbosity(self._ctx, int(level))

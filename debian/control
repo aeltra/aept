@@ -21,7 +21,7 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 
-Package: libaept0
+Package: libaept1
 Section: libs
 Architecture: any
 Multi-Arch: same
@@ -35,7 +35,7 @@ Package: libaept-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libaept0 (= ${binary:Version}), ${misc:Depends}
+Depends: libaept1 (= ${binary:Version}), ${misc:Depends}
 Description: Development files for libaept
  This package contains the header files and development symlinks
  needed to build applications against libaept.
@@ -53,7 +53,7 @@ Description: Minimal package manager for .aeltra packages
 Package: python3-aept
 Section: python
 Architecture: all
-Depends: ${python3:Depends}, ${misc:Depends}, libaept0 (>= ${source:Version}), python3-cffi
+Depends: ${python3:Depends}, ${misc:Depends}, libaept1 (>= ${source:Version}), python3-cffi
 Description: Python bindings for libaept
  python3-aept provides a Pythonic interface to the libaept package
  management library using CFFI ABI mode. It enables Python applications

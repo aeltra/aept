@@ -68,7 +68,7 @@ Makefile
 /debian/debhelper-build-stamp
 /debian/files
 /debian/libaept-dev/
-/debian/libaept0/
+/debian/libaept*/
 /debian/tmp/
 
 # Python

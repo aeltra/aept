@@ -39,7 +39,7 @@
 # The 32 in aept.h, plus the three the CLI needs because it links libaept
 # like any other consumer: aept_log(), aept_malloc(), aept_asprintf().
 
-enum:AEPT_ERR_NONE: enum { AEPT_ERR_NONE = 0, AEPT_ERR_GENERAL, AEPT_ERR_TIMEOUT, AEPT_ERR_TRIGGER, };
+enum:AEPT_ERR_NONE: enum { AEPT_ERR_NONE = 0, AEPT_ERR_GENERAL, AEPT_ERR_TIMEOUT, AEPT_ERR_TRIGGER, AEPT_ERR_NOMEM, };
 enum:AEPT_FLAG_FORCE_DEPENDS: enum { AEPT_FLAG_FORCE_DEPENDS, AEPT_FLAG_DOWNLOAD_ONLY, AEPT_FLAG_NOACTION, AEPT_FLAG_ALLOW_DOWNGRADE, AEPT_FLAG_REINSTALL, AEPT_FLAG_NO_CACHE, AEPT_FLAG_FORCE_CONFNEW, AEPT_FLAG_FORCE_CONFOLD, AEPT_FLAG_PURGE, AEPT_FLAG_NON_INTERACTIVE, AEPT_FLAG_CHECK_SIGNATURE, AEPT_FLAG_IGNORE_UID, AEPT_FLAG_KEEP_GOING, };
 enum:AEPT_LOG_ERROR: enum { AEPT_LOG_ERROR = 0, AEPT_LOG_WARNING = 1, AEPT_LOG_INFO = 2, AEPT_LOG_DEBUG = 3, };
 func:aept_architectures: AEPT_EXPORT int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
@@ -65,13 +65,13 @@ func:aept_pin: AEPT_EXPORT int aept_pin(aept_ctx_t *ctx, const char **specs, int
 func:aept_pkg_info_free: AEPT_EXPORT void aept_pkg_info_free(aept_pkg_info_t *info);
 func:aept_pkg_list_free: AEPT_EXPORT void aept_pkg_list_free(aept_pkg_list_t *list);
 func:aept_remove: AEPT_EXPORT int aept_remove(aept_ctx_t *ctx, const char **names, int count);
-func:aept_set_cache_dir: AEPT_EXPORT void aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
+func:aept_set_cache_dir: AEPT_EXPORT int aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
 func:aept_set_confirm_fn: AEPT_EXPORT void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
 func:aept_set_display_fn: AEPT_EXPORT void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);
 func:aept_set_flag: AEPT_EXPORT void aept_set_flag(aept_ctx_t *ctx, int flag, int value);
 func:aept_set_log_fn: AEPT_EXPORT void aept_set_log_fn(aept_ctx_t *ctx, aept_log_fn fn, void *userdata);
 func:aept_set_network_timeout: AEPT_EXPORT void aept_set_network_timeout(aept_ctx_t *ctx, int seconds);
-func:aept_set_offline_root: AEPT_EXPORT void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
+func:aept_set_offline_root: AEPT_EXPORT int aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 func:aept_set_verbosity: AEPT_EXPORT void aept_set_verbosity(aept_ctx_t *ctx, int level);
 func:aept_show: AEPT_EXPORT int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
 func:aept_triggers: AEPT_EXPORT int aept_triggers(aept_ctx_t *ctx);

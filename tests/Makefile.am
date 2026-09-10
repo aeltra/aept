@@ -10,7 +10,8 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
-    test_url_parse test_config_values test_verify test_fetch_internals
+    test_url_parse test_config_values test_verify test_fetch_internals \
+    test_oom
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
 
@@ -275,3 +276,19 @@ AM_TESTS_ENVIRONMENT += AEPT_COVERAGE=1; export AEPT_COVERAGE;
 endif
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)
+
+# The out-of-memory escape.  --wrap lets the test fail a chosen allocation
+# and see what libaept does about it.
+#
+# All five are needed.  strdup and vasprintf allocate inside libc, where a
+# wrapped malloc is never consulted, and they are 129 of the 182 call
+# sites; calloc is there because gcc rewrites malloc()+memset(0) into
+# calloc() at -O2, which is the shape of aept_init().
+#
+# -static as elsewhere: --wrap acts at link time.
+test_oom_SOURCES = test_oom.c
+test_oom_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_oom_LDADD = $(top_builddir)/src/libaept.la
+test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
+    -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
+    -Wl,--wrap=strdup -Wl,--wrap=vasprintf

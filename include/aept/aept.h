@@ -48,7 +48,10 @@ AEPT_API void aept_cleanup(aept_ctx_t *ctx);
 /* --- Configuration ------------------------------------------------------- */
 
 AEPT_API int aept_load_config(aept_ctx_t *ctx, const char *path);
-AEPT_API void aept_set_offline_root(aept_ctx_t *ctx, const char *path);
+/* 0, or -1 when the copy could not be allocated -- the only failure,
+ * and the reason these two setters return a value where the others do
+ * not.  The previous value is kept on failure, not cleared. */
+AEPT_API int aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 
 /*
@@ -60,7 +63,7 @@ AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
  * from a config file living inside a target are relative to that
  * target.  Pass NULL to clear a prior override.
  */
-AEPT_API void aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
+AEPT_API int aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
 
 /*
  * Seconds a single network wait may take before the transfer is
@@ -92,6 +95,10 @@ enum {
      * because the call itself returns 0 -- the transaction's own work
      * is complete and pretending otherwise would be the lie. */
     AEPT_ERR_TRIGGER,
+    /* An allocation failed.  The call changed nothing observable, but
+     * does not recover what it had already taken: libaept unwinds to
+     * the entry point rather than ending the process. */
+    AEPT_ERR_NOMEM,
 };
 
 /* Why the most recent call on this context failed.  Meaningful

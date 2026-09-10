@@ -56,12 +56,20 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 #   any interface removed or changed             major++,  minor = revision = 0
 #
 # That last line renames the soname, so old binaries refuse to load the
-# new library rather than dying on a missing symbol.  0:3:0 is where
-# aept_set_cache_dir() put us (0:2:0 was aept_triggers() and
-# AEPT_ERR_TRIGGER; 0:1:0 was aept_set_network_timeout() and
-# aept_last_error()): added, nothing removed, so callers built against
-# libaept.so.0 keep working unrebuilt.
-libaept_la_LDFLAGS = -version-number 0:3:0 $(COVERAGE_LDFLAGS)
+# new library rather than dying on a missing symbol.
+#
+# 1:0:0  aept_set_offline_root() and aept_set_cache_dir() return int
+#        instead of void.  A changed interface, so the binary package
+#        becomes libaept1.
+# 0:4:0  AEPT_ERR_NOMEM.  test_abi_symbols.sh reports the enum as
+#        changed, because the baseline records declarations as text, but
+#        this is an addition: the earlier enumerators keep 0..3 and the
+#        enum's size is unchanged.  An enumerator inserted or renumbered
+#        would be a real break.
+# 0:3:0  aept_set_cache_dir()
+# 0:2:0  aept_triggers(), AEPT_ERR_TRIGGER
+# 0:1:0  aept_set_network_timeout(), aept_last_error()
+libaept_la_LDFLAGS = -version-number 1:0:0 $(COVERAGE_LDFLAGS)
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS) \

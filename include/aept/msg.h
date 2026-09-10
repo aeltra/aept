@@ -18,6 +18,10 @@ enum aept_log_level { AEPT_ERROR, AEPT_WARNING, AEPT_INFO, AEPT_DEBUG };
  * cleared by aept_cleanup().  Immutable after aept_init() returns. */
 void aept_log_set_ctx(struct aept_ctx *ctx);
 
+/* The same pointer back, NULL outside a context.  The allocators in
+ * util.c use it to find where a failure unwinds to. */
+struct aept_ctx *aept_log_get_ctx(void);
+
 /* Exported: the aept_log_*() macros below expand to this, and the CLI
  * links against libaept like any other consumer. */
 AEPT_API void aept_log(int level, const char *file, int line, const char *fmt, ...)

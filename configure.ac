@@ -32,14 +32,10 @@ AC_CHECK_LIB([solvext], [repo_add_debpackages], [:],
 # clang-format, for the format targets only.  Not required to build.
 #
 # The major is recorded so the format targets can refuse one that is too
-# old.  19 is a floor, not a pin: nothing in .clang-format needs that exact
-# version, and a newer one that formatted this tree differently would fail
-# format-check with a concrete diff rather than drift quietly.  Older ones
-# are refused because they predate settings the file uses.
-#
-# The unversioned binary is preferred, since that is what the build
-# dependency names and it tracks the distribution's default; the versioned
-# one is a fallback for a machine that has it without the metapackage.
+# old.  19 is a floor, not a pin: a newer one that formatted this tree
+# differently fails format-check with a concrete diff rather than drifting
+# quietly.  The unversioned binary is preferred because that is what the
+# build dependency names; the versioned one is a fallback.
 AC_CHECK_PROGS([CLANG_FORMAT], [clang-format clang-format-19], [no])
 AC_SUBST([CLANG_FORMAT])
 
@@ -78,22 +74,17 @@ AC_ARG_ENABLE([coverage],
 if test "$enable_coverage" = yes; then
     COVERAGE_CFLAGS="-O0 -g --coverage"
     COVERAGE_LDFLAGS="--coverage"
-    # ... but per-target CFLAGS alone are not enough to make -O0 stick.
-    # Automake emits "$(target_CFLAGS) $(CFLAGS)", so CFLAGS lands LAST on
-    # every command line, and gcc takes the last -O it is given.  AC_PROG_CC
-    # defaults CFLAGS to "-g -O2" when it is unset, and dpkg-buildpackage
-    # exports an -O2 of its own, so the -O0 above was being overridden in
-    # both the documented developer workflow and the package build: every
-    # compile line read "-O0 -g --coverage -g -O2" and the coverage figures
-    # were measured on an OPTIMISED build.  That is the thing the paragraph
-    # above says must not happen, and it moved the numbers by 2.3 points
-    # overall -- it also moves the denominators, because merged and cloned
-    # basic blocks change which lines are countable at all.
+    # ... but per-target CFLAGS alone do not make -O0 stick.  Automake
+    # emits "$(target_CFLAGS) $(CFLAGS)", so CFLAGS lands last and gcc
+    # takes the last -O; AC_PROG_CC defaults it to "-g -O2" and
+    # dpkg-buildpackage exports its own.  Without the strip below, every
+    # compile line reads "-O0 -g --coverage -g -O2" and the figures come
+    # from an optimised build: 2.3 points out, denominators included,
+    # since merged and cloned blocks change which lines are countable.
     #
-    # Only the optimisation level is removed, and only where it stands as
-    # its own word, so everything else the user asked for still reaches the
-    # compiler.  Replacing CFLAGS wholesale would discard their -march, -D
-    # and warning flags along with it.
+    # Only the optimisation level is removed, and only as its own word:
+    # replacing CFLAGS wholesale would discard the user's -march, -D and
+    # warning flags with it.
     CFLAGS=`echo "$CFLAGS" | sed -e 's/\(^\| \)-O[[0-9a-z]]*/\1/g'`
     if test "$PYTHON" = no; then
         AC_MSG_ERROR([--enable-coverage needs python3 for the aggregator])

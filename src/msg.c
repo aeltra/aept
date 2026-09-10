@@ -19,6 +19,11 @@
 /* Thread-local logging context pointer.  Each thread that calls aept_init()
  * gets its own context, enabling concurrent contexts on different offline
  * roots in different threads. */
+/*
+ * Nothing in this file may allocate: it is the path an out-of-memory
+ * failure is reported along (internal.h), so an aept_asprintf() here
+ * would re-enter the allocator that has just failed.
+ */
 static _Thread_local struct aept_ctx *aept_log_ctx;
 
 static const char *level_name[] = {[AEPT_ERROR] = "error",
@@ -34,6 +39,11 @@ static const char *level_color[] = {[AEPT_ERROR] = "\033[31m",
 void aept_log_set_ctx(struct aept_ctx *ctx)
 {
     aept_log_ctx = ctx;
+}
+
+struct aept_ctx *aept_log_get_ctx(void)
+{
+    return aept_log_ctx;
 }
 
 void aept_log(int level, const char *file, int line, const char *fmt, ...)

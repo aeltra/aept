@@ -84,19 +84,16 @@ FORMAT_CHANGED = \
 
 FORMAT_ALL = find $(FORMAT_DIRS) \( -name '*.c' -o -name '*.h' \) -print | sort
 
-# 19 is a floor, not a pin.  Nothing in .clang-format needs that exact
-# major: what the check actually requires is a formatter that agrees with
-# the committed formatting, and format-check compares output exactly, so a
-# newer one that disagreed would fail with a concrete diff.  Older ones are
-# refused outright because they predate settings the file uses -- and an
-# option a version does not know is a hard error from clang-format
-# ("unknown key"), not a quiet fall back to some default.
+# 19 is a floor, not a pin.  What the check requires is a formatter that
+# agrees with the committed formatting, and format-check compares output
+# exactly, so a newer one that disagreed fails with a concrete diff -- and
+# an option a version does not know is a hard error ("unknown key"), not a
+# quiet fall back to a default.  Older ones predate settings the file uses.
 #
-# Too old is an error rather than a skip: the package build declares
-# "clang-format (>= 1:19~) <!nocheck>" in Build-Depends, so when the checks
-# run at all a usable formatter is present by construction.  Skipping
-# quietly would turn a satisfied build dependency into a check that stopped
-# happening without saying so.
+# Too old is an error rather than a skip: Build-Depends names
+# "clang-format (>= 1:19~) <!nocheck>", so when the checks run at all a
+# usable formatter is there by construction, and skipping quietly would
+# turn a satisfied build dependency into a check that stopped happening.
 CLANG_FORMAT_MIN_MAJOR = 19
 
 # Fail loudly rather than silently doing nothing.

@@ -3,6 +3,7 @@
 from .aept import (
     Aept,
     AeptError,
+    AeptNoMemory,
     AeptTimeout,
     Flag,
     LogLevel,
@@ -14,6 +15,7 @@ from .aept import (
 __all__ = [
     "Aept",
     "AeptError",
+    "AeptNoMemory",
     "AeptTimeout",
     "Flag",
     "LogLevel",
