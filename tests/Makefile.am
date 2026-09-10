@@ -213,7 +213,7 @@ dist_check_SCRIPTS = \
     test_triggers.sh \
     test_autoremove.sh \
     test_clean.sh \
-    test_mark.sh \
+    test_mark.sh test_option_order.sh \
     test_pin.sh \
     test_python.sh \
     test_tls_reject.sh \

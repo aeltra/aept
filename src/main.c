@@ -359,6 +359,35 @@ static void usage_print_architecture(FILE *out)
 
 /* ── per-command option tables ─────────────────────────────────────── */
 
+/*
+ * Two kinds of option parser here, and which kind a function is decides
+ * its optstring.
+ *
+ * A DISPATCHING parser hands the rest of the line to another parser, so
+ * it must stop at the first non-option.  Otherwise it scans on and meets
+ * options belonging to the inner parser: "aept mark manual --all" died
+ * in cmd_mark() that way, on an --all that was never its to read.
+ * main() and cmd_mark() are the two today; a sub-sub-command would add a
+ * third, and it must say so here.
+ *
+ * A LEAF parser owns the whole line, so it permutes: options may come
+ * before or after the operands, and "aept install curl --force-depends"
+ * means what it looks like.  Without that, getopt stops at "curl" and
+ * --force-depends reaches aept_install() as a package name.
+ *
+ * Both reset with optind = 0, never 1.  glibc re-reads the optstring
+ * only on a full reinitialisation, which is what 0 asks for; at 1 it
+ * silently reuses the ordering it derived for the previous parse, so the
+ * "+" below -- or its absence -- is never looked at, and every parser
+ * inherits main()'s.  musl re-reads on every call.  Each half needs the
+ * other: "+" with optind = 1 does nothing on glibc, and optind = 0
+ * without "+" would break the dispatchers there.  Together the two libcs
+ * agree; tests/test_option_order.sh pins that, and
+ * scripts/musl-build.sh is how the musl half gets run.
+ */
+#define OPTS_DISPATCH(s) "+" s
+#define OPTS_LEAF(s) s
+
 static struct option update_options[] = {
     {"help", no_argument, NULL, 'h'},
     {NULL,   0,           NULL, 0  }
@@ -465,8 +494,8 @@ static int cmd_update(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", update_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), update_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_update(stdout);
@@ -494,8 +523,8 @@ static int cmd_install(int argc, char *argv[])
     int keep_going = 0;
     int opt, r, rc;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("fdnh"), install_options, NULL)) != -1) {
         switch (opt) {
         case 'f':
             force_depends = 1;
@@ -598,8 +627,8 @@ static int cmd_autoremove(int argc, char *argv[])
     int keep_going = 0;
     int opt, r, rc;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "fnh", autoremove_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("fnh"), autoremove_options, NULL)) != -1) {
         switch (opt) {
         case 'f':
             force_depends = 1;
@@ -649,8 +678,8 @@ static int cmd_remove(int argc, char *argv[])
     int keep_going = 0;
     int opt, r, rc;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "fnh", remove_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("fnh"), remove_options, NULL)) != -1) {
         switch (opt) {
         case 'f':
             force_depends = 1;
@@ -707,8 +736,8 @@ static int cmd_upgrade(int argc, char *argv[])
     int keep_going = 0;
     int opt, r, rc;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "fdnh", install_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("fdnh"), install_options, NULL)) != -1) {
         switch (opt) {
         case 'f':
             force_depends = 1;
@@ -776,8 +805,8 @@ static int cmd_clean(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", clean_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), clean_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_clean(stdout);
@@ -810,8 +839,8 @@ static int cmd_triggers(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", triggers_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), triggers_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_triggers(stdout);
@@ -838,8 +867,8 @@ static int cmd_list(int argc, char *argv[])
     aept_pkg_list_t list;
     int opt, r, i;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", list_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), list_options, NULL)) != -1) {
         switch (opt) {
         case 0x100:
             filter_installed = 1;
@@ -897,8 +926,8 @@ static int cmd_show(int argc, char *argv[])
     aept_pkg_info_t info;
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", show_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), show_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_show(stdout);
@@ -985,8 +1014,8 @@ static int cmd_files(int argc, char *argv[])
     int count;
     int opt, r, i;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", files_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), files_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_files(stdout);
@@ -1030,8 +1059,8 @@ static int cmd_owns(int argc, char *argv[])
     int count;
     int opt, r, i;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", owns_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), owns_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_owns(stdout);
@@ -1072,8 +1101,8 @@ static int cmd_mark_manual(int argc, char *argv[])
     int all = 0;
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", mark_manual_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), mark_manual_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_mark(stdout);
@@ -1110,8 +1139,8 @@ static int cmd_mark_auto(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", mark_auto_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), mark_auto_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_mark(stdout);
@@ -1142,8 +1171,10 @@ static int cmd_mark(int argc, char *argv[])
     const char *action;
     int opt;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", mark_options, NULL)) != -1) {
+    /* Dispatching, so OPTS_DISPATCH: everything after the action word
+     * belongs to cmd_mark_manual() or cmd_mark_auto(). */
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_DISPATCH("h"), mark_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_mark(stdout);
@@ -1175,8 +1206,8 @@ static int cmd_pin(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), pin_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_pin(stdout);
@@ -1207,8 +1238,8 @@ static int cmd_unpin(int argc, char *argv[])
 {
     int opt, r;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", pin_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), pin_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_pin(stdout);
@@ -1241,8 +1272,8 @@ static int cmd_print_architecture(int argc, char *argv[])
     int count;
     int opt, r, i;
 
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "h", print_arch_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), print_arch_options, NULL)) != -1) {
         switch (opt) {
         case 'h':
             usage_print_architecture(stdout);
@@ -1293,7 +1324,8 @@ int main(int argc, char *argv[])
 
     setup_signals();
 
-    while ((opt = getopt_long(argc, argv, "+c:o:C:vh", global_options, NULL)) != -1) {
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_DISPATCH("c:o:C:vh"), global_options, NULL)) != -1) {
         switch (opt) {
         case 'c':
             conf_file = optarg;
