@@ -19,6 +19,7 @@ libaept_la_SOURCES = \
     owner_index.c \
     remove.c \
     update.c \
+    stanza.c \
     status.c \
     trigger.c \
     util.c \

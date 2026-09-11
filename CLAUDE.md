@@ -310,8 +310,8 @@ target, and a check that is red from the first day is a check that gets ignored.
 The figures are measured at `-O0` (see the flag-ordering note further
 down; an optimised build reads about 2.3 points higher and is wrong).
 **Every tier is at or over its target** — security 90.3 against 90,
-transaction 85.0 against 85, plumbing 83.6 against 80, CLI 79.9 against a
-60 cap — and 84.7% overall. **Every security-tier file is over its 85%
+transaction 85.0 against 85, plumbing 84.4 against 80, CLI 80.5 against a
+60 cap — and 85.0% overall. **Every security-tier file is over its 85%
 floor**, so all the floors are hard gates. The rule is unchanged: a file
 or tier dropping more than two points below its recorded figure fails, and
 so does a file slipping back under a floor it has reached.
@@ -381,7 +381,7 @@ Seven things about the measurement, each of which has cost a wrong number:
   more than it.
 
 Branch coverage is reported beside lines and never gated. It runs below
-lines (~11 points: 84.7 vs 73.5), and the gap sits where the error handling is — a tier whose lines climb while its
+lines (~11 points: 85.0 vs 73.6), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
@@ -460,6 +460,23 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 
   **Conditional GET.** The index request carries `If-None-Match` and `If-Modified-Since` when both are known, per RFC 9110 §13.1.3, and a `304` means keep what is on disk — no download, no re-verification, since it was verified when it was written. Packages are never revalidated: they are immutable and already checksummed. The validators live in `<lists_dir>/<name>.validator` (`validator.c`), the **first** per-source state file in the tree, as **opaque tokens echoed verbatim** — an ETag and an HTTP-date are equally unparsed, so there is no date parser anywhere in aept. That is the whole reason for a side file: apt keeps the validator in the cached file's mtime and is therefore forced through `time_t`, needing a parser *and* a generator, in a store any `cp` without `-a` resets. The record names the URL it was written for and is only sent back to that URL, or the same source fetched as `Packages.gz` instead of `InPackages.gz` would revalidate against the wrong document. It is written **last**, after the index has been verified and stored — a validator recorded for an index that was then rejected would earn a `304` and freeze the client on a document it never accepted. An **unsolicited `304` is a protocol error** in libfetch, on the same grounds as an unsolicited `206`: a request that asked no question gets no answer. **None of this is a freshness mechanism** — `ETag`, `Last-Modified` and `304` are all unsigned, a mirror answering "not modified" forever *is* the freeze attack, and only index.c's signed `Valid-Until` bounds it. `tests/test_update_conditional.sh` and `tests/test_validator.c` cover it.
 - **index.c** — the repository metadata stanza an index opens with (`Origin`, `Date`, `Valid-Until`) instead of a package. Timestamps are UTC and fixed width, so comparing two is `strcmp` and needs no date parsing. `aept_index_check_expiry()` runs at **index load time** (`install.c` and `api.c`), not at update time, and that placement is the point: the client this catches is one whose updates never arrive, and an attacker who simply drops the request leaves a client on a stale index forever where nothing on the update path can see it. `option check_index_expiry` decides whether expiry is fatal — default `0` (warn and use it anyway), because enforcing needs a re-signing job republishing on a timer, and without one every archive that stops receiving uploads expires and every client stops working. A deployment that runs such a job sets it to `1`; `install` then fails and `api.c` skips the source rather than aborting the whole query. An index carrying no `Valid-Until` is never refused, or repositories indexed before the field existed would break. **Rollback is not defended against**: `Date` is emitted and signed, but nothing compares it to the index already held. `tests/test_index_freshness.sh` covers the rest.
+- **stanza.c** — reads one field back out of a control stanza, for
+  `aept show` and nothing else. libsolv's pool is a *solving*
+  representation: it re-renders `libx (>= 1.0)` as `libx >= 1.0`, appends
+  every package's implicit `name = evr` to `Provides`, files Debian's
+  `Replaces` under `obsoletes` — where libsolv's own Debian reader lands
+  it as the *Conflicts* value or nowhere (`ext/repo_deb.c:549` compares
+  `idarraydata[k] == cid`, a tautology, so it pairs the two lists
+  positionally instead of intersecting them; still present in 0.7.39) —
+  and scales `Installed-Size` from kB into bytes. All correct for
+  solving, all wrong printed under a Debian field name, so display reads
+  the stanza the pool was built from: `{info_dir}/{name}.control` for an
+  installed version, `{lists_dir}/{repo}` for one a source offers, since
+  `query_load_repos()` names each repo after its source and that name is
+  the index's filename. Only `show` may do this — it is a linear scan per
+  package, the wrong shape for `list`, which must keep asking the pool.
+  The solver is still the right thing to *find* a package with; it is
+  only the wrong thing to *describe* one with.
 - **clearsign.c** — Splits a signify clearsigned envelope into message and signature. Splits at the **last** signature marker, because the envelope has no escaping and a package `Description` can contain a line that looks like one. The signature covers the index bytes exactly, trailing newline included.
 - **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.

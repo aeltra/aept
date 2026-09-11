@@ -10,7 +10,7 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
-    test_url_parse test_config_values test_verify test_fetch_internals \
+    test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
     test_oom
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
@@ -292,3 +292,13 @@ test_oom_LDADD = $(top_builddir)/src/libaept.la
 test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
     -Wl,--wrap=strdup -Wl,--wrap=vasprintf
+
+test_stanza_SOURCES = \
+    test_stanza.c \
+    $(top_srcdir)/src/stanza.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_stanza_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_stanza_LDADD = $(ARCHIVE_LIBS)
+test_stanza_LDFLAGS = $(COVERAGE_LDFLAGS)

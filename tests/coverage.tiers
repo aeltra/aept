@@ -62,6 +62,7 @@ file src/api.c                  plumbing
 file src/clean.c                plumbing
 file src/config.c               plumbing
 file src/msg.c                  plumbing
+file src/stanza.c               plumbing
 file src/util.c                 plumbing
 file src/libfetch/common.c      plumbing
 file src/libfetch/common.h      plumbing

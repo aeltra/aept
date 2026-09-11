@@ -31,6 +31,7 @@
 #include "aept/pin.h"
 #include "aept/remove.h"
 #include "aept/solver.h"
+#include "aept/stanza.h"
 #include "aept/status.h"
 #include "aept/trigger.h"
 #include "aept/update.h"
@@ -617,51 +618,6 @@ static int query_load_repos(aept_ctx_t *ctx)
     return 0;
 }
 
-static char *deparray_to_str(Pool *pool, Solvable *s, Id keyname, Id marker)
-{
-    Queue q;
-    int i;
-    size_t len;
-    char *result, *p;
-
-    queue_init(&q);
-    solvable_lookup_deparray(s, keyname, &q, marker);
-
-    if (q.count == 0) {
-        queue_free(&q);
-        return NULL;
-    }
-
-    len = 0;
-    for (i = 0; i < q.count; i++) {
-        if (i > 0)
-            len += 2;
-        len += strlen(pool_dep2str(pool, q.elements[i]));
-    }
-
-    result = malloc(len + 1);
-    if (!result) {
-        queue_free(&q);
-        return NULL;
-    }
-
-    p = result;
-    for (i = 0; i < q.count; i++) {
-        const char *dep = pool_dep2str(pool, q.elements[i]);
-        size_t dlen = strlen(dep);
-        if (i > 0) {
-            *p++ = ',';
-            *p++ = ' ';
-        }
-        memcpy(p, dep, dlen);
-        p += dlen;
-    }
-    *p = '\0';
-
-    queue_free(&q);
-    return result;
-}
-
 /* ── Query: list ─────────────────────────────────────────────────── */
 
 struct api_list_entry {
@@ -823,10 +779,29 @@ void aept_pkg_list_free(aept_pkg_list_t *list)
  * not the version on disk, and a Status line copied from the package
  * would claim the candidate was installed when it is not.
  */
-static void fill_info(Pool *pool, Solvable *s, aept_pkg_info_t *out)
+/*
+ * The file the solvable was read from: the status area for what is
+ * installed, the source's index for what is offered.  query_load_repos()
+ * names each repo after its source, and that name is the index's file
+ * name, so a solvable always leads back to its own stanza.
+ */
+static char *stanza_path(struct aept_ctx *ctx, Pool *pool, Solvable *s)
+{
+    char *path = NULL;
+
+    if (s->repo == pool->installed)
+        aept_asprintf(&path, "%s/%s.control", ctx->config.info_dir, pool_id2str(pool, s->name));
+    else if (s->repo && s->repo->name)
+        aept_asprintf(&path, "%s/%s", ctx->config.lists_dir, s->repo->name);
+
+    return path;
+}
+
+static void fill_info(struct aept_ctx *ctx, Pool *pool, Solvable *s, aept_pkg_info_t *out)
 {
     const char *str;
     unsigned int medianr;
+    char *path, *stanza = NULL;
 
     memset(out, 0, sizeof(*out));
 
@@ -835,13 +810,32 @@ static void fill_info(Pool *pool, Solvable *s, aept_pkg_info_t *out)
     out->architecture = strdup(pool_id2str(pool, s->arch));
     out->installed_size = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
 
-    out->depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, -SOLVABLE_PREREQMARKER);
-    out->pre_depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, SOLVABLE_PREREQMARKER);
-    out->recommends = deparray_to_str(pool, s, SOLVABLE_RECOMMENDS, 0);
-    out->suggests = deparray_to_str(pool, s, SOLVABLE_SUGGESTS, 0);
-    out->provides = deparray_to_str(pool, s, SOLVABLE_PROVIDES, -SOLVABLE_FILEMARKER);
-    out->conflicts = deparray_to_str(pool, s, SOLVABLE_CONFLICTS, 0);
-    out->replaces = deparray_to_str(pool, s, SOLVABLE_OBSOLETES, 0);
+    /*
+     * The relationship fields come from the stanza, not the pool: what
+     * the packager declared rather than what the solver made of it.
+     * libsolv drops the parentheses from "libx (>= 1.0)", appends every
+     * package's own "name = evr" to Provides, and files Debian's
+     * Replaces under obsoletes -- where it lands as the Conflicts value
+     * or nowhere at all.  Right for solving, wrong to print.
+     *
+     * A stanza that cannot be found leaves them NULL, and the field is
+     * simply not printed; that beats printing something else's value.
+     */
+    path = stanza_path(ctx, pool, s);
+    if (path) {
+        stanza = aept_stanza_find(path, out->name, out->version);
+        free(path);
+    }
+    if (stanza) {
+        out->depends = aept_stanza_field(stanza, "Depends");
+        out->pre_depends = aept_stanza_field(stanza, "Pre-Depends");
+        out->recommends = aept_stanza_field(stanza, "Recommends");
+        out->suggests = aept_stanza_field(stanza, "Suggests");
+        out->provides = aept_stanza_field(stanza, "Provides");
+        out->conflicts = aept_stanza_field(stanza, "Conflicts");
+        out->replaces = aept_stanza_field(stanza, "Replaces");
+        free(stanza);
+    }
 
     str = solvable_lookup_str(s, SOLVABLE_URL);
     out->homepage = str ? strdup(str) : NULL;
@@ -898,7 +892,7 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
     if (!s)
         goto not_found;
 
-    fill_info(pool, s, out);
+    fill_info(ctx, pool, s, out);
 
     r = 0;
     goto cleanup;
@@ -955,7 +949,7 @@ static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t 
              * same version: the Status line is the useful difference. */
             if (s->repo == pool->installed) {
                 aept_pkg_info_free(&out->entries[i]);
-                fill_info(pool, s, &out->entries[i]);
+                fill_info(ctx, pool, s, &out->entries[i]);
             }
             break;
         }
@@ -966,7 +960,7 @@ static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t 
             cap = cap ? cap * 2 : 4;
             out->entries = aept_realloc(out->entries, (size_t)cap * sizeof(*out->entries));
         }
-        fill_info(pool, s, &out->entries[out->count++]);
+        fill_info(ctx, pool, s, &out->entries[out->count++]);
     }
 
     if (out->count == 0)

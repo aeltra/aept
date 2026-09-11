@@ -27,11 +27,11 @@ new_root "$root"
 info=$root/var/lib/aept/info
 mkdir -p "$info"
 
-# Replaces is deliberately absent from the assertions below: libsolv's
-# Debian reader stores no obsoletes for a plain "Replaces:", and sets
-# them from Conflicts when both fields are present, so the line aept
-# prints is the Conflicts value rather than the Replaces one.  Asserting
-# that would enshrine it.
+# The fields below are asserted in the form the package declares them:
+# the parentheses of "libx (>= 1.0)", a Provides without the implicit
+# self-provide, and a Replaces that is the Replaces.  All three used to
+# come from libsolv's pool, which renders, appends and conflates for the
+# solver's benefit -- correct there, wrong under a Debian field name.
 #
 # An installed package carrying every optional field.  Written by hand:
 # a .control and a .list are just files, and going through an install
@@ -67,12 +67,13 @@ for field in \
     'Version: 2.1-3' \
     'Architecture: all' \
     'Installed-Size: 42 kB' \
-    'Depends: libx >= 1.0' \
+    'Depends: libx (>= 1.0)' \
     'Pre-Depends: libpre' \
     'Recommends: librec' \
     'Suggests: libsug' \
     'Provides: virtual-thing' \
     'Conflicts: libcon' \
+    'Replaces: librep' \
     'Homepage: https://example.invalid/showcase' \
     'Description: a one-line summary' \
     'Status: install ok installed'
@@ -82,6 +83,14 @@ do
 $out"
 done
 note "every field the package carries is printed"
+
+# libsolv adds "showcase = 2.1-3" to every package's Provides for its own
+# purposes.  That is not something the packager wrote, so it must not
+# appear under a field name that says they did.
+printf '%s\n' "$out" | grep -q '^Provides:.*showcase' \
+    && fail "the solver's implicit self-provide leaked into Provides:
+$out"
+note "Provides is what the package declared, without the self-provide"
 
 # The summary is the first line of Description; the rest follow it,
 # each indented by one space.  A package whose description went missing
