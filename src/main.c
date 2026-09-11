@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,14 +27,28 @@ static int verbose_count;
 
 /* ── signal handling ──────────────────────────────────────────────── */
 
-static aept_ctx_t *g_ctx; /* for signal handler only */
+/*
+ * Read by the signal handler, so atomic rather than a plain pointer: a
+ * handler may touch only a lock-free atomic or a volatile sig_atomic_t,
+ * and this is the same reason ctx->cancelled is _Atomic.
+ *
+ * It must be cleared before the context it names is freed, or a signal
+ * arriving between the free and process exit hands aept_cancel() memory
+ * that is gone.  cli_cleanup() below is the only thing that frees a
+ * context here, and clearing first is enough: a handler runs to
+ * completion against a suspended main thread, so it sees the pointer
+ * either wholly before or wholly after.
+ */
+static aept_ctx_t *_Atomic g_ctx;
 static volatile sig_atomic_t g_signum;
 
 static void signal_handler(int sig)
 {
+    aept_ctx_t *ctx = g_ctx;
+
     g_signum = sig;
-    if (g_ctx)
-        aept_cancel(g_ctx);
+    if (ctx)
+        aept_cancel(ctx);
 }
 
 static void setup_signals(void)
@@ -54,6 +69,14 @@ static void setup_signals(void)
 }
 
 /* ── shared helpers ───────────────────────────────────────────────── */
+
+/* Finish with a context: unpublish it before it is freed.  Every
+ * aept_cleanup() in this file goes through here. */
+static void cli_cleanup(aept_ctx_t *ctx)
+{
+    g_ctx = NULL;
+    aept_cleanup(ctx);
+}
 
 static const char *resolve_conf(void)
 {
@@ -76,11 +99,8 @@ static aept_ctx_t *init_aept(void)
 
     g_ctx = ctx;
 
-    /* g_ctx first: handlers are installed before any command runs, so a
-     * SIGINT here would hand aept_cancel() a freed context. */
     if (offline_root && aept_set_offline_root(ctx, offline_root) < 0) {
-        g_ctx = NULL;
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return NULL;
     }
 
@@ -88,7 +108,7 @@ static aept_ctx_t *init_aept(void)
 
     if (conf_explicit && access(cf, R_OK) < 0) {
         aept_log_error("cannot access config file '%s': %s", cf, strerror(errno));
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return NULL;
     }
 
@@ -98,7 +118,7 @@ static aept_ctx_t *init_aept(void)
     if (aept_load_config(ctx, cf) < 0) {
         if (cf != conf_file)
             free((char *)cf);
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return NULL;
     }
 
@@ -112,8 +132,7 @@ static aept_ctx_t *init_aept(void)
      * CLI value is a host path and must remain literal.
      */
     if (cache_dir_override && aept_set_cache_dir(ctx, cache_dir_override) < 0) {
-        g_ctx = NULL;
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return NULL;
     }
 
@@ -121,7 +140,7 @@ static aept_ctx_t *init_aept(void)
 
     if (!offline_root && access("/etc/aeltra_version", F_OK) != 0) {
         aept_log_error("not running on Aeltra OS; use -o to set an offline root");
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return NULL;
     }
 
@@ -511,7 +530,7 @@ static int cmd_update(int argc, char *argv[])
         return 1;
 
     r = aept_update(ctx);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -617,7 +636,7 @@ static int cmd_install(int argc, char *argv[])
     free(pkg_names);
     free(local_paths);
     rc = transaction_exit(ctx, r);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return rc;
 }
 
@@ -668,7 +687,7 @@ static int cmd_autoremove(int argc, char *argv[])
 
     r = aept_autoremove(ctx);
     rc = transaction_exit(ctx, r);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return rc;
 }
 
@@ -724,7 +743,7 @@ static int cmd_remove(int argc, char *argv[])
 
     r = aept_remove(ctx, (const char **)&argv[optind], argc - optind);
     rc = transaction_exit(ctx, r);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return rc;
 }
 
@@ -797,7 +816,7 @@ static int cmd_upgrade(int argc, char *argv[])
 
     r = aept_upgrade(ctx);
     rc = transaction_exit(ctx, r);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return rc;
 }
 
@@ -822,7 +841,7 @@ static int cmd_clean(int argc, char *argv[])
         return 1;
 
     r = aept_clean(ctx);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -856,7 +875,7 @@ static int cmd_triggers(int argc, char *argv[])
         return 1;
 
     r = aept_triggers(ctx);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -894,7 +913,7 @@ static int cmd_list(int argc, char *argv[])
 
     r = aept_list(ctx, pattern, filter_installed, filter_upgradable, &list);
     if (r < 0) {
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return 1;
     }
 
@@ -917,7 +936,7 @@ static int cmd_list(int argc, char *argv[])
     }
 
     aept_pkg_list_free(&list);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return 0;
 }
 
@@ -951,7 +970,7 @@ static int cmd_show(int argc, char *argv[])
     if (r != 0) {
         if (r > 0)
             aept_log_error("package '%s' not found", argv[optind]);
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return 1;
     }
 
@@ -1004,7 +1023,7 @@ static int cmd_show(int argc, char *argv[])
         printf("Status: install ok installed\n");
 
     aept_pkg_info_free(&info);
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return 0;
 }
 
@@ -1039,7 +1058,7 @@ static int cmd_files(int argc, char *argv[])
     if (r != 0) {
         if (r > 0)
             aept_log_error("package '%s' is not installed", argv[optind]);
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return 1;
     }
 
@@ -1049,7 +1068,7 @@ static int cmd_files(int argc, char *argv[])
     }
     free(paths);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return 0;
 }
 
@@ -1082,7 +1101,7 @@ static int cmd_owns(int argc, char *argv[])
 
     r = aept_owns(ctx, argv[optind], &owners, &count);
     if (r != 0) {
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return 1;
     }
 
@@ -1092,7 +1111,7 @@ static int cmd_owns(int argc, char *argv[])
     }
     free(owners);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return 0;
 }
 
@@ -1131,7 +1150,7 @@ static int cmd_mark_manual(int argc, char *argv[])
         r = aept_mark_manual(ctx, (const char **)&argv[optind], argc - optind);
     }
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -1162,7 +1181,7 @@ static int cmd_mark_auto(int argc, char *argv[])
 
     r = aept_mark_auto(ctx, (const char **)&argv[optind], argc - optind);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -1230,7 +1249,7 @@ static int cmd_pin(int argc, char *argv[])
 
     r = aept_pin(ctx, (const char **)&argv[optind], argc - optind);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -1262,7 +1281,7 @@ static int cmd_unpin(int argc, char *argv[])
 
     r = aept_unpin(ctx, (const char **)&argv[optind], argc - optind);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return r != 0 ? 1 : 0;
 }
 
@@ -1290,7 +1309,7 @@ static int cmd_print_architecture(int argc, char *argv[])
 
     r = aept_architectures(ctx, &archs, &count);
     if (r < 0) {
-        aept_cleanup(ctx);
+        cli_cleanup(ctx);
         return 1;
     }
 
@@ -1300,7 +1319,7 @@ static int cmd_print_architecture(int argc, char *argv[])
     }
     free(archs);
 
-    aept_cleanup(ctx);
+    cli_cleanup(ctx);
     return 0;
 }
 
