@@ -1,0 +1,156 @@
+#!/bin/sh
+# test_show.sh - what "aept show" prints.
+#
+# Copyright (C) 2026 Tobias Koch
+# SPDX-License-Identifier: MIT
+#
+# The output is a contract: it is what a person reads to decide whether
+# to install something, and what a script greps.  Every field is
+# conditional on the package carrying it, and the description is
+# reformatted rather than copied -- continuation lines are re-indented
+# one space at a time.  None of that had ever run: the API-level test
+# calls aept_show(), and the smoke test only asks for a package that is
+# not there, so the printing below the lookup was reached by nothing.
+
+set -u
+
+. "${srcdir:-.}/aeptlib.sh"
+
+require_aept
+require_tools ar tar sha256sum
+
+work=$(mktemp -d) || fail "mktemp failed"
+trap 'rm -rf "$work"' EXIT
+
+root=$work/root
+new_root "$root"
+info=$root/var/lib/aept/info
+mkdir -p "$info"
+
+# Replaces is deliberately absent from the assertions below: libsolv's
+# Debian reader stores no obsoletes for a plain "Replaces:", and sets
+# them from Conflicts when both fields are present, so the line aept
+# prints is the Conflicts value rather than the Replaces one.  Asserting
+# that would enshrine it.
+#
+# An installed package carrying every optional field.  Written by hand:
+# a .control and a .list are just files, and going through an install
+# would settle for whatever the fixture builder happens to emit.
+cat > "$info/showcase.control" <<'EOF'
+Package: showcase
+Version: 2.1-3
+Architecture: all
+Maintainer: t <t@example.invalid>
+Installed-Size: 42
+Depends: libx (>= 1.0)
+Pre-Depends: libpre
+Recommends: librec
+Suggests: libsug
+Provides: virtual-thing
+Conflicts: libcon
+Replaces: librep
+Homepage: https://example.invalid/showcase
+Description: a one-line summary
+ the first continuation line
+ the second continuation line
+Status: install ok installed
+EOF
+printf './usr/bin/showcase\t100755\n' > "$info/showcase.list"
+
+out=$(aept_run "$root" show showcase 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show of an installed package exited $rc:
+$out"
+
+for field in \
+    'Package: showcase' \
+    'Version: 2.1-3' \
+    'Architecture: all' \
+    'Installed-Size: 42 kB' \
+    'Depends: libx >= 1.0' \
+    'Pre-Depends: libpre' \
+    'Recommends: librec' \
+    'Suggests: libsug' \
+    'Provides: virtual-thing' \
+    'Conflicts: libcon' \
+    'Homepage: https://example.invalid/showcase' \
+    'Description: a one-line summary' \
+    'Status: install ok installed'
+do
+    printf '%s\n' "$out" | grep -qF "$field" \
+        || fail "show did not print '$field':
+$out"
+done
+note "every field the package carries is printed"
+
+# The summary is the first line of Description; the rest follow it,
+# each indented by one space.  A package whose description went missing
+# between the two is the failure this catches.
+printf '%s\n' "$out" | grep -qx ' the first continuation line' \
+    || fail "the first continuation line is missing or misindented:
+$out"
+printf '%s\n' "$out" | grep -qx ' the second continuation line' \
+    || fail "the second continuation line is missing or misindented:
+$out"
+note "the description continuation lines follow the summary, one space in"
+
+# ── a package that is available but not installed ────────────────────
+#
+# Filename comes from the index and Status from the status area, so
+# this is the case that has neither the one nor the other.
+
+cache=$root/var/cache/aept
+list=$root/var/lib/aept/lists/testrepo
+mkdir -p "$cache"
+mkdir -p "$work/tree/usr/share/shelf"
+printf 's\n' > "$work/tree/usr/share/shelf/f"
+make_pkg_tree "$work/shelf_1.0.aeltra" shelf 1.0 "" "$work/tree"
+add_repo "$root" testrepo "$work"
+packages_stanza shelf 1.0 "$work/shelf_1.0.aeltra" > "$list"
+
+out=$(aept_run "$root" show shelf 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show of an available package exited $rc:
+$out"
+printf '%s\n' "$out" | grep -qF 'Package: shelf' \
+    || fail "show of an available package printed no name:
+$out"
+printf '%s\n' "$out" | grep -qF 'Filename: ' \
+    || fail "show of an available package printed no Filename:
+$out"
+printf '%s\n' "$out" | grep -qF 'Status: install ok installed' \
+    && fail "an uninstalled package was reported as installed:
+$out"
+note "an available package shows its Filename and no Status"
+
+# ── the ways it declines ─────────────────────────────────────────────
+
+out=$(aept_run "$root" show absent 2>&1)
+rc=$?
+[ "$rc" -ne 0 ] || fail "show of an unknown package succeeded:
+$out"
+case $out in
+    *"not found"*) ;;
+    *) fail "show of an unknown package gave no useful error:
+$out" ;;
+esac
+note "an unknown package is reported as not found"
+
+out=$(aept_run "$root" show 2>&1)
+rc=$?
+[ "$rc" -ne 0 ] || fail "show with no package name succeeded:
+$out"
+note "show with no package name is refused"
+
+out=$(aept_run "$root" show --help 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show --help exited $rc:
+$out"
+case $out in
+    Usage:*) ;;
+    *) fail "show --help printed no usage:
+$out" ;;
+esac
+note "show --help prints usage and succeeds"
+
+exit 0

@@ -207,7 +207,7 @@ typedef struct {
     char *name;
     char *version;
     char *architecture;
-    unsigned long long installed_size;
+    unsigned long long installed_size; /* bytes; the control file's kB * 1024 */
     char *depends;
     char *pre_depends;
     char *recommends;

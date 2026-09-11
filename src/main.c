@@ -978,8 +978,10 @@ static int cmd_show(int argc, char *argv[])
     printf("Version: %s\n", info.version);
     printf("Architecture: %s\n", info.architecture);
 
+    /* The field is bytes; Debian's Installed-Size is kB, which is what
+     * the control file said and what this label promises. */
     if (info.installed_size)
-        printf("Installed-Size: %llu kB\n", info.installed_size);
+        printf("Installed-Size: %llu kB\n", info.installed_size / 1024);
 
     if (info.depends)
         printf("Depends: %s\n", info.depends);

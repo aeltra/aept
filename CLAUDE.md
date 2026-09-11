@@ -310,8 +310,8 @@ target, and a check that is red from the first day is a check that gets ignored.
 The figures are measured at `-O0` (see the flag-ordering note further
 down; an optimised build reads about 2.3 points higher and is wrong).
 **Every tier is at or over its target** — security 90.3 against 90,
-transaction 85.0 against 85, plumbing 83.4 against 80, CLI 74.7 against a
-60 cap — and 84.0% overall. **Every security-tier file is over its 85%
+transaction 85.0 against 85, plumbing 83.6 against 80, CLI 79.9 against a
+60 cap — and 84.7% overall. **Every security-tier file is over its 85%
 floor**, so all the floors are hard gates. The rule is unchanged: a file
 or tier dropping more than two points below its recorded figure fails, and
 so does a file slipping back under a floor it has reached.
@@ -381,7 +381,7 @@ Seven things about the measurement, each of which has cost a wrong number:
   more than it.
 
 Branch coverage is reported beside lines and never gated. It runs below
-lines (~11 points: 84.0 vs 72.7), and the gap sits where the error handling is — a tier whose lines climb while its
+lines (~11 points: 84.7 vs 73.5), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
