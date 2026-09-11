@@ -309,16 +309,22 @@ gate against the tier targets — it was built when most tiers were well short o
 target, and a check that is red from the first day is a check that gets ignored.
 The figures are measured at `-O0` (see the flag-ordering note further
 down; an optimised build reads about 2.3 points higher and is wrong).
-Plumbing and CLI are over target at 82.0 and 74.5 against a 60 cap,
-**security is 89.1 against a 90 target and transaction 83.5 against 85** —
-one and two points short — and 82.7% overall. `src/validator.c` at 84.6% is the one security-tier file still
-under its 85% floor, so that floor is reported rather than enforced until
-it is first cleared; every other file's floor is a hard gate. The rule is
-unchanged: a file or tier dropping more than two points below its recorded
-figure fails, and so does a file slipping back under a floor it has reached.
+**Every tier is at or over its target** — security 90.3 against 90,
+transaction 85.0 against 85, plumbing 83.4 against 80, CLI 74.7 against a
+60 cap — and 84.0% overall. **Every security-tier file is over its 85%
+floor**, so all the floors are hard gates. The rule is unchanged: a file
+or tier dropping more than two points below its recorded figure fails, and
+so does a file slipping back under a floor it has reached.
 
-The two tiers short of target are short because the measurement is honest,
-not because tests were lost.
+Closing the last of that gap was not a coverage exercise. The tests that
+did it assert behaviour nothing had checked: that a pin survives its
+neighbours being pinned, that an edited conffile survives an upgrade the
+package did not touch, that a conffile path climbing out of the root is
+refused by name, that installing a virtual name marks its provider manual
+rather than leaving it for the next autoremove, that a shared dependency
+outlives one of its dependants, and that a damaged pin or auto-installed
+file costs the unparseable line and nothing else. Each was confirmed by
+breaking the code it covers and watching it fail.
 
 Seven things about the measurement, each of which has cost a wrong number:
 
@@ -375,8 +381,7 @@ Seven things about the measurement, each of which has cost a wrong number:
   more than it.
 
 Branch coverage is reported beside lines and never gated. It runs below
-lines (~10 points after the targeted branch push on the HTTP, update and
-install paths: 82.7 vs 72.2), and the gap sits where the error handling is — a tier whose lines climb while its
+lines (~11 points: 84.0 vs 72.7), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture

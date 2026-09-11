@@ -178,4 +178,61 @@ $out"
 [ "$(version_of tool)" = "2.0" ] || fail "the fresh install under --reinstall did not land"
 note "--reinstall of an absent package installs it once, not twice"
 
+# ── the pin file holds more than one package ─────────────────────────
+#
+# Every case above pins one name, so the line that copies somebody
+# else's pin through to the rewritten file had never run.  A pin that
+# quietly drops its neighbours is the same failure this file exists to
+# catch, one remove away.
+
+aept_run "$root" unpin tool >/dev/null 2>&1
+: > "$pin_file"
+aept_run "$root" pin tool=1.0 >/dev/null 2>&1 || fail "pinning tool failed"
+aept_run "$root" pin other=3.0 >/dev/null 2>&1 || fail "pinning other failed"
+grep -q '^tool 1.0$' "$pin_file" || fail "pinning a second package dropped the first:
+$(cat "$pin_file")"
+grep -q '^other 3.0$' "$pin_file" || fail "the second pin was not recorded:
+$(cat "$pin_file")"
+note "pinning a second package keeps the first"
+
+aept_run "$root" unpin other >/dev/null 2>&1 || fail "unpin other failed"
+grep -q '^tool 1.0$' "$pin_file" || fail "unpinning one package dropped the other:
+$(cat "$pin_file")"
+grep -q '^other ' "$pin_file" && fail "unpin left the record behind:
+$(cat "$pin_file")"
+note "unpinning one package keeps the others"
+
+# An over-long line cannot be parsed, and must be dropped whole rather
+# than have its tail read back as a further pin.  The neighbours around
+# it survive.
+{
+    printf 'keeper 1.0\n'
+    awk 'BEGIN { printf "bloated "; while (i++ < 600) printf "9.9.9."; printf "\n" }'
+    printf 'tool 1.0\n'
+} > "$pin_file"
+aept_run "$root" pin other=3.0 >/dev/null 2>&1 || fail "pinning past a long line failed"
+grep -q '^keeper 1.0$' "$pin_file" || fail "a pin before the long line was lost:
+$(cat "$pin_file")"
+grep -q '^tool 1.0$' "$pin_file" || fail "a pin after the long line was lost:
+$(cat "$pin_file")"
+grep -q '^9\.9\.9\.' "$pin_file" && fail "the tail of the long line came back as a pin:
+$(cat "$pin_file")"
+note "an unparseable pin line is dropped whole, its neighbours kept"
+
+# Nowhere to write: the error is reported rather than silently lost.
+chmod 500 "$root/var/lib/aept"
+out=$(aept_run "$root" pin tool=1.0 2>&1)
+rc=$?
+chmod 700 "$root/var/lib/aept"
+if [ "$rc" -eq 0 ]; then
+    note "SKIP: the pin directory stayed writable (running as root?)"
+else
+    case $out in
+        *"pin file"*) ;;
+        *) fail "an unwritable pin file gave no useful error:
+$out" ;;
+    esac
+    note "an unwritable pin file is reported, not ignored"
+fi
+
 exit 0

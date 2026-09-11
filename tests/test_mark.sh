@@ -85,4 +85,67 @@ rc=$?
 $out"
 note "mark manual without names or --all is refused"
 
+# ── a damaged auto-installed file ────────────────────────────────────
+#
+# The file is what autoremove reasons from, so a line it cannot parse
+# must cost that line and nothing else.  Reading a long line back in
+# pieces would invent package names; dropping the file would make every
+# auto-installed package look manual and never be collected.
+
+aept_run "$root" mark auto one >/dev/null 2>&1 || fail "marking one auto failed"
+{
+    printf 'keeper\n'
+    awk 'BEGIN { while (i++ < 300) printf "verylongname"; printf "\n" }'
+    printf '\n'
+    printf 'two\n'
+} > "$auto_file"
+
+# mark manual is the operation that rewrites the file, so it is the one
+# that has to survive the damage.
+aept_run "$root" mark manual two >/dev/null 2>&1 || fail "unmarking two failed"
+grep -q '^keeper$' "$auto_file" || fail "an entry before the long line was lost:
+$(cat "$auto_file")"
+grep -q '^two$' "$auto_file" && fail "mark manual did not remove the entry:
+$(cat "$auto_file")"
+grep -q 'verylongnameverylongname' "$auto_file" \
+    && fail "the unparseable line survived the rewrite:
+$(cat "$auto_file")"
+note "an unparseable auto-installed line is dropped whole, neighbours kept"
+
+# Nowhere to write: reported, not silently lost.
+# "one" is installed and, after the rewrite above, no longer marked --
+# both are needed, or the call returns before it opens the file: an
+# unknown name is skipped, and an already-marked one short-circuits.
+#
+# The file itself is made read-only, not its directory: marking appends
+# to a file that already exists, and a read-only directory still permits
+# that.
+chmod 400 "$auto_file"
+out=$(aept_run "$root" mark auto one 2>&1)
+rc=$?
+chmod 600 "$auto_file"
+if [ "$rc" -eq 0 ]; then
+    note "SKIP: the auto-installed file stayed writable (running as root?)"
+else
+    case $out in
+        *auto-installed*) ;;
+        *) fail "an unwritable auto-installed file gave no useful error:
+$out" ;;
+    esac
+    note "an unwritable auto-installed file is reported, not ignored"
+fi
+
+# Rewriting needs to create a temporary beside it, which a read-only
+# directory does prevent.  The name has to be an installed one, or the
+# call skips it before reaching the file at all.
+chmod 500 "$root/var/lib/aept"
+out=$(aept_run "$root" mark manual one 2>&1)
+rc=$?
+chmod 700 "$root/var/lib/aept"
+if [ "$rc" -eq 0 ]; then
+    note "SKIP: the state directory stayed writable (running as root?)"
+else
+    note "a rewrite with nowhere for its temporary file fails rather than truncating"
+fi
+
 exit 0

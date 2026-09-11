@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "libfetch/fetch.h"
@@ -23,6 +25,10 @@
 #define URL "https://example.com/testrepo/InPackages.gz"
 #define ETAG "\"5f0a1c-2a4b\""
 #define LASTMOD "Wed, 21 Oct 2015 07:28:00 GMT"
+
+/* validator.c keeps its line buffer at file scope; this only has to be
+ * at least as large for the over-long-line case to overrun it. */
+#define LINE_MAX_MIRROR 4096
 
 static struct aept_ctx ctx;
 static char path[] = "/tmp/aept-validator-XXXXXX";
@@ -169,6 +175,87 @@ int main(void)
         free(text);
     }
     free(big);
+
+    /* ── malformed records the loader must refuse whole ───────────── */
+
+    /*
+     * An over-long line is refused rather than parsed in pieces.  The
+     * record has no continuation syntax, so the tail of a 5000-byte
+     * ETag would arrive as a line of its own; were that merely skipped,
+     * a record whose URL line was the casualty would leave validators
+     * to be sent with any request at all.
+     */
+    {
+        char *text = NULL;
+        char *huge = aept_malloc(LINE_MAX_MIRROR + 200);
+
+        memset(huge, 'x', LINE_MAX_MIRROR + 199);
+        huge[LINE_MAX_MIRROR + 199] = '\0';
+        aept_asprintf(&text, "URL: %s\nETag: %s\n", URL, huge);
+        check_rejected(text, "an over-long line is refused, not split");
+        free(text);
+        free(huge);
+    }
+
+    /* A control character in the date is refused, as it is in the ETag:
+     * both come from the server and neither is parsed. */
+    check_rejected("URL: " URL "\nLast-Modified: Wed,\t21 Oct 2015\n",
+                   "a control character in the date is refused");
+
+    /* Blank lines are skipped, so a record that survives a round trip
+     * through something that pads it still loads. */
+    {
+        char *text = NULL;
+
+        aept_asprintf(&text, "\nURL: %s\n\nETag: %s\n\n", URL, ETAG);
+        write_raw(text);
+        test_int_eq(aept_validator_load(path, URL, &loaded), 0,
+                    "blank lines between fields are ignored");
+        test_str_eq(loaded.etag, ETAG, "and the ETag still arrives");
+        free(text);
+    }
+
+    /* ── failures on the way out ──────────────────────────────────── */
+
+    memset(&saved, 0, sizeof(saved));
+    snprintf(saved.etag, sizeof(saved.etag), "%s", ETAG);
+
+    /* Nowhere to write the temporary file. */
+    test_int_eq(aept_validator_save("/nonexistent-dir-for-aept-test/v", URL, &saved), -1,
+                "saving into a missing directory fails");
+
+    /*
+     * The rename cannot land: the destination is a directory.  What
+     * matters as much as the -1 is that the temporary file is not left
+     * behind -- a failed save must litter nothing.
+     */
+    {
+        char dir[512];
+        char stray[600];
+        DIR *d;
+        struct dirent *e;
+        int leftovers = 0;
+
+        snprintf(dir, sizeof(dir), "%s.dir", path);
+        mkdir(dir, 0755);
+        test_int_eq(aept_validator_save(dir, URL, &saved), -1, "saving over a directory fails");
+
+        /* Look for a "<dir>.<pid>" temporary beside it. */
+        d = opendir("/tmp");
+        if (d) {
+            const char *base = strrchr(dir, '/');
+            base = base ? base + 1 : dir;
+            while ((e = readdir(d)) != NULL) {
+                if (strncmp(e->d_name, base, strlen(base)) == 0 && strcmp(e->d_name, base) != 0) {
+                    snprintf(stray, sizeof(stray), "/tmp/%s", e->d_name);
+                    leftovers++;
+                }
+            }
+            closedir(d);
+        }
+        test_int_eq(leftovers, 0, "and leaves no temporary file behind");
+        rmdir(dir);
+    }
 
     unlink(path);
     return test_summary();
