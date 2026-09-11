@@ -123,6 +123,78 @@ printf '%s\n' "$out" | grep -qF 'Status: install ok installed' \
 $out"
 note "an available package shows its Filename and no Status"
 
+# ── the candidate, and every version ─────────────────────────────────
+#
+# "show" answers with the candidate, which is commonly not the version
+# on disk.  The Status line has to describe the version in the stanza it
+# appears in: saying "installed" under a 2.0 stanza while 1.0 is what is
+# installed is how somebody concludes they are already upgraded.
+
+mkdir -p "$work/v1/usr/share/two" "$work/v2/usr/share/two"
+printf '1\n' > "$work/v1/usr/share/two/f"
+printf '2\n' > "$work/v2/usr/share/two/f"
+make_pkg_tree "$work/two_1.0.aeltra" two 1.0 "Homepage: https://old.invalid" "$work/v1"
+make_pkg_tree "$work/two_2.0.aeltra" two 2.0 "Homepage: https://new.invalid" "$work/v2"
+{
+    packages_stanza shelf 1.0 "$work/shelf_1.0.aeltra"
+    packages_stanza two 1.0 "$work/two_1.0.aeltra" "Homepage: https://old.invalid"
+    packages_stanza two 2.0 "$work/two_2.0.aeltra" "Homepage: https://new.invalid"
+} > "$list"
+cp "$work/two_1.0.aeltra" "$work/two_2.0.aeltra" "$cache/"
+aept_run "$root" install --non-interactive "$work/two_1.0.aeltra" >/dev/null 2>&1 \
+    || fail "installing two 1.0 failed"
+
+out=$(aept_run "$root" show two 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show of the candidate exited $rc:
+$out"
+printf '%s\n' "$out" | grep -qF 'Version: 2.0' \
+    || fail "show did not answer with the candidate:
+$out"
+printf '%s\n' "$out" | grep -qF 'Status: install ok installed' \
+    && fail "the candidate 2.0 was reported installed while 1.0 is:
+$out"
+note "show answers with the candidate, and does not call it installed"
+
+out=$(aept_run "$root" show -a two 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show -a exited $rc:
+$out"
+[ "$(printf '%s\n' "$out" | grep -c '^Package: two$')" = 2 ] \
+    || fail "show -a did not print one stanza per version:
+$out"
+[ "$(printf '%s\n' "$out" | grep -n '^Version:' | head -1 | cut -d: -f2-)" = "1:Version: 2.0" ] \
+    || [ "$(printf '%s\n' "$out" | grep '^Version:' | head -1)" = "Version: 2.0" ] \
+    || fail "show -a did not lead with the newest version:
+$out"
+[ "$(printf '%s\n' "$out" | grep -c '^Status: install ok installed$')" = 1 ] \
+    || fail "show -a marked other than exactly one version installed:
+$out"
+# ... and it is the 1.0 stanza that carries it.
+printf '%s\n' "$out" | awk '/^Version: 1.0$/,/^$/' | grep -qF 'Status: install ok installed' \
+    || fail "the installed marker is not on the 1.0 stanza:
+$out"
+note "show -a prints every version, newest first, marking the installed one"
+
+# The long form, because a missing entry in the option table is exactly
+# the kind of thing that goes unnoticed until somebody types it out.
+long=$(aept_run "$root" show --all two 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show --all exited $rc:
+$long"
+[ "$long" = "$out" ] || fail "--all and -a disagree:
+--- --all ---
+$long
+--- -a ---
+$out"
+note "--all is the long form of -a"
+
+out=$(aept_run "$root" show -a absent 2>&1)
+rc=$?
+[ "$rc" -ne 0 ] || fail "show -a of an unknown package succeeded:
+$out"
+note "show -a of an unknown package is refused too"
+
 # ── the ways it declines ─────────────────────────────────────────────
 
 out=$(aept_run "$root" show absent 2>&1)

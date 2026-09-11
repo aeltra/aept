@@ -334,9 +334,12 @@ static void usage_show(FILE *out)
 {
     fprintf(out, "Usage: aept show [options] <package>\n"
                  "\n"
-                 "Show package information.\n"
+                 "Show package information.  Without -a this is the candidate:\n"
+                 "the best version any source offers, or the installed one when\n"
+                 "no source offers it.\n"
                  "\n"
                  "Options:\n"
+                 "  -a, --all   Show every version, newest first\n"
                  "  -h, --help  Show this help\n");
 }
 
@@ -467,6 +470,7 @@ static struct option list_options[] = {
 };
 
 static struct option show_options[] = {
+    {"all",  no_argument, NULL, 'a'},
     {"help", no_argument, NULL, 'h'},
     {NULL,   0,           NULL, 0  }
 };
@@ -940,14 +944,71 @@ static int cmd_list(int argc, char *argv[])
     return 0;
 }
 
+static void print_info(const aept_pkg_info_t *info)
+{
+    printf("Package: %s\n", info->name);
+    printf("Version: %s\n", info->version);
+    printf("Architecture: %s\n", info->architecture);
+
+    /* The field is bytes; Debian's Installed-Size is kB, which is what
+     * the control file said and what this label promises. */
+    if (info->installed_size)
+        printf("Installed-Size: %llu kB\n", info->installed_size / 1024);
+
+    if (info->depends)
+        printf("Depends: %s\n", info->depends);
+    if (info->pre_depends)
+        printf("Pre-Depends: %s\n", info->pre_depends);
+    if (info->recommends)
+        printf("Recommends: %s\n", info->recommends);
+    if (info->suggests)
+        printf("Suggests: %s\n", info->suggests);
+    if (info->provides)
+        printf("Provides: %s\n", info->provides);
+    if (info->conflicts)
+        printf("Conflicts: %s\n", info->conflicts);
+    if (info->replaces)
+        printf("Replaces: %s\n", info->replaces);
+
+    if (info->homepage)
+        printf("Homepage: %s\n", info->homepage);
+
+    if (info->filename)
+        printf("Filename: %s\n", info->filename);
+
+    if (info->summary) {
+        printf("Description: %s\n", info->summary);
+        if (info->description) {
+            const char *p = info->description;
+            while (*p) {
+                const char *eol = strchr(p, '\n');
+                if (eol) {
+                    printf(" %.*s\n", (int)(eol - p), p);
+                    p = eol + 1;
+                } else {
+                    printf(" %s\n", p);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (info->is_installed)
+        printf("Status: install ok installed\n");
+}
+
 static int cmd_show(int argc, char *argv[])
 {
     aept_pkg_info_t info;
-    int opt, r;
+    aept_pkg_info_list_t list;
+    int opt, r, all = 0, i;
 
     optind = 0;
-    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), show_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("ah"), show_options, NULL)) != -1) {
         switch (opt) {
+        case 'a':
+            all = 1;
+            break;
         case 'h':
             usage_show(stdout);
             return 0;
@@ -966,7 +1027,21 @@ static int cmd_show(int argc, char *argv[])
     if (!ctx)
         return 1;
 
-    r = aept_show(ctx, argv[optind], &info);
+    if (!all) {
+        r = aept_show(ctx, argv[optind], &info);
+        if (r != 0) {
+            if (r > 0)
+                aept_log_error("package '%s' not found", argv[optind]);
+            cli_cleanup(ctx);
+            return 1;
+        }
+        print_info(&info);
+        aept_pkg_info_free(&info);
+        cli_cleanup(ctx);
+        return 0;
+    }
+
+    r = aept_show_all(ctx, argv[optind], &list);
     if (r != 0) {
         if (r > 0)
             aept_log_error("package '%s' not found", argv[optind]);
@@ -974,57 +1049,15 @@ static int cmd_show(int argc, char *argv[])
         return 1;
     }
 
-    printf("Package: %s\n", info.name);
-    printf("Version: %s\n", info.version);
-    printf("Architecture: %s\n", info.architecture);
-
-    /* The field is bytes; Debian's Installed-Size is kB, which is what
-     * the control file said and what this label promises. */
-    if (info.installed_size)
-        printf("Installed-Size: %llu kB\n", info.installed_size / 1024);
-
-    if (info.depends)
-        printf("Depends: %s\n", info.depends);
-    if (info.pre_depends)
-        printf("Pre-Depends: %s\n", info.pre_depends);
-    if (info.recommends)
-        printf("Recommends: %s\n", info.recommends);
-    if (info.suggests)
-        printf("Suggests: %s\n", info.suggests);
-    if (info.provides)
-        printf("Provides: %s\n", info.provides);
-    if (info.conflicts)
-        printf("Conflicts: %s\n", info.conflicts);
-    if (info.replaces)
-        printf("Replaces: %s\n", info.replaces);
-
-    if (info.homepage)
-        printf("Homepage: %s\n", info.homepage);
-
-    if (info.filename)
-        printf("Filename: %s\n", info.filename);
-
-    if (info.summary) {
-        printf("Description: %s\n", info.summary);
-        if (info.description) {
-            const char *p = info.description;
-            while (*p) {
-                const char *eol = strchr(p, '\n');
-                if (eol) {
-                    printf(" %.*s\n", (int)(eol - p), p);
-                    p = eol + 1;
-                } else {
-                    printf(" %s\n", p);
-                    break;
-                }
-            }
-        }
+    /* One stanza per version, blank-line separated, as a Packages file
+     * is -- so the output can be fed to something that reads one. */
+    for (i = 0; i < list.count; i++) {
+        if (i > 0)
+            printf("\n");
+        print_info(&list.entries[i]);
     }
 
-    if (info.is_installed)
-        printf("Status: install ok installed\n");
-
-    aept_pkg_info_free(&info);
+    aept_pkg_info_list_free(&list);
     cli_cleanup(ctx);
     return 0;
 }

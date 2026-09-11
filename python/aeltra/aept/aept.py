@@ -119,6 +119,28 @@ def _txn_to_python(txn):
 
 # --- Main class -----------------------------------------------------------
 
+def _pkg_info(p) -> PkgInfo:
+    """Marshal one aept_pkg_info_t.  Shared by show() and show_all()."""
+    return PkgInfo(
+        name=c_to_str(p.name),
+        version=c_to_str(p.version),
+        architecture=c_to_str(p.architecture),
+        installed_size=p.installed_size,
+        depends=c_to_str(p.depends),
+        pre_depends=c_to_str(p.pre_depends),
+        recommends=c_to_str(p.recommends),
+        suggests=c_to_str(p.suggests),
+        provides=c_to_str(p.provides),
+        conflicts=c_to_str(p.conflicts),
+        replaces=c_to_str(p.replaces),
+        homepage=c_to_str(p.homepage),
+        filename=c_to_str(p.filename),
+        summary=c_to_str(p.summary),
+        description=c_to_str(p.description),
+        is_installed=bool(p.is_installed),
+    )
+
+
 class Aept:
     """Context manager wrapping the libaept C library.
 
@@ -402,26 +424,26 @@ class Aept:
                         "aept_show() failed")
             if rc == 1:
                 return None
-            return PkgInfo(
-                name=c_to_str(out.name),
-                version=c_to_str(out.version),
-                architecture=c_to_str(out.architecture),
-                installed_size=out.installed_size,
-                depends=c_to_str(out.depends),
-                pre_depends=c_to_str(out.pre_depends),
-                recommends=c_to_str(out.recommends),
-                suggests=c_to_str(out.suggests),
-                provides=c_to_str(out.provides),
-                conflicts=c_to_str(out.conflicts),
-                replaces=c_to_str(out.replaces),
-                homepage=c_to_str(out.homepage),
-                filename=c_to_str(out.filename),
-                summary=c_to_str(out.summary),
-                description=c_to_str(out.description),
-                is_installed=bool(out.is_installed),
-            )
+            return _pkg_info(out)
         finally:
             lib.aept_pkg_info_free(out)
+
+    def show_all(self, name: str) -> Optional[List[PkgInfo]]:
+        """Every version, newest first, or None when the name is unknown.
+
+        A version both installed and offered by a source appears once,
+        as the installed one.  ``PkgInfo.is_installed`` describes that
+        version, not the package.
+        """
+        out = ffi.new("aept_pkg_info_list_t *")
+        try:
+            rc = self._call(lib.aept_show_all(self._ctx, str_to_c(name), out),
+                            "aept_show_all() failed")
+            if rc == 1:
+                return None
+            return [_pkg_info(out.entries[i]) for i in range(out.count)]
+        finally:
+            lib.aept_pkg_info_list_free(out)
 
     # --- Query: files / owns / architectures ------------------------------
 

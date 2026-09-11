@@ -272,11 +272,22 @@ Remove version pins for one or more packages.
 
 ## show \[options\] \<package\>
 
-Show information about a package. Displays fields such as name, version,
-architecture, installed size, dependencies, homepage, filename, and
-description. If a package is available in a repository and also
-installed, the repository version is shown and the install status is
-indicated. Returns exit code 1 if the package is not found.
+Show information about a package: name, version, architecture, installed
+size, dependencies, homepage, filename and description.
+
+By default this is the **candidate** -- the best version any configured
+source offers, or the installed one when no source offers it. The
+**Status** line appears only when the version in the stanza is the one
+on disk, so a candidate newer than what is installed is not reported as
+installed.
+
+**-a, --all**
+
+> Print every version, newest first, one stanza each, separated by blank
+> lines as in a *Packages* file. A version both installed and offered by
+> a source appears once, as the installed one.
+
+Returns exit code 1 if the package is not found.
 
 ## list \[options\] \[pattern\]
 

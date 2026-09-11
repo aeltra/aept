@@ -817,13 +817,52 @@ void aept_pkg_list_free(aept_pkg_list_t *list)
 
 /* ── Query: show ─────────────────────────────────────────────────── */
 
+/*
+ * Fill one info from one solvable.  is_installed describes THIS version,
+ * not the package: "aept show" prints the candidate, which is commonly
+ * not the version on disk, and a Status line copied from the package
+ * would claim the candidate was installed when it is not.
+ */
+static void fill_info(Pool *pool, Solvable *s, aept_pkg_info_t *out)
+{
+    const char *str;
+    unsigned int medianr;
+
+    memset(out, 0, sizeof(*out));
+
+    out->name = strdup(pool_id2str(pool, s->name));
+    out->version = strdup(pool_id2str(pool, s->evr));
+    out->architecture = strdup(pool_id2str(pool, s->arch));
+    out->installed_size = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
+
+    out->depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, -SOLVABLE_PREREQMARKER);
+    out->pre_depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, SOLVABLE_PREREQMARKER);
+    out->recommends = deparray_to_str(pool, s, SOLVABLE_RECOMMENDS, 0);
+    out->suggests = deparray_to_str(pool, s, SOLVABLE_SUGGESTS, 0);
+    out->provides = deparray_to_str(pool, s, SOLVABLE_PROVIDES, -SOLVABLE_FILEMARKER);
+    out->conflicts = deparray_to_str(pool, s, SOLVABLE_CONFLICTS, 0);
+    out->replaces = deparray_to_str(pool, s, SOLVABLE_OBSOLETES, 0);
+
+    str = solvable_lookup_str(s, SOLVABLE_URL);
+    out->homepage = str ? strdup(str) : NULL;
+
+    str = solvable_lookup_location(s, &medianr);
+    out->filename = str ? strdup(str) : NULL;
+
+    str = solvable_lookup_str(s, SOLVABLE_SUMMARY);
+    out->summary = str ? strdup(str) : NULL;
+
+    str = solvable_lookup_str(s, SOLVABLE_DESCRIPTION);
+    out->description = str ? strdup(str) : NULL;
+
+    out->is_installed = (s->repo == pool->installed);
+}
+
 static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     Pool *pool;
     Id name_id, p;
     Solvable *s, *best = NULL, *installed = NULL;
-    const char *str;
-    unsigned int medianr;
     int r = -1;
 
     memset(out, 0, sizeof(*out));
@@ -859,32 +898,7 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
     if (!s)
         goto not_found;
 
-    out->name = strdup(pool_id2str(pool, s->name));
-    out->version = strdup(pool_id2str(pool, s->evr));
-    out->architecture = strdup(pool_id2str(pool, s->arch));
-    out->installed_size = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
-
-    out->depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, -SOLVABLE_PREREQMARKER);
-    out->pre_depends = deparray_to_str(pool, s, SOLVABLE_REQUIRES, SOLVABLE_PREREQMARKER);
-    out->recommends = deparray_to_str(pool, s, SOLVABLE_RECOMMENDS, 0);
-    out->suggests = deparray_to_str(pool, s, SOLVABLE_SUGGESTS, 0);
-    out->provides = deparray_to_str(pool, s, SOLVABLE_PROVIDES, -SOLVABLE_FILEMARKER);
-    out->conflicts = deparray_to_str(pool, s, SOLVABLE_CONFLICTS, 0);
-    out->replaces = deparray_to_str(pool, s, SOLVABLE_OBSOLETES, 0);
-
-    str = solvable_lookup_str(s, SOLVABLE_URL);
-    out->homepage = str ? strdup(str) : NULL;
-
-    str = solvable_lookup_location(s, &medianr);
-    out->filename = str ? strdup(str) : NULL;
-
-    str = solvable_lookup_str(s, SOLVABLE_SUMMARY);
-    out->summary = str ? strdup(str) : NULL;
-
-    str = solvable_lookup_str(s, SOLVABLE_DESCRIPTION);
-    out->description = str ? strdup(str) : NULL;
-
-    out->is_installed = installed != NULL;
+    fill_info(pool, s, out);
 
     r = 0;
     goto cleanup;
@@ -896,12 +910,130 @@ cleanup:
     return r;
 }
 
+/*
+ * Every version of the package, newest first: what is installed and what
+ * each configured source offers.  A version present both on disk and in
+ * a source appears once, as the installed one, since that is the copy
+ * the machine actually has.
+ */
+static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t *out)
+{
+    Pool *pool;
+    Id name_id, p;
+    Solvable *s;
+    int r = -1, cap = 0, i;
+
+    memset(out, 0, sizeof(*out));
+
+    if (aept_solver_init(ctx) < 0)
+        return -1;
+
+    aept_status_load(ctx);
+    query_load_repos(ctx);
+
+    pool = aept_solver_pool(ctx->solver);
+
+    name_id = pool_str2id(pool, name, 0);
+    if (!name_id)
+        goto not_found;
+
+    FOR_POOL_SOLVABLES(p)
+    {
+        const char *evr;
+        int dup = 0;
+
+        s = pool_id2solvable(pool, p);
+        if (s->name != name_id)
+            continue;
+
+        evr = pool_id2str(pool, s->evr);
+        for (i = 0; i < out->count; i++) {
+            if (strcmp(out->entries[i].version, evr) != 0)
+                continue;
+            dup = 1;
+            /* An installed copy displaces the source's record of the
+             * same version: the Status line is the useful difference. */
+            if (s->repo == pool->installed) {
+                aept_pkg_info_free(&out->entries[i]);
+                fill_info(pool, s, &out->entries[i]);
+            }
+            break;
+        }
+        if (dup)
+            continue;
+
+        if (out->count == cap) {
+            cap = cap ? cap * 2 : 4;
+            out->entries = aept_realloc(out->entries, (size_t)cap * sizeof(*out->entries));
+        }
+        fill_info(pool, s, &out->entries[out->count++]);
+    }
+
+    if (out->count == 0)
+        goto not_found;
+
+    /*
+     * Newest first, so the candidate leads and "show -a" reads like a
+     * history.  Ordered by libsolv rather than by strcmp: version
+     * strings do not compare as text -- "10.0" sorts before "9.0" that
+     * way.  A selection sort because a package has a handful of
+     * versions, not thousands.
+     */
+    for (i = 0; i < out->count; i++) {
+        int k, top = i;
+
+        for (k = i + 1; k < out->count; k++) {
+            if (pool_evrcmp_str(pool, out->entries[k].version, out->entries[top].version,
+                                EVRCMP_COMPARE) > 0)
+                top = k;
+        }
+        if (top != i) {
+            aept_pkg_info_t tmp = out->entries[i];
+            out->entries[i] = out->entries[top];
+            out->entries[top] = tmp;
+        }
+    }
+
+    r = 0;
+    goto cleanup;
+
+not_found:
+    r = 1;
+cleanup:
+    aept_solver_fini(ctx);
+    return r;
+}
+
+void aept_pkg_info_list_free(aept_pkg_info_list_t *list)
+{
+    int i;
+
+    if (!list || !list->entries)
+        return;
+
+    for (i = 0; i < list->count; i++)
+        aept_pkg_info_free(&list->entries[i]);
+    free(list->entries);
+    list->entries = NULL;
+    list->count = 0;
+}
+
 int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     int r;
     AEPT_OOM_ENTER(ctx, -1);
 
     r = api_show(ctx, name, out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+int aept_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t *out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_show_all(ctx, name, out);
     AEPT_OOM_LEAVE(ctx);
     return r;
 }

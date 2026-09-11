@@ -63,6 +63,7 @@ func:aept_mark_manual_all: AEPT_EXPORT int aept_mark_manual_all(aept_ctx_t *ctx)
 func:aept_owns: AEPT_EXPORT int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out);
 func:aept_pin: AEPT_EXPORT int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
 func:aept_pkg_info_free: AEPT_EXPORT void aept_pkg_info_free(aept_pkg_info_t *info);
+func:aept_pkg_info_list_free: AEPT_EXPORT void aept_pkg_info_list_free(aept_pkg_info_list_t *list);
 func:aept_pkg_list_free: AEPT_EXPORT void aept_pkg_list_free(aept_pkg_list_t *list);
 func:aept_remove: AEPT_EXPORT int aept_remove(aept_ctx_t *ctx, const char **names, int count);
 func:aept_set_cache_dir: AEPT_EXPORT int aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
@@ -74,6 +75,7 @@ func:aept_set_network_timeout: AEPT_EXPORT void aept_set_network_timeout(aept_ct
 func:aept_set_offline_root: AEPT_EXPORT int aept_set_offline_root(aept_ctx_t *ctx, const char *path);
 func:aept_set_verbosity: AEPT_EXPORT void aept_set_verbosity(aept_ctx_t *ctx, int level);
 func:aept_show: AEPT_EXPORT int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
+func:aept_show_all: AEPT_EXPORT int aept_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t *out);
 func:aept_triggers: AEPT_EXPORT int aept_triggers(aept_ctx_t *ctx);
 func:aept_unpin: AEPT_EXPORT int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
 func:aept_update: AEPT_EXPORT int aept_update(aept_ctx_t *ctx);
@@ -83,6 +85,7 @@ type:aept_ctx_t: typedef struct aept_ctx aept_ctx_t;
 type:aept_display_fn: typedef void (*aept_display_fn)(const aept_transaction_t *txn, void *userdata);
 type:aept_log_fn: typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
 type:aept_pkg_entry_t: typedef struct { char *name; char *version; char *summary; int installed; int upgradable; } aept_pkg_entry_t;
+type:aept_pkg_info_list_t: typedef struct { aept_pkg_info_t *entries; int count; } aept_pkg_info_list_t;
 type:aept_pkg_info_t: typedef struct { char *name; char *version; char *architecture; unsigned long long installed_size; char *depends; char *pre_depends; char *recommends; char *suggests; char *provides; char *conflicts; char *replaces; char *homepage; char *filename; char *summary; char *description; int is_installed; } aept_pkg_info_t;
 type:aept_pkg_list_t: typedef struct { aept_pkg_entry_t *entries; int count; } aept_pkg_list_t;
 type:aept_transaction_t: typedef struct aept_transaction { const char **install; int n_install; const char **upgrade; int n_upgrade; const char **reinstall; int n_reinstall; const char **remove; int n_remove; } aept_transaction_t;

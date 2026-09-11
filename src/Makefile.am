@@ -58,6 +58,11 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # That last line renames the soname, so old binaries refuse to load the
 # new library rather than dying on a missing symbol.
 #
+# 1:1:0  aept_show_all(), aept_pkg_info_list_free() and the
+#        aept_pkg_info_list_t they use.  Added, nothing removed.
+#        aept_pkg_info_t.is_installed now describes the version in hand
+#        rather than the package: the struct is unchanged, so this is a
+#        behaviour fix rather than an interface change.
 # 1:0:0  aept_set_offline_root() and aept_set_cache_dir() return int
 #        instead of void.  A changed interface, so the binary package
 #        becomes libaept1.
@@ -69,7 +74,7 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # 0:3:0  aept_set_cache_dir()
 # 0:2:0  aept_triggers(), AEPT_ERR_TRIGGER
 # 0:1:0  aept_set_network_timeout(), aept_last_error()
-libaept_la_LDFLAGS = -version-number 1:0:0 $(COVERAGE_LDFLAGS)
+libaept_la_LDFLAGS = -version-number 1:1:0 $(COVERAGE_LDFLAGS)
 
 aept_SOURCES = main.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS) \

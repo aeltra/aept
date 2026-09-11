@@ -140,8 +140,15 @@ typedef struct {
     int   is_installed;
 } aept_pkg_info_t;
 
+typedef struct {
+    aept_pkg_info_t *entries;
+    int count;
+} aept_pkg_info_list_t;
+
 int  aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
 void aept_pkg_info_free(aept_pkg_info_t *info);
+int  aept_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t *out);
+void aept_pkg_info_list_free(aept_pkg_info_list_t *list);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 

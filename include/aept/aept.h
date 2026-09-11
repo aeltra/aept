@@ -219,12 +219,27 @@ typedef struct {
     char *filename;
     char *summary;
     char *description;
+    /* Whether THIS version is the one on disk -- not whether the package
+     * is installed.  aept_show() answers with the candidate, which is
+     * commonly a newer version than the installed one. */
     int is_installed;
 } aept_pkg_info_t;
 
-/* Returns 0 on success, 1 if not found, -1 on error. */
+typedef struct {
+    aept_pkg_info_t *entries;
+    int count;
+} aept_pkg_info_list_t;
+
+/* The candidate: the best version any source offers, or the installed
+ * one when no source offers it.  Returns 0, 1 if not found, -1 on error. */
 AEPT_API int aept_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out);
 AEPT_API void aept_pkg_info_free(aept_pkg_info_t *info);
+
+/* Every version, newest first: what is installed and what each source
+ * offers.  A version both installed and offered appears once, as the
+ * installed one.  Returns 0, 1 if not found, -1 on error. */
+AEPT_API int aept_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t *out);
+AEPT_API void aept_pkg_info_list_free(aept_pkg_info_list_t *list);
 
 /* --- Query: files / owns / architectures --------------------------------- */
 

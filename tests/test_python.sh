@@ -68,6 +68,14 @@ with Aept() as a:
     assert info is not None and info.name == "pyfix" and info.version == "1.0", f"show: {info}"
     assert a.show("absent") is None, "show(absent) should be None"
 
+    # show_all() marshals a list rather than one struct, and frees it
+    # through a different entry point -- neither is reached by show().
+    every = a.show_all("pyfix")
+    assert every is not None, "show_all(pyfix) should not be None"
+    assert [i.version for i in every] == ["1.0"], f"show_all: {every}"
+    assert every[0].is_installed, "the installed version should say so"
+    assert a.show_all("absent") is None, "show_all(absent) should be None"
+
     files = a.files("pyfix")
     assert files and any(f.endswith("usr/bin/pyfix") for f in files), f"files: {files}"
     assert a.files("absent") is None, "files(absent) should be None"
