@@ -301,6 +301,12 @@ Returns exit code 1 if the package is not found.
 List packages. With no arguments, all available packages are shown. An
 optional glob pattern filters by package name.
 
+A package reads as upgradable when an **upgrade** would move it, which
+is the same judgement **show** makes about the candidate: a package
+pinned to the version it already has is not upgradable however much
+newer the archive is, and a build for an architecture this machine does
+not accept does not make anything upgradable.
+
 **--installed**
 
 > Only show installed packages.

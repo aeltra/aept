@@ -588,6 +588,55 @@ int aept_mark_manual_all(aept_ctx_t *ctx)
 
 /* ── Query helpers ───────────────────────────────────────────────── */
 
+/*
+ * The three things every query has to agree on, so that "show", "show
+ * -a" and "list" describe the same machine.
+ *
+ * They also have to agree with "install", which is the point: show
+ * names a version somebody is about to install, and list marks what is
+ * upgradable.  Both were computed as "highest version in the archive"
+ * and so disagreed with the solver whenever a pin or an architecture
+ * had a view.
+ */
+
+/*
+ * Whether a source offers this solvable to this machine.
+ * pool_installable() is libsolv's own test, so the architectures aept
+ * accepts stay decided by pool_setarch() in aept_solver_init() rather
+ * than restated at every query.  What is installed is never subject to
+ * it: a package installed for an architecture since dropped from the
+ * configuration is still on the disk.
+ */
+static int query_offered(Pool *pool, Solvable *s)
+{
+    return s->repo != pool->installed && pool_installable(pool, s);
+}
+
+/*
+ * Which of two versions of one package a query should prefer, given the
+ * version it is pinned to, or NULL.  A pin beats a higher version,
+ * because the solver turns it into an exact solvable rather than a
+ * preference; otherwise the higher version wins.
+ */
+static Solvable *query_prefer(Pool *pool, Solvable *best, Solvable *s, const char *pin_ver)
+{
+    if (pin_ver) {
+        int s_pinned = strcmp(pool_id2str(pool, s->evr), pin_ver) == 0;
+        int b_pinned = best && strcmp(pool_id2str(pool, best->evr), pin_ver) == 0;
+
+        if (s_pinned != b_pinned)
+            return s_pinned ? s : best;
+    }
+
+    if (!best)
+        return s;
+
+    return pool_evrcmp_str(pool, pool_id2str(pool, s->evr), pool_id2str(pool, best->evr),
+                           EVRCMP_COMPARE) > 0
+               ? s
+               : best;
+}
+
 static int query_load_repos(aept_ctx_t *ctx)
 {
     int i;
@@ -615,6 +664,22 @@ static int query_load_repos(aept_ctx_t *ctx)
         free(list_path);
     }
 
+    return 0;
+}
+
+/*
+ * The opening every query shares.  Pins are loaded here and not only by
+ * install: a query that skips them answers with a version an install
+ * would not take.
+ */
+static int query_begin(struct aept_ctx *ctx)
+{
+    if (aept_solver_init(ctx) < 0)
+        return -1;
+
+    aept_status_load(ctx);
+    query_load_repos(ctx);
+    aept_pin_load_into_solver(ctx);
     return 0;
 }
 
@@ -663,11 +728,8 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
 
     memset(out, 0, sizeof(*out));
 
-    if (aept_solver_init(ctx) < 0)
+    if (query_begin(ctx) < 0)
         return -1;
-
-    aept_status_load(ctx);
-    query_load_repos(ctx);
 
     pool = aept_solver_pool(ctx->solver);
 
@@ -676,6 +738,12 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
         struct api_list_entry *e;
 
         s = pool_id2solvable(pool, p);
+
+        /* Not a version this machine could install, so not one that
+         * makes anything upgradable. */
+        if (s->repo != pool->installed && !query_offered(pool, s))
+            continue;
+
         e = find_list_entry(entries, nentries, s->name);
 
         if (!e) {
@@ -690,13 +758,11 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
             e->installed = NULL;
         }
 
-        if (s->repo == pool->installed) {
+        if (s->repo == pool->installed)
             e->installed = s;
-        } else {
-            if (!e->avail || pool_evrcmp_str(pool, pool_id2str(pool, s->evr),
-                                             pool_id2str(pool, e->avail->evr), EVRCMP_COMPARE) > 0)
-                e->avail = s;
-        }
+        else
+            e->avail =
+                query_prefer(pool, e->avail, s, aept_solver_pin_version(ctx->solver, e->name));
     }
 
     qsort(entries, nentries, sizeof(*entries), cmp_api_list_entry);
@@ -718,6 +784,12 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
         if (filter_installed && !e->installed)
             continue;
 
+        /*
+         * Upgradable means an upgrade would move this package, so it is
+         * the same judgement "show" makes about the candidate: e->avail
+         * already honours the pin, and a package pinned to what it has
+         * is not upgradable however much newer the archive is.
+         */
         upgradable = e->installed && e->avail &&
                      pool_evrcmp_str(pool, pool_id2str(pool, e->avail->evr),
                                      pool_id2str(pool, e->installed->evr), EVRCMP_COMPARE) > 0;
@@ -870,24 +942,14 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     Pool *pool;
     Id name_id, p;
-    Solvable *s, *best = NULL, *installed = NULL, *pinned = NULL;
+    Solvable *s, *best = NULL, *installed = NULL;
     const char *pin_ver;
     int r = -1;
 
     memset(out, 0, sizeof(*out));
 
-    if (aept_solver_init(ctx) < 0)
+    if (query_begin(ctx) < 0)
         return -1;
-
-    aept_status_load(ctx);
-    query_load_repos(ctx);
-    /*
-     * Pins decide the answer, so they have to be here.  Without them
-     * this reported the newest version in the archive as the candidate
-     * while an install, which loads them, took the pinned one instead:
-     * two commands describing the same machine differently.
-     */
-    aept_pin_load_into_solver(ctx);
 
     pool = aept_solver_pool(ctx->solver);
 
@@ -903,32 +965,10 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
         if (s->name != name_id)
             continue;
 
-        if (s->repo == pool->installed) {
+        if (s->repo == pool->installed)
             installed = s;
-            continue;
-        }
-
-        /*
-         * Only what could actually be installed here.  pool_installable()
-         * is libsolv's own test, so the architectures aept accepts are
-         * decided in one place -- pool_setarch() in aept_solver_init() --
-         * rather than restated here.  An index that also carries builds
-         * for other architectures must not offer one of those as the
-         * candidate: nothing would ever install it.
-         */
-        if (!pool_installable(pool, s))
-            continue;
-
-        /* A pin names an exact version, and the solver turns it into an
-         * exact solvable; the same version wins here. */
-        if (pin_ver && strcmp(pool_id2str(pool, s->evr), pin_ver) == 0) {
-            pinned = s;
-            continue;
-        }
-
-        if (!best || pool_evrcmp_str(pool, pool_id2str(pool, s->evr), pool_id2str(pool, best->evr),
-                                     EVRCMP_COMPARE) > 0)
-            best = s;
+        else if (query_offered(pool, s))
+            best = query_prefer(pool, best, s, pin_ver);
     }
 
     /*
@@ -937,12 +977,12 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
      * silently does nothing is how a machine ends up on a version
      * somebody pinned away from.
      */
-    if (pin_ver && !pinned)
+    if (pin_ver && best && strcmp(pool_id2str(pool, best->evr), pin_ver) != 0)
         aept_log_warning("pinned version '%s' of '%s' not found in any repository, "
                          "showing best available",
                          pin_ver, name);
 
-    s = pinned ? pinned : (best ? best : installed);
+    s = best ? best : installed;
     if (!s)
         goto not_found;
 
@@ -973,11 +1013,8 @@ static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t 
 
     memset(out, 0, sizeof(*out));
 
-    if (aept_solver_init(ctx) < 0)
+    if (query_begin(ctx) < 0)
         return -1;
-
-    aept_status_load(ctx);
-    query_load_repos(ctx);
 
     pool = aept_solver_pool(ctx->solver);
 
@@ -994,13 +1031,9 @@ static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t 
         if (s->name != name_id)
             continue;
 
-        /*
-         * A build for an architecture this machine does not take is not
-         * a version of the package it could have, so it is not listed --
-         * the same test the candidate is chosen by.  What is installed
-         * is always listed, whatever the configuration says now.
-         */
-        if (s->repo != pool->installed && !pool_installable(pool, s))
+        /* A version this machine could not install is not one of its
+         * versions, so it is not listed either. */
+        if (s->repo != pool->installed && !query_offered(pool, s))
             continue;
 
         evr = pool_id2str(pool, s->evr);

@@ -235,4 +235,66 @@ $out" ;;
     note "an unwritable pin file is reported, not ignored"
 fi
 
+# ── every query agrees with what an install would do ─────────────────
+#
+# "list" marks upgradable and "show" names the candidate; both are the
+# same judgement, and both used to be "highest version in the archive".
+# A package pinned to what it already has is not upgradable, however
+# much newer the archive is -- saying otherwise sends somebody chasing
+# an upgrade that will not happen.
+
+aept_run "$root" remove --non-interactive tool >/dev/null 2>&1
+: > "$pin_file"
+packages_stanza tool 1.0 "$work/tool_1.0.aeltra" > "$list"
+aept_run "$root" install --non-interactive tool >/dev/null 2>&1 \
+    || fail "installing tool 1.0 failed"
+{ packages_stanza tool 1.0 "$work/tool_1.0.aeltra"
+  packages_stanza tool 2.0 "$work/tool_2.0.aeltra"; } > "$list"
+
+out=$(aept_run "$root" list --installed 2>&1)
+case $out in
+    *upgradable*) ;;
+    *) fail "an unpinned package with a newer version is not upgradable:
+$out" ;;
+esac
+note "unpinned, a newer version in the archive reads as upgradable"
+
+aept_run "$root" pin tool=1.0 >/dev/null 2>&1 || fail "pinning tool failed"
+
+out=$(aept_run "$root" list --installed 2>&1)
+case $out in
+    *upgradable*) fail "a package pinned to what it has was marked upgradable:
+$out" ;;
+esac
+note "pinned to what it has, it is not"
+
+shown=$(aept_run "$root" show tool 2>&1 | sed -n 's/^Version: //p')
+listed=$(aept_run "$root" list --installed 2>&1 | sed -n 's/^tool - \([^ ]*\).*/\1/p')
+[ "$shown" = "1.0" ] || fail "show named '$shown' under the pin, not 1.0"
+[ "$listed" = "1.0" ] || fail "list named '$listed', not 1.0"
+note "show and list name the same version"
+
+aept_run "$root" unpin tool >/dev/null 2>&1 || fail "unpinning failed"
+out=$(aept_run "$root" list --installed 2>&1)
+case $out in
+    *upgradable*) ;;
+    *) fail "upgradable did not come back once the pin was gone:
+$out" ;;
+esac
+note "and upgradable returns once the pin is gone"
+
+# The same rule about architecture: a build this machine would never
+# install cannot be what makes a package upgradable.
+{ packages_stanza tool 1.0 "$work/tool_1.0.aeltra"
+  printf 'Package: tool\nVersion: 9.0\nArchitecture: nosucharch\n'
+  printf 'Filename: tool_9.0.aeltra\nSize: 100\n'
+  printf 'SHA256: %064d\nDescription: for another machine\n\n' 1; } > "$list"
+
+out=$(aept_run "$root" list --installed 2>&1)
+case $out in
+    *upgradable*) fail "a build for an unconfigured architecture made it upgradable:
+$out" ;;
+esac
+note "a build for an unconfigured architecture does not make it upgradable"
+
 exit 0
