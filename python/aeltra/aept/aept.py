@@ -79,7 +79,11 @@ class PkgInfo:
     name: str
     version: str
     architecture: Optional[str]
+    section: Optional[str]
+    source: Optional[str]
+    maintainer: Optional[str]
     installed_size: int
+    download_size: int
     depends: Optional[str]
     pre_depends: Optional[str]
     recommends: Optional[str]
@@ -125,7 +129,11 @@ def _pkg_info(p) -> PkgInfo:
         name=c_to_str(p.name),
         version=c_to_str(p.version),
         architecture=c_to_str(p.architecture),
+        section=c_to_str(p.section),
+        source=c_to_str(p.source),
+        maintainer=c_to_str(p.maintainer),
         installed_size=p.installed_size,
+        download_size=p.download_size,
         depends=c_to_str(p.depends),
         pre_depends=c_to_str(p.pre_depends),
         recommends=c_to_str(p.recommends),

@@ -950,6 +950,13 @@ static void print_info(const aept_pkg_info_t *info)
     printf("Version: %s\n", info->version);
     printf("Architecture: %s\n", info->architecture);
 
+    if (info->section)
+        printf("Section: %s\n", info->section);
+    if (info->source)
+        printf("Source: %s\n", info->source);
+    if (info->maintainer)
+        printf("Maintainer: %s\n", info->maintainer);
+
     /* The field is bytes; Debian's Installed-Size is kB, which is what
      * the control file said and what this label promises. */
     if (info->installed_size)
@@ -973,12 +980,23 @@ static void print_info(const aept_pkg_info_t *info)
     if (info->homepage)
         printf("Homepage: %s\n", info->homepage);
 
+    /* Only an index carries Size, so this is absent for something that
+     * is merely installed -- as is Filename, beside it. */
+    if (info->download_size)
+        printf("Download-Size: %llu kB\n", info->download_size / 1024);
+
     if (info->filename)
         printf("Filename: %s\n", info->filename);
 
     if (info->summary) {
         printf("Description: %s\n", info->summary);
-        if (info->description) {
+        /*
+         * libsolv's DESCRIPTION holds the continuation lines -- but the
+         * summary itself when a package has none, which is every stanza
+         * in an archive whose descriptions are one line.  Printing both
+         * then says the same sentence twice.
+         */
+        if (info->description && strcmp(info->description, info->summary) != 0) {
             const char *p = info->description;
             while (*p) {
                 const char *eol = strchr(p, '\n');

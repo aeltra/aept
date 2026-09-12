@@ -207,7 +207,11 @@ typedef struct {
     char *name;
     char *version;
     char *architecture;
+    char *section;
+    char *source; /* the source package this was built from */
+    char *maintainer;
     unsigned long long installed_size; /* bytes; the control file's kB * 1024 */
+    unsigned long long download_size;  /* bytes, as the index's Size: says */
     char *depends;
     char *pre_depends;
     char *recommends;

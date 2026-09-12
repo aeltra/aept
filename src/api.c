@@ -827,6 +827,20 @@ static void fill_info(struct aept_ctx *ctx, Pool *pool, Solvable *s, aept_pkg_in
         free(path);
     }
     if (stanza) {
+        char *num;
+
+        out->section = aept_stanza_field(stanza, "Section");
+        out->source = aept_stanza_field(stanza, "Source");
+        out->maintainer = aept_stanza_field(stanza, "Maintainer");
+
+        /* Size is the compressed archive, in bytes, and only an index
+         * carries it: what is installed was downloaded long ago. */
+        num = aept_stanza_field(stanza, "Size");
+        if (num) {
+            out->download_size = strtoull(num, NULL, 10);
+            free(num);
+        }
+
         out->depends = aept_stanza_field(stanza, "Depends");
         out->pre_depends = aept_stanza_field(stanza, "Pre-Depends");
         out->recommends = aept_stanza_field(stanza, "Recommends");
@@ -856,7 +870,8 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 {
     Pool *pool;
     Id name_id, p;
-    Solvable *s, *best = NULL, *installed = NULL;
+    Solvable *s, *best = NULL, *installed = NULL, *pinned = NULL;
+    const char *pin_ver;
     int r = -1;
 
     memset(out, 0, sizeof(*out));
@@ -866,12 +881,21 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 
     aept_status_load(ctx);
     query_load_repos(ctx);
+    /*
+     * Pins decide the answer, so they have to be here.  Without them
+     * this reported the newest version in the archive as the candidate
+     * while an install, which loads them, took the pinned one instead:
+     * two commands describing the same machine differently.
+     */
+    aept_pin_load_into_solver(ctx);
 
     pool = aept_solver_pool(ctx->solver);
 
     name_id = pool_str2id(pool, name, 0);
     if (!name_id)
         goto not_found;
+
+    pin_ver = aept_solver_pin_version(ctx->solver, name);
 
     FOR_POOL_SOLVABLES(p)
     {
@@ -881,14 +905,44 @@ static int api_show(aept_ctx_t *ctx, const char *name, aept_pkg_info_t *out)
 
         if (s->repo == pool->installed) {
             installed = s;
-        } else {
-            if (!best || pool_evrcmp_str(pool, pool_id2str(pool, s->evr),
-                                         pool_id2str(pool, best->evr), EVRCMP_COMPARE) > 0)
-                best = s;
+            continue;
         }
+
+        /*
+         * Only what could actually be installed here.  pool_installable()
+         * is libsolv's own test, so the architectures aept accepts are
+         * decided in one place -- pool_setarch() in aept_solver_init() --
+         * rather than restated here.  An index that also carries builds
+         * for other architectures must not offer one of those as the
+         * candidate: nothing would ever install it.
+         */
+        if (!pool_installable(pool, s))
+            continue;
+
+        /* A pin names an exact version, and the solver turns it into an
+         * exact solvable; the same version wins here. */
+        if (pin_ver && strcmp(pool_id2str(pool, s->evr), pin_ver) == 0) {
+            pinned = s;
+            continue;
+        }
+
+        if (!best || pool_evrcmp_str(pool, pool_id2str(pool, s->evr), pool_id2str(pool, best->evr),
+                                     EVRCMP_COMPARE) > 0)
+            best = s;
     }
 
-    s = best ? best : installed;
+    /*
+     * A pin for a version no source offers falls back to best available,
+     * as an install does -- with the same warning, since a pin that
+     * silently does nothing is how a machine ends up on a version
+     * somebody pinned away from.
+     */
+    if (pin_ver && !pinned)
+        aept_log_warning("pinned version '%s' of '%s' not found in any repository, "
+                         "showing best available",
+                         pin_ver, name);
+
+    s = pinned ? pinned : (best ? best : installed);
     if (!s)
         goto not_found;
 
@@ -938,6 +992,15 @@ static int api_show_all(aept_ctx_t *ctx, const char *name, aept_pkg_info_list_t 
 
         s = pool_id2solvable(pool, p);
         if (s->name != name_id)
+            continue;
+
+        /*
+         * A build for an architecture this machine does not take is not
+         * a version of the package it could have, so it is not listed --
+         * the same test the candidate is chosen by.  What is installed
+         * is always listed, whatever the configuration says now.
+         */
+        if (s->repo != pool->installed && !pool_installable(pool, s))
             continue;
 
         evr = pool_id2str(pool, s->evr);
@@ -1040,6 +1103,9 @@ void aept_pkg_info_free(aept_pkg_info_t *info)
     free(info->name);
     free(info->version);
     free(info->architecture);
+    free(info->section);
+    free(info->source);
+    free(info->maintainer);
     free(info->depends);
     free(info->pre_depends);
     free(info->recommends);

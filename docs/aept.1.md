@@ -272,20 +272,27 @@ Remove version pins for one or more packages.
 
 ## show \[options\] \<package\>
 
-Show information about a package: name, version, architecture, installed
-size, dependencies, homepage, filename and description.
+Show information about a package: name, version, architecture, section,
+source package, maintainer, installed size, dependencies, homepage,
+download size, filename and description. A field the package does not
+declare is not printed; **Download-Size** and **Filename** come from an
+index, so neither appears for a version that is merely installed.
 
-By default this is the **candidate** -- the best version any configured
-source offers, or the installed one when no source offers it. The
-**Status** line appears only when the version in the stanza is the one
-on disk, so a candidate newer than what is installed is not reported as
-installed.
+By default this is the **candidate**: the version an **install** would
+take. That is the best version any configured source offers for an
+architecture this machine accepts -- or the version it is pinned to, if
+it is pinned -- falling back to the installed one when no source offers
+it. The **Status** line appears only when the version in the stanza is
+the one on disk, so a candidate newer than what is installed is not
+reported as installed.
 
 **-a, --all**
 
 > Print every version, newest first, one stanza each, separated by blank
 > lines as in a *Packages* file. A version both installed and offered by
-> a source appears once, as the installed one.
+> a source appears once, as the installed one. Builds for architectures
+> this machine does not accept are not listed, since no install would
+> take them.
 
 Returns exit code 1 if the package is not found.
 

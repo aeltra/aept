@@ -226,7 +226,7 @@ static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
     return 0;
 }
 
-static const char *find_pin_version(aept_solver_t *s, const char *name)
+const char *aept_solver_pin_version(aept_solver_t *s, const char *name)
 {
     int i;
 
@@ -403,7 +403,7 @@ int aept_solver_resolve_install(struct aept_ctx *ctx, const char **names, int co
         }
     } else {
         for (i = 0; i < count; i++) {
-            const char *pin_ver = find_pin_version(s, names[i]);
+            const char *pin_ver = aept_solver_pin_version(s, names[i]);
 
             if (pin_ver) {
                 Id nameid = pool_str2id(s->pool, names[i], 0);

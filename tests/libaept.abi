@@ -86,6 +86,6 @@ type:aept_display_fn: typedef void (*aept_display_fn)(const aept_transaction_t *
 type:aept_log_fn: typedef void (*aept_log_fn)(int level, const char *msg, void *userdata);
 type:aept_pkg_entry_t: typedef struct { char *name; char *version; char *summary; int installed; int upgradable; } aept_pkg_entry_t;
 type:aept_pkg_info_list_t: typedef struct { aept_pkg_info_t *entries; int count; } aept_pkg_info_list_t;
-type:aept_pkg_info_t: typedef struct { char *name; char *version; char *architecture; unsigned long long installed_size; char *depends; char *pre_depends; char *recommends; char *suggests; char *provides; char *conflicts; char *replaces; char *homepage; char *filename; char *summary; char *description; int is_installed; } aept_pkg_info_t;
+type:aept_pkg_info_t: typedef struct { char *name; char *version; char *architecture; char *section; char *source; char *maintainer; unsigned long long installed_size; unsigned long long download_size; char *depends; char *pre_depends; char *recommends; char *suggests; char *provides; char *conflicts; char *replaces; char *homepage; char *filename; char *summary; char *description; int is_installed; } aept_pkg_info_t;
 type:aept_pkg_list_t: typedef struct { aept_pkg_entry_t *entries; int count; } aept_pkg_list_t;
 type:aept_transaction_t: typedef struct aept_transaction { const char **install; int n_install; const char **upgrade; int n_upgrade; const char **reinstall; int n_reinstall; const char **remove; int n_remove; } aept_transaction_t;

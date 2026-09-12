@@ -74,6 +74,8 @@ with Aept() as a:
     assert every is not None, "show_all(pyfix) should not be None"
     assert [i.version for i in every] == ["1.0"], f"show_all: {every}"
     assert every[0].is_installed, "the installed version should say so"
+    assert every[0].maintainer and "@" in every[0].maintainer, \
+        f"maintainer: {every[0].maintainer}"
     assert a.show_all("absent") is None, "show_all(absent) should be None"
 
     files = a.files("pyfix")

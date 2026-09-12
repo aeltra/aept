@@ -125,7 +125,11 @@ typedef struct {
     char *name;
     char *version;
     char *architecture;
+    char *section;
+    char *source;
+    char *maintainer;
     unsigned long long installed_size;
+    unsigned long long download_size;
     char *depends;
     char *pre_depends;
     char *recommends;

@@ -41,6 +41,8 @@ Package: showcase
 Version: 2.1-3
 Architecture: all
 Maintainer: t <t@example.invalid>
+Section: utils
+Source: showsrc
 Installed-Size: 42
 Depends: libx (>= 1.0)
 Pre-Depends: libpre
@@ -66,6 +68,9 @@ for field in \
     'Package: showcase' \
     'Version: 2.1-3' \
     'Architecture: all' \
+    'Section: utils' \
+    'Source: showsrc' \
+    'Maintainer: t <t@example.invalid>' \
     'Installed-Size: 42 kB' \
     'Depends: libx (>= 1.0)' \
     'Pre-Depends: libpre' \
@@ -103,6 +108,27 @@ printf '%s\n' "$out" | grep -qx ' the second continuation line' \
 $out"
 note "the description continuation lines follow the summary, one space in"
 
+# A description of one line is one line.  libsolv reports the summary
+# again as the description when a package has no continuation -- which
+# is every stanza in an archive whose descriptions are one line -- and
+# printing both said the same sentence twice.
+cat > "$info/terse.control" <<'EOF'
+Package: terse
+Version: 1.0
+Architecture: all
+Description: all there is to say
+Status: install ok installed
+EOF
+printf './usr/bin/terse\t100755\n' > "$info/terse.list"
+out=$(aept_run "$root" show terse 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show of a one-line description exited $rc:
+$out"
+[ "$(printf '%s\n' "$out" | grep -c 'all there is to say')" = 1 ] \
+    || fail "a one-line description was printed more than once:
+$out"
+note "a one-line description is printed once"
+
 # ── a package that is available but not installed ────────────────────
 #
 # Filename comes from the index and Status from the status area, so
@@ -126,6 +152,9 @@ printf '%s\n' "$out" | grep -qF 'Package: shelf' \
 $out"
 printf '%s\n' "$out" | grep -qF 'Filename: ' \
     || fail "show of an available package printed no Filename:
+$out"
+printf '%s\n' "$out" | grep -qE '^Download-Size: [0-9]+ kB$' \
+    || fail "show of an available package printed no Download-Size:
 $out"
 printf '%s\n' "$out" | grep -qF 'Status: install ok installed' \
     && fail "an uninstalled package was reported as installed:
@@ -203,6 +232,58 @@ rc=$?
 [ "$rc" -ne 0 ] || fail "show -a of an unknown package succeeded:
 $out"
 note "show -a of an unknown package is refused too"
+
+# ── the candidate is the one an install would take ───────────────────
+#
+# "show" is the command somebody runs before installing, so the version
+# it names has to be the version they would get.  It answered with the
+# newest in the archive regardless of what the machine would accept.
+
+aept_run "$root" pin two=1.0 >/dev/null 2>&1 || fail "pinning two failed"
+out=$(aept_run "$root" show two 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "show under a pin exited $rc:
+$out"
+printf '%s\n' "$out" | grep -qF 'Version: 1.0' \
+    || fail "show ignored the pin and named another version:
+$out"
+note "a pinned package shows the version it is pinned to"
+
+aept_run "$root" unpin two >/dev/null 2>&1 || fail "unpinning two failed"
+out=$(aept_run "$root" show two 2>&1)
+printf '%s\n' "$out" | grep -qF 'Version: 2.0' \
+    || fail "the candidate did not return to the newest once unpinned:
+$out"
+note "and the newest again once the pin is gone"
+
+# A build for an architecture the machine does not take is not a
+# version it could have, so it is neither the candidate nor listed.
+mkdir -p "$work/other/usr/share/two"
+printf 'o\n' > "$work/other/usr/share/two/f"
+make_pkg_tree "$work/two_9.0.aeltra" two 9.0 "" "$work/other"
+{
+    packages_stanza shelf 1.0 "$work/shelf_1.0.aeltra"
+    packages_stanza two 1.0 "$work/two_1.0.aeltra" "Homepage: https://old.invalid"
+    packages_stanza two 2.0 "$work/two_2.0.aeltra" "Homepage: https://new.invalid"
+    printf 'Package: two\nVersion: 9.0\nArchitecture: nosucharch\n'
+    printf 'Filename: two_9.0.aeltra\nSize: 100\n'
+    printf 'SHA256: %064d\nDescription: for another machine\n\n' 1
+} > "$list"
+
+out=$(aept_run "$root" show two 2>&1)
+printf '%s\n' "$out" | grep -qF 'Version: 9.0' \
+    && fail "a build for an unconfigured architecture was named the candidate:
+$out"
+printf '%s\n' "$out" | grep -qF 'Version: 2.0' \
+    || fail "the candidate is not the newest installable version:
+$out"
+note "a build for an unconfigured architecture is not the candidate"
+
+out=$(aept_run "$root" show -a two 2>&1)
+printf '%s\n' "$out" | grep -qF 'Version: 9.0' \
+    && fail "show -a listed a version the machine cannot install:
+$out"
+note "nor is it listed among the versions"
 
 # ── the ways it declines ─────────────────────────────────────────────
 

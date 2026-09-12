@@ -62,6 +62,11 @@ Transaction *aept_solver_transaction(aept_solver_t *s);
 Pool *aept_solver_pool(aept_solver_t *s);
 int aept_solver_solvable_source_index(aept_solver_t *s, Id p);
 Id aept_solver_find_available(aept_solver_t *s, const char *name);
+/* The version this package is pinned to, or NULL.  Query paths need it
+ * to answer with the version an install would choose: a pin makes the
+ * job an exact solvable rather than "best available". */
+const char *aept_solver_pin_version(aept_solver_t *s, const char *name);
+
 void aept_solver_add_pin(aept_solver_t *s, const char *name, const char *version);
 void aept_solver_clear_pins(aept_solver_t *s);
 const char *aept_solver_installed_version(aept_solver_t *s, const char *name);
