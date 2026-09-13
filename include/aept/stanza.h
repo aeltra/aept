@@ -7,19 +7,22 @@
 #ifndef STANZA_H_7BF97F
 #define STANZA_H_7BF97F
 
+#include <stdio.h>
+
 /*
- * What a package declared, as opposed to what the solver made of it.
+ * Reading fields back out of a control stanza.
  *
- * libsolv's pool is a solving representation: it renders dependencies
- * its own way, appends every package's implicit self-provide, folds
- * Debian's Replaces into obsoletes, and scales Installed-Size into
- * bytes.  All of that is right for solving and wrong for "aept show",
- * which promises the fields the packager wrote.  So display reads the
- * stanza the pool was built from.
+ * Two callers, for different reasons.  deb.c parses an index with these
+ * to build solvables, so this is where the format is actually read.
+ * "aept show" uses them again on a single stanza, because the pool is a
+ * solving representation and not a record of what the packager wrote:
+ * it renders "libx (>= 1.0)" its own way, appends every package's
+ * implicit self-provide, and scales Installed-Size into bytes.
  *
- * Only "show" uses this: one package, one stanza, once.  It is a linear
- * scan of the index, which would be the wrong shape for anything that
- * walks every solvable -- "list" must keep asking the pool.
+ * Finding one package's stanza is a linear scan of the index, which is
+ * the right shape for "show" -- one package, once -- and the wrong one
+ * for anything walking every solvable.  "list" must keep asking the
+ * pool.
  */
 
 /*
@@ -28,6 +31,13 @@
  * versions of a package.  The caller frees the result.
  */
 char *aept_stanza_find(const char *path, const char *name, const char *version);
+
+/*
+ * Call cb for each stanza in fp, from the current position, until cb
+ * returns non-zero or the input ends; that value is returned.  The
+ * stanza text is valid only for the duration of the call.
+ */
+int aept_stanza_foreach(FILE *fp, int (*cb)(const char *stanza, void *user), void *user);
 
 /*
  * The value of one field, or NULL when the stanza does not carry it.
@@ -39,5 +49,13 @@ char *aept_stanza_find(const char *path, const char *name, const char *version);
  * comes from the pool.  The caller frees the result.
  */
 char *aept_stanza_field(const char *stanza, const char *field);
+
+/*
+ * The same, with the value's lines kept apart: continuations are joined
+ * with a newline and lose only the one character that marked them.
+ * For Description, whose first line is the summary and whose body is
+ * meant to stay laid out as written.  The caller frees the result.
+ */
+char *aept_stanza_field_lines(const char *stanza, const char *field);
 
 #endif

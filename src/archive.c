@@ -653,6 +653,62 @@ int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes)
     return stream_entry(ar->ar, stream, max_bytes);
 }
 
+/* Loose enough never to bind on a real control stanza, tight enough
+ * that a hostile archive cannot spend memory here. */
+#define MAX_CONTROL_SIZE (1024 * 1024)
+
+int aept_ar_read_control(const char *ipk_path, char **out)
+{
+    struct aept_ar *ar;
+    struct archive_entry *entry;
+    char *buf = NULL;
+    size_t len = 0;
+    int found = 0, r = -1;
+
+    *out = NULL;
+
+    ar = aept_ar_open_pkg_control_archive(ipk_path);
+    if (!ar) {
+        aept_log_error("failed to open control archive in '%s'", ipk_path);
+        return -1;
+    }
+
+    while (archive_read_next_header(ar->ar, &entry) == ARCHIVE_OK) {
+        const char *path = archive_entry_pathname(entry);
+        FILE *mem;
+
+        if (!path)
+            continue;
+        if (path[0] == '.' && path[1] == '/')
+            path += 2;
+        if (strcmp(path, "control") != 0)
+            continue;
+
+        found = 1;
+        mem = open_memstream(&buf, &len);
+        if (!mem) {
+            aept_log_error("open_memstream: %s", strerror(errno));
+            break;
+        }
+        r = stream_entry(ar->ar, mem, MAX_CONTROL_SIZE);
+        if (fclose(mem) != 0)
+            r = -1;
+        break;
+    }
+
+    aept_ar_close(ar);
+
+    if (!found)
+        aept_log_error("no control file in '%s'", ipk_path);
+    if (r < 0) {
+        free(buf);
+        return -1;
+    }
+
+    *out = buf;
+    return 0;
+}
+
 void aept_ar_file_list_init(aept_ar_file_list_t *fl)
 {
     fl->entries = NULL;

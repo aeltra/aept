@@ -31,6 +31,12 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename);
  * max_bytes have been written.  max_bytes == 0 disables the limit. */
 int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes);
 
+/* The package's control stanza, as text, read straight out of its
+ * control archive.  For the solver, which must describe a package
+ * named on the command line before any temporary directory exists.
+ * The caller frees the result. */
+int aept_ar_read_control(const char *ipk_path, char **out);
+
 typedef struct {
     char *path;        /* archive path, e.g. "./usr/bin/foo" */
     char *link_target; /* NULL if not a symlink */

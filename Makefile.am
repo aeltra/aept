@@ -25,6 +25,7 @@ noinst_HEADERS = \
     include/aept/remove.h \
     include/aept/script.h \
     include/aept/solver.h \
+    include/aept/deb.h \
     include/aept/stanza.h \
     include/aept/status.h \
     include/aept/trigger.h \

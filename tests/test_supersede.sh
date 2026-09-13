@@ -1,26 +1,23 @@
 #!/bin/sh
-# test_supersede.sh - when one package takes another's place.
+# test_supersede.sh - Conflicts plus Replaces is not a supersede.
 #
 # Copyright (C) 2026 Tobias Koch
 # SPDX-License-Identifier: MIT
 #
-# Debian says this with two fields, and the pair means more than either
-# alone (Policy 7.6): Replaces on its own is permission to overwrite
-# another package's files, and only Replaces *together with* Conflicts
-# on the same package means "that package should go, and I take its
-# place".  test_file_clash.sh holds that distinction down at install
-# time, where it decides who owns a path.
+# Debian has no field meaning "this package supersedes that one".  RPM's
+# Obsoletes means it, and libsolv models it: an obsoleting package is an
+# update candidate for the obsoleted one, so a plain upgrade swaps them.
 #
-# This is the other half: what it means for resolution.  A supersede
-# makes a package an update candidate for the one it supersedes, so a
-# plain "aept upgrade" -- which asks for nothing in particular -- will
-# swap them.  That is correct and useful: it is how a renamed package
-# reaches machines that have the old name.
+# Conflicts plus Replaces is not that.  "Conflicts: X" says X must go for
+# this package to be installed; "Replaces: X" says this package may
+# overwrite X's files on the way out.  Both describe how a removal the
+# user asked for is carried out.  Neither is a reason to start one.
 #
-# Which makes the negative just as important.  A package that merely
-# conflicts must NOT be offered that way, or any two packages declaring
-# they cannot coexist become upgrade paths for each other, and an
-# unattended upgrade starts replacing things nobody asked it to.
+# Read as obsoletes, every mail transport agent becomes an upgrade path
+# for every other, and an unattended upgrade starts swapping daemons
+# nobody named.  That is what this pins shut: the difference between the
+# two declarations shows up when a package is installed by name, never
+# in what an upgrade decides to do.
 
 set -u
 
@@ -48,7 +45,7 @@ for p in exim postfix dovecot; do
 done
 
 make_pkg_tree "$work/exim_1.0.aeltra" exim 1.0 "" "$work/exim"
-# postfix supersedes exim: it conflicts with it AND replaces it.
+# postfix conflicts with exim and may take its files over.
 make_pkg_tree "$work/postfix_1.0.aeltra" postfix 1.0 "Conflicts: exim
 Replaces: exim" "$work/postfix"
 # dovecot merely conflicts -- it takes nothing over.
@@ -64,7 +61,7 @@ fresh_exim() {
     installed exim || fail "exim is not installed after a fresh install"
 }
 
-# ── a supersede is an upgrade path ───────────────────────────────────
+# ── Conflicts + Replaces is not an upgrade path ──────────────────────
 
 {
     packages_stanza exim 1.0 "$work/exim_1.0.aeltra"
@@ -75,19 +72,36 @@ fresh_exim
 
 out=$(aept_run "$root" upgrade --non-interactive 2>&1)
 rc=$?
-[ "$rc" -eq 0 ] || fail "upgrade with a superseding package exited $rc:
+[ "$rc" -eq 0 ] || fail "upgrade with a conflicting-and-replacing package exited $rc:
 $out"
-installed postfix || fail "the superseding package was not installed:
+installed exim || fail "exim was removed by an upgrade nobody asked for:
 $out"
-installed exim && fail "the superseded package is still installed:
+installed postfix && fail "Conflicts plus Replaces was taken as an upgrade path:
 $out"
-note "a supersede is taken by a plain upgrade, and the old package goes"
+note "Conflicts plus Replaces is not an upgrade path; the machine is left alone"
 
-# ── a bare conflict is not ───────────────────────────────────────────
+# ── ... but installing it by name does remove the conflict ───────────
+#
+# The same two declarations, now that the user has actually asked for
+# postfix.  This is the removal Conflicts calls for, and the one
+# Replaces describes the file handling of.
+
+out=$(aept_run "$root" install --non-interactive postfix 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "installing postfix over exim exited $rc:
+$out"
+installed postfix || fail "postfix was not installed when asked for by name:
+$out"
+installed exim && fail "exim survived a package that conflicts with it:
+$out"
+note "asked for by name, it is installed and the conflict is removed"
+
+# ── a bare conflict behaves the same way ─────────────────────────────
 #
 # dovecot conflicts with exim and replaces nothing.  An upgrade must
-# leave the machine alone: the two cannot coexist, but that is a reason
-# to refuse to install both, not a licence to substitute one.
+# leave the machine alone here too: the two cannot coexist, but that is
+# a reason to refuse to install both, not a licence to substitute one.
+# Replaces changes how files are handled, never whether this happens.
 
 {
     packages_stanza exim 1.0 "$work/exim_1.0.aeltra"
@@ -103,6 +117,6 @@ installed exim || fail "a package was removed for a conflict nobody asked to res
 $out"
 installed dovecot && fail "a merely-conflicting package was installed by an upgrade:
 $out"
-note "a bare conflict is not an upgrade path; the machine is left alone"
+note "a bare conflict is not an upgrade path either"
 
 exit 0

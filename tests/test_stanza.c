@@ -164,6 +164,46 @@ int main(void)
         free(v);
     }
 
+    /*
+     * Folding versus keeping the lines.  A relationship field is one
+     * logical value however it was wrapped, so continuations join with
+     * a single space whatever the indent.  A Description is laid out by
+     * its author: its continuations keep their newline and lose only
+     * the one character that marked them, so any further indent is the
+     * author's and survives.
+     */
+    write_raw("Package: p\n"
+              "Version: 1\n"
+              "Depends: one,\n"
+              "   two,\n"
+              "\tthree\n"
+              "Description: summary\n"
+              " body\n"
+              "   indented\n"
+              "\n");
+    {
+        char *stanza = aept_stanza_find(path, "p", "1");
+
+        v = aept_stanza_field(stanza, "Depends");
+        test_str_eq(v, "one, two, three", "a folded field joins with one space per line");
+        free(v);
+
+        v = aept_stanza_field_lines(stanza, "Depends");
+        test_str_eq(v, "one,\n  two,\nthree", "kept apart, only the marking character goes");
+        free(v);
+
+        v = aept_stanza_field_lines(stanza, "Description");
+        test_str_eq(v, "summary\nbody\n  indented",
+                    "a Description keeps its lines and the author's indent");
+        free(v);
+
+        v = aept_stanza_field_lines(stanza, "Absent");
+        test_ok(v == NULL, "a field that is not there reads as nothing either way");
+        free(v);
+
+        free(stanza);
+    }
+
     /* A stanza with no Package line belongs to nobody. */
     write_raw("Version: 1\nDepends: d\n\n");
     v = field_of("p", "1", "Depends");

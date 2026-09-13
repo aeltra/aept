@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <config.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +14,6 @@
 #include <solv/pool.h>
 #include <solv/poolarch.h>
 #include <solv/repo.h>
-#include <solv/repo_deb.h>
 #include <solv/solver.h>
 #include <solv/solvable.h>
 #include <solv/transaction.h>
@@ -22,6 +23,8 @@
 #include "aept/internal.h"
 #include "aept/msg.h"
 #include "aept/solver.h"
+#include "aept/archive.h"
+#include "aept/deb.h"
 #include "aept/util.h"
 
 int aept_solver_init(struct aept_ctx *ctx)
@@ -79,7 +82,7 @@ int aept_solver_load_repo(struct aept_ctx *ctx, const char *name, FILE *fp, int 
         return -1;
     }
 
-    if (repo_add_debpackages(repo, fp, 0)) {
+    if (aept_deb_add_packages(repo, fp) < 0) {
         aept_log_error("failed to parse Packages for '%s'", name);
         repo_free(repo, 0);
         return -1;
@@ -102,7 +105,7 @@ int aept_solver_load_installed(struct aept_ctx *ctx, FILE *fp)
         return -1;
     }
 
-    if (repo_add_debpackages(s->installed_repo, fp, 0)) {
+    if (aept_deb_add_packages(s->installed_repo, fp) < 0) {
         aept_log_error("failed to parse status file");
         repo_free(s->installed_repo, 0);
         s->installed_repo = NULL;
@@ -117,6 +120,7 @@ int aept_solver_load_installed(struct aept_ctx *ctx, FILE *fp)
 Id aept_solver_load_local(struct aept_ctx *ctx, const char *path)
 {
     aept_solver_t *s = ctx->solver;
+    char *control;
     Id p;
 
     if (s->ncmdline >= AEPT_MAX_CMDLINE) {
@@ -132,7 +136,11 @@ Id aept_solver_load_local(struct aept_ctx *ctx, const char *path)
         }
     }
 
-    p = repo_add_deb(s->commandline_repo, path, 0);
+    if (aept_ar_read_control(path, &control) < 0)
+        return 0;
+
+    p = aept_deb_add_control(s->commandline_repo, control);
+    free(control);
     if (!p) {
         aept_log_error("failed to read '%s'", path);
         return 0;
@@ -166,6 +174,83 @@ const char *aept_solver_commandline_path(aept_solver_t *s, Id p)
     }
 
     return NULL;
+}
+
+/*
+ * Move the removal of a package that another package in this same
+ * transaction takes over to after that package's installation.
+ *
+ * That is what Debian's Replaces, paired with Conflicts, asks for
+ * (Policy 7.6.2): the new package overwrites the old one's files, and
+ * what remains of the old package is removed afterwards.  Removing
+ * first would take the files away before their replacements arrive, and
+ * for a package holding something the rest of the transaction needs --
+ * a shell, the core utilities -- the system is unusable in the gap.
+ *
+ * libsolv orders a conflict's removal first and cannot be asked for the
+ * other order: its one primitive for "installs over, then removes" is
+ * obsoletes, which also makes the package an update candidate, which is
+ * not what Replaces means.  See deb.h.  So the order is aept's own,
+ * applied on top of transaction_order() rather than instead of it --
+ * every step keeps its place except the removals that must wait, and
+ * each of those moves the shortest distance that satisfies the rule.
+ *
+ * install.c supplies the other half: the fileset it threads into the
+ * removal stops it deleting a path that was just handed over.
+ */
+static void order_takeovers(Transaction *trans)
+{
+    Pool *pool = trans->pool;
+    Queue ordered;
+    int *after;
+    int i, j, n = trans->steps.count;
+
+    if (n == 0)
+        return;
+
+    after = solv_calloc(n, sizeof(*after));
+
+    for (i = 0; i < n; i++) {
+        Id ep = trans->steps.elements[i];
+
+        after[i] = -1;
+        if (transaction_type(trans, ep,
+                             SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL) !=
+            SOLVER_TRANSACTION_ERASE)
+            continue;
+
+        /* The last install that takes this package over, so a removal
+         * claimed by several waits for all of them. */
+        for (j = i + 1; j < n; j++) {
+            Id ip = trans->steps.elements[j];
+            int type = transaction_type(
+                trans, ip, SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL);
+
+            if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
+                continue;
+            if (aept_deb_takes_over(pool, pool_id2solvable(pool, ip),
+                                    pool_id2solvable(pool, ep)->name))
+                after[i] = j;
+        }
+    }
+
+    queue_init(&ordered);
+    for (i = 0; i < n; i++) {
+        if (after[i] < 0)
+            queue_push(&ordered, trans->steps.elements[i]);
+        for (j = 0; j < n; j++)
+            if (after[j] == i)
+                queue_push(&ordered, trans->steps.elements[j]);
+    }
+
+    if (ordered.count == n) {
+        queue_empty(&trans->steps);
+        for (i = 0; i < n; i++)
+            queue_push(&trans->steps, ordered.elements[i]);
+    }
+
+    queue_free(&ordered);
+    solv_free(after);
 }
 
 static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
@@ -222,6 +307,7 @@ static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
 
     s->trans = solver_create_transaction(s->solv);
     transaction_order(s->trans, keep_orderdata ? SOLVER_TRANSACTION_KEEP_ORDERDATA : 0);
+    order_takeovers(s->trans);
 
     return 0;
 }
@@ -470,8 +556,13 @@ int aept_solver_resolve_install(struct aept_ctx *ctx, const char **names, int co
     }
 
     r = do_solve(ctx, &job, count > 0 || local_count > 0);
-    if (r == 0 && (count > 0 || local_count > 0))
+    if (r == 0 && (count > 0 || local_count > 0)) {
         reorder_transaction(s->trans, s->pool, names, count, local_ids, local_count);
+        /* reorder_transaction rebuilds the step list from libsolv's
+         * choices, so the takeover rule is applied again on top: it has
+         * to be the last word on the order. */
+        order_takeovers(s->trans);
+    }
 
     queue_free(&job);
 

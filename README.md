@@ -40,8 +40,8 @@ aept autoremove
 
 ## Building
 
-Dependencies: autotools, `libarchive`, OpenSSL >= 1.1.1, `libsolv` and
-`libsolvext`. At runtime, `usign` is required for signature
+Dependencies: autotools, `libarchive`, OpenSSL >= 1.1.1 and `libsolv`.
+At runtime, `usign` is required for signature
 verification. `scdoc` and `pandoc` are only needed to rebuild the
 manual.
 

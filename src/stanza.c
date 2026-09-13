@@ -70,6 +70,55 @@ static int stanza_matches(const char *stanza, const char *name, const char *vers
     return ok;
 }
 
+/*
+ * Read the next stanza from fp into b, returning 0 at end of input.
+ * A blank line ends one; so does end of file, since a .control holds a
+ * single stanza and need not end with one.
+ */
+static int next_stanza(FILE *fp, struct buf *b)
+{
+    char line[STANZA_LINE_MAX];
+
+    buf_reset(b);
+
+    while (fgets(line, sizeof(line), fp)) {
+        /*
+         * An over-long line is dropped whole.  Reading its tail as a
+         * line of its own would invent a field, and a stanza is only
+         * ever used here to answer a question about itself.
+         */
+        if (aept_fgets_is_truncated(line, sizeof(line))) {
+            aept_fgets_drain_line(fp);
+            continue;
+        }
+
+        if (line[0] == '\n' || line[0] == '\r') {
+            if (b->len)
+                return 1;
+            continue;
+        }
+
+        buf_add(b, line);
+    }
+
+    return b->len ? 1 : 0;
+}
+
+int aept_stanza_foreach(FILE *fp, int (*cb)(const char *stanza, void *user), void *user)
+{
+    struct buf b = {NULL, 0, 0};
+    int r = 0;
+
+    while (next_stanza(fp, &b)) {
+        r = cb(b.p, user);
+        if (r)
+            break;
+    }
+
+    free(b.p);
+    return r;
+}
+
 char *aept_stanza_find(const char *path, const char *name, const char *version)
 {
     FILE *fp;
@@ -117,7 +166,7 @@ char *aept_stanza_find(const char *path, const char *name, const char *version)
     return found;
 }
 
-char *aept_stanza_field(const char *stanza, const char *field)
+static char *stanza_field(const char *stanza, const char *field, int keep_lines)
 {
     size_t flen = strlen(field);
     const char *p = stanza;
@@ -151,18 +200,27 @@ char *aept_stanza_field(const char *stanza, const char *field)
                     break;
                 neol = strchr(next, '\n');
 
-                /* The indent that marks a continuation is not part of
-                 * the value; exactly one space joins it to what came
-                 * before, however deeply it was indented. */
+                /*
+                 * The indent that marks a continuation is not part of
+                 * the value.  Folding drops all of it and joins with a
+                 * single space, however deeply the line was indented;
+                 * keeping the lines drops exactly the one character
+                 * that marked it and joins with a newline, because in
+                 * a Description the remaining indent is the author's.
+                 */
                 val = next;
-                while (*val == ' ' || *val == '\t')
+                if (keep_lines) {
                     val++;
+                } else {
+                    while (*val == ' ' || *val == '\t')
+                        val++;
+                }
                 if (neol && val > neol)
                     val = neol;
                 nlen = neol ? (size_t)(neol - val) : strlen(val);
 
                 tmp = aept_malloc(nlen + 2);
-                tmp[0] = ' ';
+                tmp[0] = keep_lines ? '\n' : ' ';
                 memcpy(tmp + 1, val, nlen);
                 tmp[nlen + 1] = '\0';
                 buf_add(&v, tmp);
@@ -194,4 +252,14 @@ char *aept_stanza_field(const char *stanza, const char *field)
     }
 
     return NULL;
+}
+
+char *aept_stanza_field(const char *stanza, const char *field)
+{
+    return stanza_field(stanza, field, 0);
+}
+
+char *aept_stanza_field_lines(const char *stanza, const char *field)
+{
+    return stanza_field(stanza, field, 1);
 }

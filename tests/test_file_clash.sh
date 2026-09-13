@@ -88,12 +88,14 @@ note "a disagreeing symlink is a clash, and the original survives"
 
 # ── a bare Replaces: does not legitimise the takeover ────────────────
 #
-# Divergence from dpkg, pinned deliberately: libsolv's deb parser drops
-# a Replaces that is not accompanied by a Conflicts ("obsoletes only
-# count when the packages also conflict", repo_deb.c), and clash.c
-# reads the takeover permission from exactly that field.  So the soft
-# file-move dpkg allows with Replaces alone is a refusal here, and the
-# takeover below needs the full Replaces + Conflicts pair.
+# Divergence from dpkg, pinned deliberately.  Policy 7.6.1 lets a bare
+# Replaces overwrite the other package's file while that package stays
+# installed, which means striking the path from its .list as well --
+# otherwise removing it later deletes a file it no longer owns.  aept
+# does not rewrite another package's file list, so it refuses the bare
+# form rather than half-applying it.  The takeover below needs the full
+# Replaces + Conflicts pair, where the other package is being removed
+# in the same transaction anyway.
 
 mkdir -p "$work/c/usr/bin"
 printf 'C\n' > "$work/c/usr/bin/shared"
@@ -109,11 +111,16 @@ note "a bare Replaces: is refused; takeover needs Conflicts too"
 
 # ── Replaces + Conflicts makes the takeover legitimate ───────────────
 #
-# The solver schedules pkga's removal, and the transaction installs
-# pkgc *first* -- so the clash check runs while pkga still owns the
-# path, and it is the Replaces declaration that lets it pass.  The
-# path is then handed over: pkga's removal afterwards must not delete
-# a file that pkgc now owns.
+# The solver schedules pkga's removal, and solver.c orders the install
+# ahead of it -- so the clash check runs while pkga still owns the path,
+# and it is the Replaces declaration that lets it pass.  The path is
+# then handed over: pkga's removal afterwards must not delete a file
+# that pkgc now owns.
+#
+# The order is asserted, not assumed.  Removing first would make this
+# whole case vacuous: the path would already be gone when pkgc2 was
+# unpacked, nothing would clash, and the test would pass while proving
+# nothing.  It would also be wrong -- see test_takeover_order.sh.
 
 make_pkg_tree "$work/pkgc2_1.0.aeltra" pkgc2 1.0 "Replaces: pkga
 Conflicts: pkga" "$work/c"
@@ -129,6 +136,15 @@ if aept_run "$root" list --installed 2>/dev/null | grep -q '^pkga '; then
 fi
 grep -q '^C$' "$root/usr/bin/shared" \
     || fail "the handed-over file did not survive pkga's removal"
+
+printf '%s\n' "$out" | grep -q 'installing pkgc2' \
+    || fail "no install step was reported:
+$out"
+[ "$(printf '%s\n' "$out" | grep -n 'installing pkgc2' | cut -d: -f1)" \
+    -lt "$(printf '%s\n' "$out" | grep -n 'removing pkga' | cut -d: -f1)" ] \
+    || fail "pkga was removed before pkgc2 was installed, so the path was
+never handed over -- it was vacated and refilled:
+$out"
 note "Replaces+Conflicts: pkgc2 takes the path, pkga goes, the file stays"
 
 exit 0

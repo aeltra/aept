@@ -10,49 +10,34 @@
 #include <unistd.h>
 
 #include <solv/pool.h>
-#include <solv/queue.h>
 #include <solv/solvable.h>
 
 #include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/clash.h"
+#include "aept/deb.h"
 #include "aept/msg.h"
 #include "aept/owner_index.h"
 #include "aept/util.h"
 
-/* Check whether solvable s declares Replaces for owner_name. */
+/*
+ * Whether s may take a path owned by owner_name.
+ *
+ * Debian spells the takeover two ways (Policy 7.6) and aept honours one
+ * of them.  "Replaces: X" with "Conflicts: X" is the pair honoured
+ * here: X is being removed in this same transaction, solver.c orders
+ * the install ahead of that removal, and the fileset threaded through
+ * it stops the removal deleting the path just handed over.
+ *
+ * "Replaces: X" on its own is permission to overwrite X's files while X
+ * stays installed.  Honouring that means striking the path from X's
+ * .list, or removing X later would delete a file it no longer owns.
+ * aept does not rewrite another package's file list, so the bare form
+ * is refused rather than half-applied; test_file_clash.sh pins it.
+ */
 static int solvable_replaces(Pool *pool, Solvable *s, const char *owner_name)
 {
-    Queue q;
-    Id owner_id;
-    int i;
-
-    owner_id = pool_str2id(pool, owner_name, 0);
-    if (!owner_id)
-        return 0;
-
-    queue_init(&q);
-    solvable_lookup_deparray(s, SOLVABLE_OBSOLETES, &q, 0);
-
-    for (i = 0; i < q.count; i++) {
-        Id dep = q.elements[i];
-        Id name;
-
-        if (ISRELDEP(dep)) {
-            Reldep *rd = GETRELDEP(pool, dep);
-            name = rd->name;
-        } else {
-            name = dep;
-        }
-
-        if (name == owner_id) {
-            queue_free(&q);
-            return 1;
-        }
-    }
-
-    queue_free(&q);
-    return 0;
+    return aept_deb_takes_over(pool, s, pool_str2id(pool, owner_name, 0));
 }
 
 /* Check whether an on-disk symlink and an archive symlink point to the

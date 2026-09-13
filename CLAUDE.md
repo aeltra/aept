@@ -35,8 +35,11 @@ attributions that a source redistribution has to carry. They are in
 the build itself, has to be listed there deliberately; check `make dist`
 output when adding such a file.
 
-Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv + libsolvext
-(AC_CHECK_LIB). `src/libfetch/` is a **fork**, no longer tracked upstream — edit it
+Build dependencies: libarchive and OpenSSL **>= 1.1.1** (pkg-config), libsolv
+(AC_CHECK_LIB). **Not libsolvext**: `src/deb.c` parses control stanzas itself
+and builds solvables through libsolv proper, so `repo_add_debpackages()` and
+the rest of the extension library have no caller — see the deb.c entry under
+Architecture for why. `src/libfetch/` is a **fork**, no longer tracked upstream — edit it
 directly; there is no patch series and no re-import script. It has been pruned
 to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
 and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
@@ -277,7 +280,7 @@ suite:
 gcc -fsanitize=thread -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch \
     -o /tmp/threadrace_tsan tests/threadrace.c \
     $(ls src/*.c | grep -v main.c) src/libfetch/*.c \
-    $(pkg-config --cflags --libs libarchive openssl) -lsolvext -lsolv -lpthread
+    $(pkg-config --cflags --libs libarchive openssl) -lsolv -lpthread
 setarch $(uname -m) -R /tmp/threadrace_tsan 20 <root-a> <root-b> <url>
 ```
 
@@ -451,7 +454,7 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 
 **Key subsystems:**
 
-- **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads Packages files via `repo_add_debpackages()` (from `<solv/repo_deb.h>`). Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
+- **solver.c** — Wraps libsolv pool/repo/solver/transaction. Loads indexes via `aept_deb_add_packages()` (deb.c), not libsolv's own `repo_add_debpackages()`. Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `order_takeovers()` runs last on the step list — after `transaction_order()` and after `reorder_transaction()`, which rebuilds it — and moves the removal of a package that another package in the same transaction replaces to after that package's installation. libsolv orders a conflict's removal first and cannot be asked for the other order: its only primitive for "installs over, then removes" is obsoletes, which also confers update candidacy. `tests/test_takeover_order.sh` pins both directions, including that a *bare* conflict still removes first. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
 - **archive.c** — Two-level extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
@@ -460,27 +463,87 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 
   **Conditional GET.** The index request carries `If-None-Match` and `If-Modified-Since` when both are known, per RFC 9110 §13.1.3, and a `304` means keep what is on disk — no download, no re-verification, since it was verified when it was written. Packages are never revalidated: they are immutable and already checksummed. The validators live in `<lists_dir>/<name>.validator` (`validator.c`), the **first** per-source state file in the tree, as **opaque tokens echoed verbatim** — an ETag and an HTTP-date are equally unparsed, so there is no date parser anywhere in aept. That is the whole reason for a side file: apt keeps the validator in the cached file's mtime and is therefore forced through `time_t`, needing a parser *and* a generator, in a store any `cp` without `-a` resets. The record names the URL it was written for and is only sent back to that URL, or the same source fetched as `Packages.gz` instead of `InPackages.gz` would revalidate against the wrong document. It is written **last**, after the index has been verified and stored — a validator recorded for an index that was then rejected would earn a `304` and freeze the client on a document it never accepted. An **unsolicited `304` is a protocol error** in libfetch, on the same grounds as an unsolicited `206`: a request that asked no question gets no answer. **None of this is a freshness mechanism** — `ETag`, `Last-Modified` and `304` are all unsigned, a mirror answering "not modified" forever *is* the freeze attack, and only index.c's signed `Valid-Until` bounds it. `tests/test_update_conditional.sh` and `tests/test_validator.c` cover it.
 - **index.c** — the repository metadata stanza an index opens with (`Origin`, `Date`, `Valid-Until`) instead of a package. Timestamps are UTC and fixed width, so comparing two is `strcmp` and needs no date parsing. `aept_index_check_expiry()` runs at **index load time** (`install.c` and `api.c`), not at update time, and that placement is the point: the client this catches is one whose updates never arrive, and an attacker who simply drops the request leaves a client on a stale index forever where nothing on the update path can see it. `option check_index_expiry` decides whether expiry is fatal — default `0` (warn and use it anyway), because enforcing needs a re-signing job republishing on a timer, and without one every archive that stops receiving uploads expires and every client stops working. A deployment that runs such a job sets it to `1`; `install` then fails and `api.c` skips the source rather than aborting the whole query. An index carrying no `Valid-Until` is never refused, or repositories indexed before the field existed would break. **Rollback is not defended against**: `Date` is emitted and signed, but nothing compares it to the index already held. `tests/test_index_freshness.sh` covers the rest.
-- **stanza.c** — reads one field back out of a control stanza, for
-  `aept show` and nothing else. libsolv's pool is a *solving*
-  representation: it re-renders `libx (>= 1.0)` as `libx >= 1.0`, appends
-  every package's implicit `name = evr` to `Provides`, files Debian's
-  `Replaces` under `obsoletes` — where libsolv's own Debian reader lands
-  it as the *Conflicts* value or nowhere (`ext/repo_deb.c:549` compares
-  `idarraydata[k] == cid`, a tautology, so it pairs the two lists
-  positionally instead of intersecting them; still present in 0.7.39) —
-  and scales `Installed-Size` from kB into bytes. All correct for
-  solving, all wrong printed under a Debian field name, so display reads
-  the stanza the pool was built from: `{info_dir}/{name}.control` for an
-  installed version, `{lists_dir}/{repo}` for one a source offers, since
-  `query_load_repos()` names each repo after its source and that name is
-  the index's filename. Only `show` may do this — it is a linear scan per
-  package, the wrong shape for `list`, which must keep asking the pool.
-  The solver is still the right thing to *find* a package with; it is
-  only the wrong thing to *describe* one with.
+- **deb.c** — control stanzas into libsolv solvables. aept builds
+  solvables itself rather than calling `repo_add_debpackages()`, because
+  that reader files `Replaces` under `SOLVABLE_OBSOLETES` and obsoletes
+  is not what `Replaces` means. To libsolv an obsoletes is a *supersede*:
+  the obsoleting package becomes an update candidate for the obsoleted
+  one, so a plain `upgrade` swaps them. **No Debian field says that.**
+  `Conflicts: X` with `Replaces: X` says X must go for this package to be
+  installed, and that this package may overwrite X's files on the way —
+  how a removal is carried out, not a reason to start one. Read as
+  obsoletes, every mail transport agent is an upgrade path for every
+  other. So `Replaces` is kept under a repodata key of aept's own
+  (`aept_deb_replaces_key()`), which the solver never reads; clash.c
+  consults it for permission to overwrite and solver.c for the order.
+  `aept_deb_takes_over()` is the single definition of the pair, used by
+  both.
+
+  The grammar accepted is the **binary package** one: `name`,
+  `name (>= 1.0)`, alternatives joined by `|`, entries separated by `,`.
+  Architecture lists, build profiles and multiarch qualifiers belong to
+  source packages and are refused — `.aeltra` is the only format aept
+  consumes, and the real archive index uses none of them. Bare `<` and
+  `>` mean `<=` and `>=` per Policy 7.1, which is the one place the
+  parser deliberately differs from libsolv's (it reads them as strict).
+  Version *comparison* is still libsolv's `pool_evrcmp`; only the text is
+  parsed here.
+
+  **The parser refuses what it cannot represent**, and drops the whole
+  package rather than the offending field. A dependency that parses into
+  something weaker than it says — a relation silently dropped — installs
+  a package against a version it was never built for, and nothing
+  downstream can notice. Losing one package is visible; that is the
+  trade. `tests/test_deb.c` pins the grammar and every refusal.
+
+  Equivalence with libsolv's reader was established against the real
+  archive index (502 packages, 354 versioned relations, 3 alternatives):
+  every `requires`, `provides`, `conflicts`, `recommends`, `suggests`,
+  plus arch, summary, description, install-size and location match
+  exactly. The only difference is `SOLVABLE_DOWNLOADSIZE`, which libsolv
+  sets only when stat'ing a `.deb` and never reads from the index's
+  `Size:` field. `Source` is deliberately not stored — nothing reads it
+  from the pool; `show` takes it from the stanza.
+
+  `tests/debdiff.c` is that comparison, kept for the next change to the
+  parser. It is **not** in `make check` and not built by it: aept no
+  longer links libsolvext, and a harness that compares against it would
+  drag the dependency back into every build to serve a check that needs
+  a real index to mean anything. Build it by hand, against a plain
+  index — an `InPackages.gz` with its clearsign envelope stripped:
+
+```bash
+gcc -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch -o /tmp/debdiff \
+    tests/debdiff.c src/deb.c src/stanza.c src/util.c src/msg.c \
+    src/config.c src/validator.c src/libfetch/pctdecode.c \
+    $(pkg-config --cflags --libs libarchive openssl) -lsolvext -lsolv
+/tmp/debdiff <index>
+```
+- **stanza.c** — reading fields back out of a control stanza. Two
+  callers. deb.c parses an index with these, so this is where the format
+  is actually read: `aept_stanza_foreach()` splits an index into stanzas
+  and `aept_stanza_field()` answers one field. `aept show` uses them
+  again on a single stanza, because the pool is a *solving*
+  representation and not a record of what the packager wrote — it
+  re-renders `libx (>= 1.0)` as `libx >= 1.0`, appends every package's
+  implicit `name = evr` to `Provides`, and scales `Installed-Size` from
+  kB into bytes. So display reads the stanza the pool was built from:
+  `{info_dir}/{name}.control` for an installed version, `{lists_dir}/{repo}`
+  for one a source offers, since `query_load_repos()` names each repo
+  after its source and that name is the index's filename. Only `show` may
+  do that — it is a linear scan per package, the wrong shape for `list`,
+  which must keep asking the pool. The solver is still the right thing to
+  *find* a package with; it is only the wrong thing to *describe* one
+  with. `aept_stanza_field_lines()` is the variant that keeps a value's
+  lines apart, for `Description`, whose first line is the summary and
+  whose body is laid out by its author; every other field is one logical
+  value and folds onto a single line. An over-long line is dropped whole
+  rather than read in pieces, which would invent a field out of the
+  middle of somebody's `Description`.
 - **clearsign.c** — Splits a signify clearsigned envelope into message and signature. Splits at the **last** signature marker, because the envelope has no escaping and a package `Description` can contain a line that looks like one. The signature covers the index bytes exactly, trailing newline included.
 - **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
-- **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps.
+- **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps. The takeover rule is `aept_deb_takes_over()`: `Replaces` **and** `Conflicts` naming the same package, read from deb.c's key. Policy 7.6.1's *bare* `Replaces` — overwrite the other package's files while it stays installed — is a **deliberate divergence from dpkg**: honouring it means striking the path from that package's `.list` as well, or removing it later would delete a file it no longer owns, and aept does not rewrite another package's file list. It is refused rather than half-applied; `tests/test_file_clash.sh` pins it.
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction. **A failing trigger script never fails the completed transaction, but it never vanishes either**: the matched directories are written to `{name}.triggers-pending` *before* the script runs — so a failure, a crash and a Ctrl-C all leave the same record — and the package's `Status:` is set to `triggers-pending` (restored, and the record removed, on success; the side file is authoritative, the Status line derived from it). Every later transaction retries the record merged with anything newly matched, and `aept triggers` retries on demand. The status feed for libsolv normalizes `triggers-pending` to `installed`, like `unpacked`: the files are on disk and clash detection must see them. The CLI reports the state as **exit 2** ("transaction succeeded, a trigger is owed") via `AEPT_ERR_TRIGGER` in `aept_last_error()`; embedders and the Python bindings read the same channel. The pending scan collects names before running anything — the scripts rewrite files in `info_dir`, and mutating a directory mid-`readdir()` can hand entries back forever. Removal deletes the record with the other info files; the upgrade-side `remove_info_files` deliberately keeps it, so the retry runs the *new* version's script.
 - **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.

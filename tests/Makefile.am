@@ -11,6 +11,7 @@ unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
     test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
+    test_deb \
     test_oom
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
@@ -214,7 +215,7 @@ dist_check_SCRIPTS = \
     test_autoremove.sh \
     test_clean.sh \
     test_mark.sh test_option_order.sh test_show.sh \
-    test_supersede.sh test_supersede_disjoint.sh \
+    test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_pin.sh \
     test_python.sh \
     test_tls_reject.sh \
@@ -244,7 +245,7 @@ dist_check_SCRIPTS = \
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
     dribbleserver.py tlsserver.py libaept.abi abi-declarations.sh \
-    coverage-report.py coverage.tiers coverage.baseline
+    coverage-report.py coverage.tiers coverage.baseline debdiff.c
 
 TEST_EXTENSIONS = .sh
 
@@ -294,6 +295,17 @@ test_oom_LDADD = $(top_builddir)/src/libaept.la
 test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
     -Wl,--wrap=strdup -Wl,--wrap=vasprintf
+
+test_deb_SOURCES = \
+    test_deb.c \
+    $(top_srcdir)/src/deb.c \
+    $(top_srcdir)/src/stanza.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_deb_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_deb_LDADD = $(ARCHIVE_LIBS) -lsolv
+test_deb_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 test_stanza_SOURCES = \
     test_stanza.c \
