@@ -34,6 +34,7 @@ void aept_config_set_defaults(struct aept_config *cfg)
 
     cfg->check_signature = 1;
     cfg->check_index_expiry = 0;
+    cfg->install_recommends = 0;
     cfg->clean_cache = 1;
     cfg->verbosity = AEPT_INFO;
 
@@ -162,6 +163,9 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
         /* Typos resolve to the enforcing value, like every other option
          * here: a misspelling must not be what quietly disables a check. */
         cfg->check_index_expiry = parse_bool(key, value, 1);
+        return;
+    } else if (strcmp(key, "install_recommends") == 0) {
+        cfg->install_recommends = parse_bool(key, value, 0);
         return;
     } else if (strcmp(key, "ignore_uid") == 0) {
         cfg->ignore_uid = parse_bool(key, value, 0);

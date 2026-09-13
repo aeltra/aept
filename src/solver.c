@@ -298,6 +298,14 @@ static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
     solver_set_flag(s->solv, SOLVER_FLAG_ALLOW_UNINSTALL, 1);
     solver_set_flag(s->solv, SOLVER_FLAG_ALLOW_ARCHCHANGE, 1);
 
+    /*
+     * Recommends are off unless asked for.  libsolv satisfies them by
+     * default, which would have aept pull in packages nobody named --
+     * apt's behaviour, and the wrong one for a tool whose targets are
+     * often small.  "option install_recommends 1" restores it.
+     */
+    solver_set_flag(s->solv, SOLVER_FLAG_IGNORE_RECOMMENDED, !ctx->config.install_recommends);
+
     if (ctx->config.allow_downgrade)
         solver_set_flag(s->solv, SOLVER_FLAG_ALLOW_DOWNGRADE, 1);
 
