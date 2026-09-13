@@ -767,7 +767,8 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
 
     qsort(entries, nentries, sizeof(*entries), cmp_api_list_entry);
 
-    out->entries = calloc(nentries, sizeof(aept_pkg_entry_t));
+    out->entries = aept_malloc(nentries * sizeof(aept_pkg_entry_t));
+    memset(out->entries, 0, nentries * sizeof(aept_pkg_entry_t));
     if (!out->entries && nentries > 0)
         goto cleanup;
 
@@ -800,10 +801,10 @@ static int api_list(aept_ctx_t *ctx, const char *pattern, int filter_installed,
         show = filter_installed ? e->installed : (e->avail ? e->avail : e->installed);
 
         aept_pkg_entry_t *pe = &out->entries[out->count++];
-        pe->name = strdup(e->name);
-        pe->version = strdup(pool_id2str(pool, show->evr));
+        pe->name = aept_strdup(e->name);
+        pe->version = aept_strdup(pool_id2str(pool, show->evr));
         summary = solvable_lookup_str(show, SOLVABLE_SUMMARY);
-        pe->summary = summary ? strdup(summary) : NULL;
+        pe->summary = summary ? aept_strdup(summary) : NULL;
         pe->installed = e->installed != NULL;
         pe->upgradable = upgradable;
     }
@@ -877,9 +878,9 @@ static void fill_info(struct aept_ctx *ctx, Pool *pool, Solvable *s, aept_pkg_in
 
     memset(out, 0, sizeof(*out));
 
-    out->name = strdup(pool_id2str(pool, s->name));
-    out->version = strdup(pool_id2str(pool, s->evr));
-    out->architecture = strdup(pool_id2str(pool, s->arch));
+    out->name = aept_strdup(pool_id2str(pool, s->name));
+    out->version = aept_strdup(pool_id2str(pool, s->evr));
+    out->architecture = aept_strdup(pool_id2str(pool, s->arch));
     out->installed_size = solvable_lookup_num(s, SOLVABLE_INSTALLSIZE, 0);
 
     /*
@@ -924,16 +925,16 @@ static void fill_info(struct aept_ctx *ctx, Pool *pool, Solvable *s, aept_pkg_in
     }
 
     str = solvable_lookup_str(s, SOLVABLE_URL);
-    out->homepage = str ? strdup(str) : NULL;
+    out->homepage = str ? aept_strdup(str) : NULL;
 
     str = solvable_lookup_location(s, &medianr);
-    out->filename = str ? strdup(str) : NULL;
+    out->filename = str ? aept_strdup(str) : NULL;
 
     str = solvable_lookup_str(s, SOLVABLE_SUMMARY);
-    out->summary = str ? strdup(str) : NULL;
+    out->summary = str ? aept_strdup(str) : NULL;
 
     str = solvable_lookup_str(s, SOLVABLE_DESCRIPTION);
-    out->description = str ? strdup(str) : NULL;
+    out->description = str ? aept_strdup(str) : NULL;
 
     out->is_installed = (s->repo == pool->installed);
 }
@@ -1195,13 +1196,9 @@ static int api_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *
 
         if (count >= alloc) {
             alloc = alloc ? alloc * 2 : 64;
-            paths = realloc(paths, alloc * sizeof(char *));
-            if (!paths) {
-                fclose(fp);
-                return -1;
-            }
+            paths = aept_realloc(paths, alloc * sizeof(char *));
         }
-        paths[count++] = strdup(buf);
+        paths[count++] = aept_strdup(buf);
     }
 
     fclose(fp);
@@ -1309,12 +1306,11 @@ static int api_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *
                     alloc = alloc ? alloc * 2 : 4;
                     owners = aept_realloc(owners, alloc * sizeof(char *));
                 }
-                char *owner = malloc(name_len + 1);
-                if (owner) {
-                    memcpy(owner, ent->d_name, name_len);
-                    owner[name_len] = '\0';
-                    owners[count++] = owner;
-                }
+                char *owner = aept_malloc(name_len + 1);
+
+                memcpy(owner, ent->d_name, name_len);
+                owner[name_len] = '\0';
+                owners[count++] = owner;
                 break;
             }
         }
@@ -1349,12 +1345,10 @@ static int api_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out)
     *count_out = 0;
 
     if (ctx->config.narchs > 0) {
-        char **archs = malloc(ctx->config.narchs * sizeof(char *));
-        if (!archs)
-            return -1;
+        char **archs = aept_malloc(ctx->config.narchs * sizeof(char *));
 
         for (i = 0; i < ctx->config.narchs; i++)
-            archs[i] = strdup(ctx->config.archs[i]);
+            archs[i] = aept_strdup(ctx->config.archs[i]);
 
         *archs_out = archs;
         *count_out = ctx->config.narchs;

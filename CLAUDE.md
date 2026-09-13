@@ -461,9 +461,28 @@ partial state `exit()` left, only the process survives to run recovery).
 
 This is why **nothing in `msg.c` may allocate** — it is the path the failure
 is reported along. `tests/test_oom.c` holds the contract down by wrapping the
-allocators (`-Wl,--wrap`) and failing the *n*-th allocation of a call for
-every *n*, which catches a path reporting the failure somewhere other than
-the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
+allocators (`-Wl,--wrap`) and failing the *n*-th allocation for every *n*
+across **all 21 public entry points that arm the escape** — driving only
+one of them left the other twenty with their `AEPT_OOM_ENTER`/`LEAVE`
+pair half-covered, the arming side exercised and the returning side never
+reached.
+
+The contract it asserts is deliberately not "every injected failure
+reports `AEPT_ERR_NOMEM`". The wrapper catches every allocation in aept's
+own objects, which is more than the `aept_*()` allocators, and a site
+calling `malloc()` directly may legitimately handle the failure itself or
+report an error of its own. What is *not* allowed is a `-1` beside
+`AEPT_ERR_NONE`: a failure the caller cannot classify. That is what
+caught `api_architectures()` returning `-1` with no error set — and, in
+the same function, an unchecked `strdup()` putting a NULL into the array
+it handed back, which is worse than an error return because it fails in
+the caller. `api.c` now uses the `aept_*()` allocators throughout; the
+one plain `malloc()` left is `aept_init()`'s own context, whose NULL
+return is the documented API.
+
+The sweeps are shallow for the transaction calls — that fixture has no
+packages and no network, so install and remove bail out after a handful
+of allocations. What they still prove is the contract at the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 `calloc()` at `-O2`, and `aept_init()` is that shape.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
