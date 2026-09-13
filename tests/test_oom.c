@@ -443,7 +443,7 @@ static int uninjected(oom_call_fn call, int load_config)
 int main(void)
 {
     aept_ctx_t *ctx;
-    long depth;
+    long depth, config_depth = 0;
     const char *before;
 
     root = mkdtemp(dir_template);
@@ -486,19 +486,29 @@ int main(void)
                    expect);
             if (n < 0)
                 break;
+            if (strcmp(CALLS[i].name, "aept_load_config") == 0)
+                config_depth = n;
             total += n;
         }
         depth = total;
     }
     /*
-     * Around 105 today.  The figure is a floor against the fixture
-     * silently breaking -- if the config stopped loading, every sweep
-     * would bottom out at nought and every assertion would pass
-     * vacuously -- not a target.
+     * A guard against the fixture silently breaking: if the config
+     * stopped loading, every sweep would bottom out at nought and every
+     * assertion above would pass vacuously.
+     *
+     * It asks about aept_load_config() and not the total, because the
+     * total is not a property of the code.  How many allocations a call
+     * makes depends on the build: -O2 with _FORTIFY_SOURCE inlines or
+     * redirects enough of the libc calls that the wrapper never sees
+     * them, and the same tree swept 105 allocations here against 76
+     * under dpkg-buildpackage.  aept_load_config() goes entirely
+     * through aept's own allocators, which are real calls into libaept
+     * whatever the flags, and it came to 26 in both.
      */
     printf("# %ld allocations swept across %zu entry points\n", depth,
            sizeof(CALLS) / sizeof(CALLS[0]));
-    test_ok(depth > 80, "the sweeps covered a meaningful number of allocations");
+    test_ok(config_depth > 10, "the config sweep reached the fixture's allocations");
 
     /* The two allocating setters return their failure: aept_last_error()
      * is documented for calls that returned non-zero and is reset by
