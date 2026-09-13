@@ -32,15 +32,15 @@
 #
 # tier <name>       lines <hit>/<total> branches <hit>/<total>
 # file <path>       lines <hit>/<total> branches <hit>/<total>
-tier security               lines 1256/1380 branches   710/875
+tier security               lines 1255/1380 branches   709/875
 tier transaction            lines 2026/2373 branches 1118/1532
-tier plumbing               lines 2300/2712 branches 1419/1921
+tier plumbing               lines 2346/2762 branches 1452/1961
 tier cli                    lines   622/771 branches   266/368
 
 file src/archive.c          lines   357/413 branches   175/231
 file src/clash.c            lines   135/153 branches    85/124
 file src/clearsign.c        lines     52/55 branches     26/28
-file src/deb.c              lines   285/295 branches   177/202
+file src/deb.c              lines   284/295 branches   176/202
 file src/download.c         lines   131/147 branches     61/72
 file src/index.c            lines     38/44 branches     27/38
 file src/update.c           lines   165/178 branches    90/104
@@ -56,15 +56,15 @@ file src/script.c           lines     32/34 branches     24/30
 file src/solver.c           lines   295/342 branches   170/214
 file src/status.c           lines   209/268 branches   112/162
 file src/trigger.c          lines   326/366 branches   170/236
-file src/api.c              lines   640/705 branches   325/476
+file src/api.c              lines   640/705 branches   326/476
 file src/clean.c            lines     24/28 branches     15/18
-file src/config.c           lines   196/233 branches    87/128
+file src/config.c           lines   194/233 branches    85/128
 file src/libfetch/common.c  lines   402/487 branches   236/305
 file src/libfetch/common.h  lines       6/6 branches       0/0
 file src/libfetch/fetch.c   lines   107/134 branches    88/118
 file src/libfetch/http.c    lines   449/549 branches   348/445
 file src/libfetch/pctdecode.c lines     21/22 branches     27/30
 file src/msg.c              lines   100/105 branches     58/78
-file src/stanza.c           lines   156/161 branches   113/134
+file src/stanza.c           lines   204/211 branches   147/174
 file src/util.c             lines   199/282 branches   122/189
 file src/main.c             lines   622/771 branches   266/368

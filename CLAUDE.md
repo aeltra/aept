@@ -531,8 +531,19 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
   value including the ones nothing wanted. `aept_stanza_next_field()` is
   therefore zero-copy — it points into the stanza — and
   `aept_stanza_value()` is the only thing that allocates, called for the
-  fields worth keeping. Together: 2.3x slower than libsolv, then 1.44x.
-  Measure before optimising here; the obvious answer was wrong once.
+  fields worth keeping. Then the block reader above. Against libsolv,
+  per index load:
+
+  |                     | glibc | musl  |
+  |---------------------|-------|-------|
+  | Aeltra, 502 pkgs    | 1.31x | 1.09x |
+  | Debian, 68,825 pkgs | 1.11x | 0.80x |
+
+  **Measure before optimising here.** Three plausible diagnoses in a row
+  were wrong: the seventeen stanza scans were nearly free, a 28%
+  allocation cut bought ~10% and nothing at scale, and a bump allocator
+  showed allocation costs aept and libsolv *the same* -- the gap was the
+  extra copy, which nothing in the allocation numbers pointed to.
 
   Equivalence with libsolv's reader was established against the real
   archive index (502 packages, 354 versioned relations, 3 alternatives):

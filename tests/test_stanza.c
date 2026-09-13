@@ -67,6 +67,33 @@ static int count_stanza(const char *stanza, void *user)
     return 0;
 }
 
+/* Every stanza's Depends must hold exactly the entries it was built
+ * with -- the check that a block boundary did not cut one short. */
+static int check_depends(const char *stanza, void *user)
+{
+    struct stanza_seen *seen = user;
+    char *name = aept_stanza_field(stanza, "Package");
+    char *dep = aept_stanza_field(stanza, "Depends");
+    int i = name ? atoi(name + 3) : -1;
+    int want = (i % 97) + 1, got = 0;
+    const char *p = dep;
+    int bad = 0;
+
+    while (p && *p) {
+        got++;
+        p = strchr(p, ',');
+        if (p)
+            p++;
+    }
+    if (i < 0 || got != want)
+        bad = 1;
+
+    seen->n++;
+    free(name);
+    free(dep);
+    return bad;
+}
+
 static int stop_at_first(const char *stanza, void *user)
 {
     count_stanza(stanza, user);
@@ -337,6 +364,79 @@ int main(void)
 
         test_ok(aept_stanza_next_field(&pos, &f), "the field before the trailing space is read");
         test_ok(!aept_stanza_next_field(&pos, &f), "unterminated trailing space ends the walk");
+    }
+
+    /*
+     * An index bigger than the reader's block, so stanzas and the
+     * lines inside them straddle the boundary between two reads.  The
+     * splitter hands out pointers into that buffer, so a stanza that
+     * is only half-there when a block runs out has to be held back
+     * until the rest arrives -- get that wrong and fields are silently
+     * truncated or invented at every 64 KB.
+     *
+     * Field lengths vary deliberately, so the boundary lands in a
+     * different place in each stanza rather than always between two.
+     */
+    {
+        FILE *fp = fopen(path, "w");
+        struct stanza_seen seen = {0, "", ""};
+        int i, j, want = 700;
+
+        if (!fp) {
+            perror(path);
+            exit(1);
+        }
+        for (i = 0; i < want; i++) {
+            fprintf(fp, "Package: pkg%d\nVersion: %d.0\nDepends: ", i, i);
+            for (j = 0; j <= i % 97; j++)
+                fprintf(fp, "%sdep%d_%d", j ? ", " : "", i, j);
+            fprintf(fp, "\nDescription: package %d\n\n", i);
+        }
+        fclose(fp);
+
+        fp = fopen(path, "r");
+        aept_stanza_foreach(fp, count_stanza, &seen);
+        fclose(fp);
+
+        test_int_eq(seen.n, want, "every stanza of a multi-block index is found");
+        test_str_eq(seen.first, "pkg0", "the first is intact");
+        test_str_eq(seen.last, "pkg699", "and so is the last");
+    }
+
+    /* The same, checking a field rather than just the count: a stanza
+     * cut by a block boundary must still read back whole. */
+    {
+        FILE *fp = fopen(path, "r");
+        struct stanza_seen seen = {0, "", ""};
+
+        test_int_eq(aept_stanza_foreach(fp, check_depends, &seen), 0,
+                    "and every Depends across the boundary reads back whole");
+        fclose(fp);
+    }
+
+    /* An over-long line in the last stanza, which ends at end of file
+     * rather than at a blank line. */
+    write_raw("Package: p\nVersion: 1\n");
+    {
+        FILE *fp = fopen(path, "a");
+        int i;
+
+        for (i = 0; i < 9000; i++)
+            fputc(i ? 'x' : 'D', fp);
+        fputs("\nSuggests: last\n", fp);
+        fclose(fp);
+
+        fp = fopen(path, "r");
+        {
+            struct stanza_seen seen = {0, "", ""};
+            aept_stanza_foreach(fp, count_stanza, &seen);
+            test_int_eq(seen.n, 1, "a final stanza with an over-long line is still one stanza");
+        }
+        fclose(fp);
+
+        v = field_of("p", "1", "Suggests");
+        test_str_eq(v, "last", "and the field after the over-long line survives");
+        free(v);
     }
 
     /* A stanza with no Package line belongs to nobody. */

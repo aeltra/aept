@@ -71,52 +71,151 @@ static int stanza_matches(const char *stanza, const char *name, const char *vers
 }
 
 /*
- * Read the next stanza from fp into b, returning 0 at end of input.
- * A blank line ends one; so does end of file, since a .control holds a
- * single stanza and need not end with one.
+ * Splitting an index into stanzas.
+ *
+ * Read in blocks and hand out pointers into the read buffer, rather
+ * than accumulating each stanza line by line.  The line-by-line form
+ * cost three passes over every byte -- fgets scanning and copying out
+ * of the FILE buffer, strlen scanning again, memcpy copying again --
+ * which on Debian's 54 MB index was 60 ms before parsing began, a
+ * sixth of the whole load.  Here each byte is read once and scanned
+ * once, and nothing is copied except the rare compaction below.
  */
-static int next_stanza(FILE *fp, struct buf *b)
+#define STANZA_BLOCK (64 * 1024)
+
+struct reader {
+    FILE *fp;
+    char *buf;
+    size_t cap; /* allocated, always one more than len can reach */
+    size_t len; /* bytes held */
+    size_t pos; /* first byte not yet handed out */
+    int eof;
+};
+
+/* Drop the unconsumed bytes to the front and read another block. */
+static int reader_fill(struct reader *r)
 {
-    char line[STANZA_LINE_MAX];
+    size_t n;
 
-    buf_reset(b);
-
-    while (fgets(line, sizeof(line), fp)) {
-        /*
-         * An over-long line is dropped whole.  Reading its tail as a
-         * line of its own would invent a field, and a stanza is only
-         * ever used here to answer a question about itself.
-         */
-        if (aept_fgets_is_truncated(line, sizeof(line))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-
-        if (line[0] == '\n' || line[0] == '\r') {
-            if (b->len)
-                return 1;
-            continue;
-        }
-
-        buf_add(b, line);
+    if (r->pos) {
+        memmove(r->buf, r->buf + r->pos, r->len - r->pos);
+        r->len -= r->pos;
+        r->pos = 0;
     }
 
-    return b->len ? 1 : 0;
+    /* Room for a block and the NUL a final stanza is terminated with. */
+    if (r->len + STANZA_BLOCK + 1 > r->cap) {
+        do {
+            r->cap = r->cap ? r->cap * 2 : STANZA_BLOCK * 2;
+        } while (r->len + STANZA_BLOCK + 1 > r->cap);
+        r->buf = aept_realloc(r->buf, r->cap);
+    }
+
+    n = fread(r->buf + r->len, 1, STANZA_BLOCK, r->fp);
+    r->len += n;
+    if (!n)
+        r->eof = 1;
+
+    return n != 0;
+}
+
+/*
+ * Remove any line too long to have been read as one.  Reading its tail
+ * as a line of its own would invent a field out of the middle of
+ * somebody's Description, so the whole line goes.  Reached only for a
+ * stanza that has one, which is why it may copy.
+ */
+static void drop_overlong(char *s)
+{
+    char *w = s, *p = s;
+
+    while (*p) {
+        char *nl = strchr(p, '\n');
+        size_t llen = nl ? (size_t)(nl - p) : strlen(p);
+        size_t whole = llen + (nl ? 1 : 0);
+
+        if (llen < STANZA_LINE_MAX - 1) {
+            memmove(w, p, whole);
+            w += whole;
+        }
+        if (!nl)
+            break;
+        p = nl + 1;
+    }
+
+    *w = '\0';
+}
+
+/*
+ * The next stanza, NUL-terminated where it sits, or NULL at the end of
+ * the input.  Valid until the next call.
+ */
+static char *reader_next(struct reader *r)
+{
+    for (;;) {
+        char *base = r->buf + r->pos;
+        size_t avail = r->len - r->pos;
+        size_t i = 0, start = (size_t)-1;
+        int overlong = 0;
+
+        while (i < avail) {
+            char *nl = memchr(base + i, '\n', avail - i);
+            size_t llen = (nl ? (size_t)(nl - base) : avail) - i;
+
+            if (base[i] == '\n' || base[i] == '\r') {
+                if (start != (size_t)-1) {
+                    base[i] = '\0';
+                    r->pos += i + 1;
+                    if (overlong)
+                        drop_overlong(base + start);
+                    return base + start;
+                }
+                /* A blank line before any content belongs to nothing. */
+            } else {
+                if (llen >= STANZA_LINE_MAX - 1)
+                    overlong = 1;
+                if (start == (size_t)-1)
+                    start = i;
+            }
+
+            if (!nl)
+                break;
+            i = (size_t)(nl - base) + 1;
+        }
+
+        if (r->eof) {
+            /* A file need not end with a blank line. */
+            if (start == (size_t)-1)
+                return NULL;
+            r->buf[r->len] = '\0';
+            r->pos = r->len;
+            if (overlong)
+                drop_overlong(base + start);
+            return base + start;
+        }
+
+        if (!reader_fill(r) && r->eof && r->len == r->pos)
+            return NULL;
+    }
 }
 
 int aept_stanza_foreach(FILE *fp, int (*cb)(const char *stanza, void *user), void *user)
 {
-    struct buf b = {NULL, 0, 0};
-    int r = 0;
+    struct reader r;
+    char *stanza;
+    int ret = 0;
 
-    while (next_stanza(fp, &b)) {
-        r = cb(b.p, user);
-        if (r)
+    memset(&r, 0, sizeof(r));
+    r.fp = fp;
+
+    while ((stanza = reader_next(&r)) != NULL) {
+        ret = cb(stanza, user);
+        if (ret)
             break;
     }
 
-    free(b.p);
-    return r;
+    free(r.buf);
+    return ret;
 }
 
 char *aept_stanza_find(const char *path, const char *name, const char *version)
