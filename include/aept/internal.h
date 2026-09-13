@@ -55,6 +55,7 @@ typedef struct aept_config {
     int check_index_expiry;
     int ignore_uid; /* default 0 */
     int allow_downgrade;
+    int install_recommends;
     /* Let "clean" empty cache_dir.  Default 1.  Turned off where the cache is
      * shared with something outside this root -- build-box points every target
      * at one host-side cache -- because emptying it is then not ours to do. */

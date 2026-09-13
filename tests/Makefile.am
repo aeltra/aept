@@ -210,6 +210,10 @@ dist_check_SCRIPTS = \
     test_file_clash.sh \
     test_remove.sh \
     test_upgrade.sh \
+    test_conflicts.sh \
+    test_depends.sh \
+    test_provides.sh \
+    test_weak_deps.sh \
     test_install_rollback.sh \
     test_triggers.sh \
     test_autoremove.sh \

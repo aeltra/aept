@@ -382,6 +382,13 @@ The following keys are recognized:
 |  allow_downgrade
 :  0
 :  Set to 1 to allow package downgrades
+|  install_recommends
+:  0
+:  Set to 1 to install a package's *Recommends* along with it, as
+   *apt*(8) does. Off by default: a recommendation is not a
+   requirement, and following it pulls in packages nobody named --
+   transitively -- which is rarely what a small root wants.
+   *Suggests* is never followed.
 |  clean_cache
 :  1
 :  Set to 0 to make *clean* leave the cache directory alone. For a
