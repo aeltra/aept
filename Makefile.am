@@ -201,6 +201,17 @@ coverage:
 	    echo "no profile data was produced" >&2; exit 1; fi
 	@$(COVERAGE_REPORT) --uncovered
 
+# Which lines, rather than which files.  Reads whatever the .gcda
+# already hold, so it neither clears them nor re-runs the suite: run one
+# of the targets above first, then ask this about a file that slipped.
+#
+#   make coverage-lines FILE=src/stanza.c
+#   make coverage-lines FILE="stanza.c deb.c" COVERAGE_LINES_FLAGS=--branches
+coverage-lines:
+	@$(check_coverage_enabled)
+	@test -n "$(FILE)" || { echo "usage: make coverage-lines FILE=src/foo.c" >&2; exit 2; }
+	@$(COVERAGE_REPORT) --lines $(FILE) $(COVERAGE_LINES_FLAGS)
+
 coverage-check:
 	@$(check_coverage_enabled)
 	@$(MAKE) $(AM_MAKEFLAGS) coverage-clean
@@ -230,4 +241,4 @@ abi-update:
 	echo "blessed `grep -c '^[a-z]' $$abi` interfaces in tests/libaept.abi"
 
 .PHONY: docs format format-all format-check abi-update \
-	coverage coverage-check coverage-update coverage-clean
+	coverage coverage-check coverage-lines coverage-update coverage-clean

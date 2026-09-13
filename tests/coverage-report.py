@@ -518,6 +518,101 @@ def check(files, tiers, tier_totals, baseline, slack):
 
 # ── main ─────────────────────────────────────────────────────────────────
 
+
+# ── which lines (rather than which files) ────────────────────────────────
+
+def resolve_source(files, srcdir, want):
+    """Match one command-line path against the collected file keys.
+
+    The keys are relative to the source tree, but the tool is normally
+    run from the build directory, so a path relative to *that* would not
+    resolve.  Accept the key itself, a path relative to either tree, and
+    an unambiguous basename.
+    """
+    if want in files:
+        return want
+
+    rel = os.path.relpath(os.path.realpath(want), os.path.realpath(srcdir))
+    if rel in files:
+        return rel
+
+    base = os.path.basename(want)
+    hits = [k for k in files if os.path.basename(k) == base]
+    if len(hits) == 1:
+        return hits[0]
+
+    return None
+
+
+def source_line(src, n):
+    """The nth line of src (1-based), or a placeholder past the end."""
+    return src[n - 1].strip() if 0 < n <= len(src) else "?"
+
+
+def list_lines(files, srcdir, paths, show_branches):
+    """Print the lines of each named file that no test reached.
+
+    Answers "which lines are missing", which the tier report deliberately
+    does not: it reports whole files, because that is what the gates are
+    about.  This is the view for the other question -- having seen a file
+    slip, what does it take to fix it.
+
+    Read the counts out of the same aggregated data the report uses.  The
+    temptation is to run gcov again by hand and parse its *text* output,
+    and that is a trap worth naming: text .gcov marks a partly-executed
+    line "5*", which a naive parser reads as uncovered, and it writes one
+    file per object, so the libtool double-compile has to be unioned by
+    hand or half the hits go missing.  The JSON collect() already parses
+    has exact counts and is already summed across objects.
+    """
+    rc = 0
+
+    for want in paths:
+        rel = resolve_source(files, srcdir, want)
+        cov = files.get(rel) if rel else None
+
+        if cov is None:
+            rel = rel or want
+            print("%s: no coverage data -- not built with --enable-coverage, "
+                  "or never reached by the suite" % rel)
+            rc = 1
+            continue
+
+        try:
+            with open(os.path.join(srcdir, rel), errors="replace") as fh:
+                src = fh.read().splitlines()
+        except OSError as err:
+            sys.exit("cannot read %s: %s" % (rel, err))
+
+        # Anything not positive counts as unreached, which is how the
+        # tier report scores it.  A *negative* count is gcov arithmetic
+        # gone wrong rather than a line no test ran -- it is called out
+        # so it is not mistaken for something a test could fix.
+        dead = sorted(n for n, hits in cov.lines.items() if hits <= 0)
+        print("%s: %d of %d countable lines not reached"
+              % (rel, len(dead), len(cov.lines)))
+        for n in dead:
+            mark = " [gcov count %d]" % cov.lines[n] if cov.lines[n] < 0 else ""
+            print("  %s:%d: %s%s" % (rel, n, source_line(src, n), mark))
+
+        if not show_branches:
+            continue
+
+        untaken = defaultdict(list)
+        for (n, i), hits in cov.branches.items():
+            if hits == 0 and cov.lines.get(n, 0) > 0:
+                untaken[n].append(i)
+
+        print("%s: %d line(s) run with a branch never taken"
+              % (rel, len(untaken)))
+        for n in sorted(untaken):
+            print("  %s:%d: [%s] %s"
+                  % (rel, n, ",".join(str(i) for i in sorted(untaken[n])),
+                     source_line(src, n)))
+
+    return rc
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Aggregate gcov data into a per-tier coverage report.")
@@ -541,6 +636,11 @@ def main():
                     help="rewrite the baseline from this run")
     ap.add_argument("--uncovered", action="store_true",
                     help="also list functions never entered")
+    ap.add_argument("--lines", nargs="+", metavar="FILE",
+                    help="list the uncovered lines of these sources "
+                         "instead of the tier report")
+    ap.add_argument("--branches", action="store_true",
+                    help="with --lines, also list branches never taken")
     args = ap.parse_args()
 
     tierpath = args.tiers or os.path.join(args.srcdir, "tests",
@@ -557,6 +657,9 @@ def main():
     tiers, _by_name, assign = load_tiers(tierpath)
     files, version, nprofiles = collect(args.build_dir, args.srcdir,
                                         args.gcov, args.jobs)
+    if args.lines:
+        return list_lines(files, args.srcdir, args.lines, args.branches)
+
     reconcile(files, assign, args.srcdir, tierpath)
 
     tier_totals, _grand = report(files, tiers, version, nprofiles,

@@ -15,6 +15,7 @@ make clean           # remove build artifacts
 make format          # clang-format the files you changed (see Coding Conventions)
 make coverage        # gcov report (needs --enable-coverage; see Coverage)
 make coverage-check  # the ratchet CI runs
+make coverage-lines FILE=src/foo.c   # which lines are not reached
 make docs            # re-render docs/aept.1.md from aept.1.scd
 ```
 
@@ -298,6 +299,25 @@ make coverage-check             # the gate: nothing regressed
 make coverage-update            # re-bless tests/coverage.baseline
 make coverage-clean             # drop accumulated counters
 ```
+
+**`make coverage-lines FILE=src/foo.c`** answers the other question: not
+which files slipped, but *which lines*. It reads whatever the `.gcda`
+already hold, so run `make coverage` first; add
+`COVERAGE_LINES_FLAGS=--branches` to list branches never taken as well.
+
+Use it rather than running `gcov` by hand and parsing the output, which
+has cost real time three times over. Text `.gcov` marks a partly-executed
+line **`5*`**, which a naive parser reads as *uncovered* — that sent me
+hunting a bug in a function the tests were exercising perfectly well. And
+gcov writes one file per object, so the libtool double-compile has to be
+unioned by hand or half the hits vanish. `coverage-report.py` parses
+gcov's **JSON** instead, which has exact counts and is already summed.
+
+One thing it surfaces that is worth knowing: a line can carry a
+**negative** count. That is gcov's own arithmetic going wrong on merged
+profiles, not a line no test reached — the report scores anything not
+positive as unreached, and `--lines` marks the negative ones so they are
+not mistaken for something a test could fix.
 
 `tests/coverage-report.py` runs `gcov` and sums it — no lcov and no gcovr, since
 `gcov` comes with the compiler that is already required and python3 is already a
