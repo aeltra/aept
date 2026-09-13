@@ -45,6 +45,34 @@ static char *field_of(const char *name, const char *version, const char *field)
     return v;
 }
 
+/* Record how many stanzas a walk saw, and the names at each end. */
+struct stanza_seen {
+    int n;
+    char first[64];
+    char last[64];
+};
+
+static int count_stanza(const char *stanza, void *user)
+{
+    struct stanza_seen *seen = user;
+    char *name = aept_stanza_field(stanza, "Package");
+
+    if (name) {
+        if (!seen->n)
+            snprintf(seen->first, sizeof(seen->first), "%s", name);
+        snprintf(seen->last, sizeof(seen->last), "%s", name);
+        free(name);
+    }
+    seen->n++;
+    return 0;
+}
+
+static int stop_at_first(const char *stanza, void *user)
+{
+    count_stanza(stanza, user);
+    return 1;
+}
+
 #define INDEX                                                                                      \
     "Package: alpha\n"                                                                             \
     "Version: 1.0\n"                                                                               \
@@ -202,6 +230,113 @@ int main(void)
         free(v);
 
         free(stanza);
+    }
+
+    /*
+     * The field iterator, which is what deb.c reads an index with.
+     * Its input is attacker-chosen, so what it does with lines that are
+     * not fields matters as much as what it does with lines that are.
+     */
+    {
+        const char *pos;
+        aept_stanza_field_t f;
+        char *val;
+
+        /* A stanza opening with a continuation belonging to no field,
+         * and with blank lines: both are skipped to reach the field. */
+        pos = "  orphan continuation\n\n\nReal: value\n";
+        test_ok(aept_stanza_next_field(&pos, &f), "an orphan continuation does not end the walk");
+        test_ok(aept_stanza_field_is(&f, "Real"), "the field after it is the one returned");
+        val = aept_stanza_value(&f, 0);
+        test_str_eq(val, "value", "and its value is intact");
+        free(val);
+        test_ok(!aept_stanza_next_field(&pos, &f), "then the stanza is exhausted");
+
+        /* A trailing line that is not a field, with no newline after
+         * it: the walk ends rather than inventing a field from it. */
+        pos = "Name: value\nno colon and no newline";
+        test_ok(aept_stanza_next_field(&pos, &f), "the field before the junk is read");
+        test_ok(aept_stanza_field_is(&f, "Name"), "and it is the right one");
+        test_ok(!aept_stanza_next_field(&pos, &f), "a trailing non-field ends the walk");
+
+        /* Matching is by whole name, not by prefix. */
+        pos = "Name: value\n";
+        test_ok(aept_stanza_next_field(&pos, &f), "a field is read");
+        test_ok(!aept_stanza_field_is(&f, "Nam"), "a shorter name does not match");
+        test_ok(!aept_stanza_field_is(&f, "Names"), "nor a longer one");
+        test_ok(aept_stanza_field_is(&f, "nAmE"), "case does not matter");
+    }
+
+    /*
+     * A Description whose first line is empty: the synopsis is empty
+     * and the body is everything else.  Keeping the lines apart has to
+     * preserve that empty first line, or deb.c -- which splits summary
+     * from body at the first newline -- would take the first body line
+     * as the synopsis.  Folded, there is no such line to preserve and
+     * the leading separator goes.
+     */
+    write_raw("Package: p\nVersion: 1\nDescription:\n body\n more\n\n");
+    {
+        char *stanza = aept_stanza_find(path, "p", "1");
+
+        v = aept_stanza_field_lines(stanza, "Description");
+        test_str_eq(v, "\nbody\nmore", "an empty synopsis stays an empty first line");
+        free(v);
+
+        v = aept_stanza_field(stanza, "Description");
+        test_str_eq(v, "body more", "folded, it starts at the first word");
+        free(v);
+
+        free(stanza);
+    }
+
+    /* A NULL version takes whichever version comes first. */
+    write_raw(INDEX);
+    {
+        char *stanza = aept_stanza_find(path, "alpha", NULL);
+
+        v = stanza ? aept_stanza_field(stanza, "Version") : NULL;
+        test_str_eq(v, "1.0", "a NULL version matches the first stanza for the name");
+        free(v);
+        free(stanza);
+    }
+
+    /*
+     * Splitting a file into stanzas, which is how deb.c reads an index.
+     * A blank line separates them; leading ones belong to nothing, and
+     * a file need not end with one.
+     */
+    write_raw("\n\nPackage: one\nVersion: 1\n\n\nPackage: two\nVersion: 2\n");
+    {
+        FILE *fp = fopen(path, "r");
+        struct stanza_seen seen = {0, "", ""};
+
+        test_int_eq(aept_stanza_foreach(fp, count_stanza, &seen), 0, "the walk reaches the end");
+        test_int_eq(seen.n, 2, "leading and doubled blank lines make no extra stanzas");
+        test_str_eq(seen.first, "one", "the first stanza is the first one with content");
+        test_str_eq(seen.last, "two", "and the last needs no blank line after it");
+        fclose(fp);
+    }
+
+    /* A callback that stops asks for the walk to end there. */
+    {
+        FILE *fp = fopen(path, "r");
+        struct stanza_seen seen = {0, "", ""};
+
+        test_int_eq(aept_stanza_foreach(fp, stop_at_first, &seen), 1,
+                    "the callback's value is what is returned");
+        test_int_eq(seen.n, 1, "and nothing is read past it");
+        fclose(fp);
+    }
+
+    /* Trailing whitespace with no newline after it ends the walk
+     * rather than being read as a field. */
+    {
+        const char *pos = "Name: value\n   ";
+        aept_stanza_field_t f;
+
+        test_ok(aept_stanza_next_field(&pos, &f), "the field before the trailing space is read");
+        test_ok(!aept_stanza_next_field(&pos, &f), "unterminated trailing space ends the walk");
     }
 
     /* A stanza with no Package line belongs to nobody. */

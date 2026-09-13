@@ -7,6 +7,7 @@
 #ifndef STANZA_H_7BF97F
 #define STANZA_H_7BF97F
 
+#include <stddef.h>
 #include <stdio.h>
 
 /*
@@ -28,7 +29,8 @@
 /*
  * The stanza for name/version, as text, or NULL when the file has no
  * such stanza or cannot be read.  Both must match: an index holds many
- * versions of a package.  The caller frees the result.
+ * versions of a package.  A NULL version matches whichever version
+ * comes first.  The caller frees the result.
  */
 char *aept_stanza_find(const char *path, const char *name, const char *version);
 
@@ -57,5 +59,39 @@ char *aept_stanza_field(const char *stanza, const char *field);
  * meant to stay laid out as written.  The caller frees the result.
  */
 char *aept_stanza_field_lines(const char *stanza, const char *field);
+
+/*
+ * A field as it sits in the stanza: pointers into it, nothing copied.
+ * Neither string is NUL-terminated.
+ */
+typedef struct {
+    const char *name;
+    size_t name_len;
+    const char *value; /* raw; spans the field's continuation lines */
+    size_t value_len;
+} aept_stanza_field_t;
+
+/*
+ * Walk a stanza one field at a time: *pos is where to read from and is
+ * advanced past the field read.  Returns 0 at the end of the stanza, 1
+ * having filled f.
+ *
+ * This is the shape a parser wants.  The two lookups above each restart
+ * at the top of the stanza and copy what they find, which is right for
+ * "show" asking after one field and wrong for deb.c, which reads every
+ * field of every stanza and keeps only some.
+ */
+int aept_stanza_next_field(const char **pos, aept_stanza_field_t *f);
+
+/* Whether f is the named field, matched case-insensitively. */
+int aept_stanza_field_is(const aept_stanza_field_t *f, const char *name);
+
+/*
+ * Copy out f's value -- the only place this allocates.  With keep_lines
+ * the continuation lines stay apart, as aept_stanza_field_lines()
+ * returns them; without it they fold onto one line separated by single
+ * spaces.  The caller frees the result.
+ */
+char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines);
 
 #endif

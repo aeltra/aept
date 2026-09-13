@@ -521,6 +521,19 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
   downstream can notice. Losing one package is visible; that is the
   trade. `tests/test_deb.c` pins the grammar and every refusal.
 
+  `add_stanza()` makes **one pass** over the stanza, dispatching each
+  field by name. It was written on `aept_stanza_field()` first — a
+  *lookup*, called once per field — which meant seventeen scans per
+  stanza, and the absent fields were the expensive ones because a field
+  that is not there is found only at the end. That turned out **not** to
+  be the cost: the profile put it in allocation, 61 mallocs per stanza
+  against libsolv's 2, because the iterator copied every field name and
+  value including the ones nothing wanted. `aept_stanza_next_field()` is
+  therefore zero-copy — it points into the stanza — and
+  `aept_stanza_value()` is the only thing that allocates, called for the
+  fields worth keeping. Together: 2.3x slower than libsolv, then 1.44x.
+  Measure before optimising here; the obvious answer was wrong once.
+
   Equivalence with libsolv's reader was established against the real
   archive index (502 packages, 354 versioned relations, 3 alternatives):
   every `requires`, `provides`, `conflicts`, `recommends`, `suggests`,

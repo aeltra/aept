@@ -6,6 +6,7 @@
 
 #include <config.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -249,200 +250,277 @@ static int parse_dep_list(Pool *pool, const char *pkg, const char *fieldname, co
     return 0;
 }
 
-/* One field's entries, parsed into out.  Absent is not an error. */
-static int parse_field(Pool *pool, const char *stanza, const char *pkg, const char *fieldname,
-                       Queue *out)
+/* Parse one dependency field into deps, through the scratch queue. */
+static int add_deps(Repo *repo, Offset *deps, Id marker, const char *pkg, const char *fieldname,
+                    const char *value, Queue *scratch)
 {
-    char *value = aept_stanza_field(stanza, fieldname);
-    int r;
-
-    if (!value)
-        return 0;
-
-    r = parse_dep_list(pool, pkg, fieldname, value, out);
-    free(value);
-    return r;
-}
-
-static int add_dep_field(Repo *repo, const char *stanza, const char *pkg, const char *fieldname,
-                         Offset *deps, Id marker, Queue *scratch)
-{
-    char *value;
-    int i, r = 0;
-
-    value = aept_stanza_field(stanza, fieldname);
-    if (!value)
-        return 0;
+    int i;
 
     queue_empty(scratch);
-    if (parse_dep_list(repo->pool, pkg, fieldname, value, scratch) < 0) {
-        r = -1;
-    } else {
-        for (i = 0; i < scratch->count; i++)
-            *deps = repo_addid_dep(repo, *deps, scratch->elements[i], marker);
-    }
+    if (parse_dep_list(repo->pool, pkg ? pkg : "?", fieldname, value, scratch) < 0)
+        return -1;
 
-    free(value);
-    return r;
+    for (i = 0; i < scratch->count; i++)
+        *deps = repo_addid_dep(repo, *deps, scratch->elements[i], marker);
+
+    return 0;
 }
 
-static void set_num_field(Repodata *data, Id p, const char *stanza, const char *fieldname, Id key,
-                          int shift)
+enum {
+    F_NONE = 0,
+    F_PACKAGE,
+    F_VERSION,
+    F_ARCHITECTURE,
+    F_DEPENDS,
+    F_PREDEPENDS,
+    F_RECOMMENDS,
+    F_SUGGESTS,
+    F_BREAKS,
+    F_PROVIDES,
+    F_CONFLICTS,
+    F_REPLACES,
+    F_FILENAME,
+    F_SHA256,
+    F_INSTALLEDSIZE,
+    F_SIZE,
+    F_HOMEPAGE,
+    F_DESCRIPTION,
+};
+
+/* Lowercase, so field_id() can reject most entries on one character
+ * rather than a call. */
+static const struct {
+    const char *name;
+    int id;
+} known_fields[] = {
+    {"package",        F_PACKAGE      },
+    {"version",        F_VERSION      },
+    {"architecture",   F_ARCHITECTURE },
+    {"depends",        F_DEPENDS      },
+    {"pre-depends",    F_PREDEPENDS   },
+    {"recommends",     F_RECOMMENDS   },
+    {"suggests",       F_SUGGESTS     },
+    {"breaks",         F_BREAKS       },
+    {"provides",       F_PROVIDES     },
+    {"conflicts",      F_CONFLICTS    },
+    {"replaces",       F_REPLACES     },
+    {"filename",       F_FILENAME     },
+    {"sha256",         F_SHA256       },
+    {"installed-size", F_INSTALLEDSIZE},
+    {"size",           F_SIZE         },
+    {"homepage",       F_HOMEPAGE     },
+    {"description",    F_DESCRIPTION  },
+    {NULL,             F_NONE         },
+};
+
+static int field_id(const aept_stanza_field_t *f)
 {
-    char *v = aept_stanza_field(stanza, fieldname);
+    int c, i;
 
-    if (!v)
-        return;
-    repodata_set_num(data, p, key, strtoull(v, NULL, 10) << shift);
-    free(v);
-}
+    if (!f->name_len)
+        return F_NONE;
 
-static void set_str_field(Repodata *data, Id p, const char *stanza, const char *fieldname, Id key)
-{
-    char *v = aept_stanza_field(stanza, fieldname);
+    c = tolower((unsigned char)f->name[0]);
+    for (i = 0; known_fields[i].name; i++)
+        if (known_fields[i].name[0] == c && aept_stanza_field_is(f, known_fields[i].name))
+            return known_fields[i].id;
 
-    if (!v)
-        return;
-    repodata_set_str(data, p, key, v);
-    free(v);
+    return F_NONE;
 }
 
 /*
- * Description is the one field whose line structure carries meaning:
- * the first line is the summary and the rest the body, so it is read
- * unfolded.  Every other field here is a single logical value.
+ * One stanza as a solvable, in a single pass.
+ *
+ * Everything destined for repodata is held aside until the whole stanza
+ * has parsed, rather than written as it is read: a repodata entry
+ * written for a solvable that is then freed would be inherited by the
+ * next one, because solvable_free() hands the id straight back.
  */
-static void set_description(Repodata *data, Id p, const char *stanza)
-{
-    char *v = aept_stanza_field_lines(stanza, "Description");
-    char *nl;
-
-    if (!v)
-        return;
-
-    nl = strchr(v, '\n');
-    if (nl) {
-        *nl = '\0';
-        repodata_set_str(data, p, SOLVABLE_DESCRIPTION, nl + 1);
-    } else {
-        repodata_set_str(data, p, SOLVABLE_DESCRIPTION, v);
-    }
-    repodata_set_str(data, p, SOLVABLE_SUMMARY, v);
-    free(v);
-}
-
 static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
 {
     Pool *pool = repo->pool;
     Solvable *s;
     Queue q, conf, repl;
     Id p;
-    char *name, *v;
-    int i, bad;
-
-    name = aept_stanza_field(stanza, "Package");
-    if (!name)
-        return 0;
+    const char *pos = stanza;
+    aept_stanza_field_t f;
+    char *pkg = NULL, *filename = NULL, *sha256 = NULL, *homepage = NULL, *descr = NULL;
+    unsigned long long isize = 0, dsize = 0;
+    int have_isize = 0, have_dsize = 0, bad = 0, i;
 
     p = repo_add_solvable(repo);
     s = pool_id2solvable(pool, p);
     queue_init(&q);
-
-    s->name = pool_str2id(pool, name, 1);
-
-    v = aept_stanza_field(stanza, "Version");
-    s->evr = v ? pool_str2id(pool, v, 1) : ID_EMPTY;
-    free(v);
-
-    v = aept_stanza_field(stanza, "Architecture");
-    s->arch = v ? pool_str2id(pool, v, 1) : ARCH_ALL;
-    free(v);
-
-    struct {
-        const char *field;
-        Offset *deps;
-        Id marker;
-    } fields[] = {
-        /* Depends carries the marker negated and Pre-Depends plain,
-         * which is what orders the pre-dependencies ahead of it in the
-         * one array the two share. */
-        {"Depends",     &s->requires,   -SOLVABLE_PREREQMARKER},
-        {"Pre-Depends", &s->requires,   SOLVABLE_PREREQMARKER },
-        {"Recommends",  &s->recommends, 0                     },
-        {"Suggests",    &s->suggests,   0                     },
-        /* Breaks is a conflict as far as solving goes.  Conflicts
-         * itself is added below, because it is also kept apart. */
-        {"Breaks",      &s->conflicts,  0                     },
-        {"Provides",    &s->provides,   0                     },
-    };
-
-    bad = 0;
-    for (i = 0; i < (int)(sizeof(fields) / sizeof(fields[0])) && !bad; i++)
-        bad = add_dep_field(repo, stanza, name, fields[i].field, fields[i].deps, fields[i].marker,
-                            &q) < 0;
-
-    /*
-     * Conflicts and Replaces are kept as the packager wrote them, in
-     * keys of aept's own -- see deb.h.  They are parsed into queues
-     * first and written only once the whole stanza has parsed: a
-     * repodata entry written for a solvable that is then freed would be
-     * inherited by the next one, since the id is reused.
-     */
     queue_init(&conf);
     queue_init(&repl);
-    if (!bad)
-        bad = parse_field(pool, stanza, name, "Conflicts", &conf) < 0;
-    if (!bad)
-        bad = parse_field(pool, stanza, name, "Replaces", &repl) < 0;
 
-    if (!bad) {
-        for (i = 0; i < conf.count; i++)
-            s->conflicts = repo_addid_dep(repo, s->conflicts, conf.elements[i], 0);
-        if (conf.count)
-            repodata_set_idarray(data, p, aept_deb_conflicts_key(pool), &conf);
-        if (repl.count)
-            repodata_set_idarray(data, p, aept_deb_replaces_key(pool), &repl);
+    while (!bad && aept_stanza_next_field(&pos, &f)) {
+        int id = field_id(&f);
+        const char *fname;
+        char *v;
+
+        if (id == F_NONE)
+            continue;
+
+        /* Description is the one field whose line structure carries
+         * meaning; every other is a single logical value. */
+        v = aept_stanza_value(&f, id == F_DESCRIPTION);
+        fname = known_fields[id - 1].name;
+
+        switch (id) {
+        case F_PACKAGE:
+            free(pkg);
+            pkg = v;
+            v = NULL;
+            s->name = pool_str2id(pool, pkg, 1);
+            break;
+        case F_VERSION:
+            s->evr = pool_str2id(pool, v, 1);
+            break;
+        case F_ARCHITECTURE:
+            s->arch = pool_str2id(pool, v, 1);
+            break;
+        case F_DEPENDS:
+            /* Depends carries the marker negated and Pre-Depends plain,
+             * which is what orders the pre-dependencies ahead of it in
+             * the one array the two share. */
+            bad = add_deps(repo, &s->requires, -SOLVABLE_PREREQMARKER, pkg, fname, v, &q) < 0;
+            break;
+        case F_PREDEPENDS:
+            bad = add_deps(repo, &s->requires, SOLVABLE_PREREQMARKER, pkg, fname, v, &q) < 0;
+            break;
+        case F_RECOMMENDS:
+            bad = add_deps(repo, &s->recommends, 0, pkg, fname, v, &q) < 0;
+            break;
+        case F_SUGGESTS:
+            bad = add_deps(repo, &s->suggests, 0, pkg, fname, v, &q) < 0;
+            break;
+        case F_BREAKS:
+            /* A conflict as far as solving goes, but not recorded as
+             * one: see aept_deb_takeover(). */
+            bad = add_deps(repo, &s->conflicts, 0, pkg, fname, v, &q) < 0;
+            break;
+        case F_PROVIDES:
+            bad = add_deps(repo, &s->provides, 0, pkg, fname, v, &q) < 0;
+            break;
+        case F_CONFLICTS:
+            queue_empty(&conf);
+            bad = parse_dep_list(pool, pkg ? pkg : "?", fname, v, &conf) < 0;
+            break;
+        case F_REPLACES:
+            queue_empty(&repl);
+            bad = parse_dep_list(pool, pkg ? pkg : "?", fname, v, &repl) < 0;
+            break;
+        case F_FILENAME:
+            free(filename);
+            filename = v;
+            v = NULL;
+            break;
+        case F_SHA256:
+            free(sha256);
+            sha256 = v;
+            v = NULL;
+            break;
+        case F_INSTALLEDSIZE:
+            isize = strtoull(v, NULL, 10);
+            have_isize = 1;
+            break;
+        case F_SIZE:
+            dsize = strtoull(v, NULL, 10);
+            have_dsize = 1;
+            break;
+        case F_HOMEPAGE:
+            free(homepage);
+            homepage = v;
+            v = NULL;
+            break;
+        case F_DESCRIPTION:
+            free(descr);
+            descr = v;
+            v = NULL;
+            break;
+        default:
+            break;
+        }
+
+        free(v);
     }
 
-    queue_free(&conf);
-    queue_free(&repl);
     queue_free(&q);
 
-    if (bad) {
-        aept_log_error("dropping package '%s'", name);
+    /* A stanza naming no package is not one -- which is what discards
+     * the Origin/Valid-Until header an index opens with. */
+    if (bad || !s->name) {
+        if (bad)
+            aept_log_error("dropping package '%s'", pkg ? pkg : "(unnamed)");
         solvable_free(s, 1);
-        free(name);
+        queue_free(&conf);
+        queue_free(&repl);
+        free(pkg);
+        free(filename);
+        free(sha256);
+        free(homepage);
+        free(descr);
         return 0;
     }
 
-    /* The implicit self-provide, which is what makes a package
-     * satisfy a dependency on its own name at its own version. */
+    if (!s->evr)
+        s->evr = ID_EMPTY;
+    if (!s->arch)
+        s->arch = ARCH_ALL;
+
+    /* Conflicts reaches the solver like Breaks, and is kept apart from
+     * it under aept's own key: see deb.h. */
+    for (i = 0; i < conf.count; i++)
+        s->conflicts = repo_addid_dep(repo, s->conflicts, conf.elements[i], 0);
+    if (conf.count)
+        repodata_set_idarray(data, p, aept_deb_conflicts_key(pool), &conf);
+    if (repl.count)
+        repodata_set_idarray(data, p, aept_deb_replaces_key(pool), &repl);
+    queue_free(&conf);
+    queue_free(&repl);
+
+    /* The implicit self-provide, which is what makes a package satisfy
+     * a dependency on its own name at its own version. */
     s->provides =
         repo_addid_dep(repo, s->provides, pool_rel2id(pool, s->name, s->evr, REL_EQ, 1), 0);
 
-    v = aept_stanza_field(stanza, "Filename");
-    if (v) {
-        repodata_set_location(data, p, 0, NULL, v);
-        free(v);
-    }
+    if (filename)
+        repodata_set_location(data, p, 0, NULL, filename);
 
-    v = aept_stanza_field(stanza, "SHA256");
-    if (v) {
-        if (strlen(v) == 32 * 2)
-            repodata_set_checksum(data, p, SOLVABLE_CHECKSUM, REPOKEY_TYPE_SHA256, v);
+    if (sha256) {
+        if (strlen(sha256) == 32 * 2)
+            repodata_set_checksum(data, p, SOLVABLE_CHECKSUM, REPOKEY_TYPE_SHA256, sha256);
         else
-            aept_log_warning("%s: ignoring malformed SHA256", name);
-        free(v);
+            aept_log_warning("%s: ignoring malformed SHA256", pkg);
     }
 
     /* Installed-Size is in kB by the format's definition, and every
      * SOLVABLE_INSTALLSIZE reader expects bytes. */
-    set_num_field(data, p, stanza, "Installed-Size", SOLVABLE_INSTALLSIZE, 10);
-    set_num_field(data, p, stanza, "Size", SOLVABLE_DOWNLOADSIZE, 0);
-    set_str_field(data, p, stanza, "Homepage", SOLVABLE_URL);
-    set_description(data, p, stanza);
+    if (have_isize)
+        repodata_set_num(data, p, SOLVABLE_INSTALLSIZE, isize << 10);
+    if (have_dsize)
+        repodata_set_num(data, p, SOLVABLE_DOWNLOADSIZE, dsize);
+    if (homepage)
+        repodata_set_str(data, p, SOLVABLE_URL, homepage);
 
-    free(name);
+    if (descr) {
+        char *nl = strchr(descr, '\n');
+
+        if (nl) {
+            *nl = '\0';
+            repodata_set_str(data, p, SOLVABLE_DESCRIPTION, nl + 1);
+        } else {
+            repodata_set_str(data, p, SOLVABLE_DESCRIPTION, descr);
+        }
+        repodata_set_str(data, p, SOLVABLE_SUMMARY, descr);
+    }
+
+    free(pkg);
+    free(filename);
+    free(sha256);
+    free(homepage);
+    free(descr);
     return p;
 }
 

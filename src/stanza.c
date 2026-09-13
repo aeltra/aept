@@ -166,90 +166,140 @@ char *aept_stanza_find(const char *path, const char *name, const char *version)
     return found;
 }
 
-static char *stanza_field(const char *stanza, const char *field, int keep_lines)
+/*
+ * Read the field beginning at *pos, advancing *pos past it.  Returns 0
+ * at the end of the stanza, 1 having filled f.
+ *
+ * Nothing is copied: f points into the stanza.  A parser reads every
+ * field of every stanza and wants only some of them, so copying here
+ * would allocate for each one just to have most thrown away -- call
+ * aept_stanza_value() for the ones worth keeping.
+ */
+int aept_stanza_next_field(const char **pos, aept_stanza_field_t *f)
 {
-    size_t flen = strlen(field);
-    const char *p = stanza;
+    const char *p = *pos;
+    const char *eol, *colon, *end;
+    size_t llen;
 
-    while (*p) {
-        const char *eol = strchr(p, '\n');
-        size_t llen = eol ? (size_t)(eol - p) : strlen(p);
-
-        /* A continuation belongs to the previous field, never starts
-         * one, so it cannot be mistaken for a field of its own. */
-        if (llen > flen && (p[0] != ' ' && p[0] != '\t') && strncasecmp(p, field, flen) == 0 &&
-            p[flen] == ':') {
-            struct buf v = {NULL, 0, 0};
-            const char *q = p + flen + 1;
-            size_t vlen = llen - flen - 1;
-            char *tmp;
-
-            /* The value, then any continuation lines folded onto it. */
-            tmp = aept_malloc(vlen + 1);
-            memcpy(tmp, q, vlen);
-            tmp[vlen] = '\0';
-            buf_add(&v, tmp);
-            free(tmp);
-
-            while (eol) {
-                const char *next = eol + 1;
-                const char *neol, *val;
-                size_t nlen;
-
-                if (*next != ' ' && *next != '\t')
-                    break;
-                neol = strchr(next, '\n');
-
-                /*
-                 * The indent that marks a continuation is not part of
-                 * the value.  Folding drops all of it and joins with a
-                 * single space, however deeply the line was indented;
-                 * keeping the lines drops exactly the one character
-                 * that marked it and joins with a newline, because in
-                 * a Description the remaining indent is the author's.
-                 */
-                val = next;
-                if (keep_lines) {
-                    val++;
-                } else {
-                    while (*val == ' ' || *val == '\t')
-                        val++;
-                }
-                if (neol && val > neol)
-                    val = neol;
-                nlen = neol ? (size_t)(neol - val) : strlen(val);
-
-                tmp = aept_malloc(nlen + 2);
-                tmp[0] = keep_lines ? '\n' : ' ';
-                memcpy(tmp + 1, val, nlen);
-                tmp[nlen + 1] = '\0';
-                buf_add(&v, tmp);
-                free(tmp);
-                eol = neol;
+    for (;;) {
+        /* Skip what cannot begin a field: a blank line, or an orphan
+         * continuation with no field before it. */
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+            eol = strchr(p, '\n');
+            if (!eol) {
+                *pos = p + strlen(p);
+                return 0;
             }
-
-            /* Trim the space either side: "Depends:  a, b \n" is the
-             * same declaration as "Depends: a, b". */
-            {
-                char *s = v.p;
-                char *e;
-
-                while (*s == ' ' || *s == '\t')
-                    s++;
-                e = s + strlen(s);
-                while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r'))
-                    e--;
-                *e = '\0';
-                tmp = aept_strdup(s);
-            }
-            free(v.p);
-            return tmp;
+            p = eol + 1;
         }
+        if (!*p) {
+            *pos = p;
+            return 0;
+        }
+
+        eol = strchr(p, '\n');
+        llen = eol ? (size_t)(eol - p) : strlen(p);
+
+        colon = memchr(p, ':', llen);
+        if (colon)
+            break;
+
+        /* Not a field; step over it rather than stopping, so one
+         * malformed line does not hide the rest of the stanza. */
+        if (!eol) {
+            *pos = p + llen;
+            return 0;
+        }
+        p = eol + 1;
+    }
+
+    f->name = p;
+    f->name_len = (size_t)(colon - p);
+    f->value = colon + 1;
+
+    /* The value runs to the end of the last continuation line. */
+    end = eol ? eol : p + llen;
+    while (eol && (eol[1] == ' ' || eol[1] == '\t')) {
+        const char *neol = strchr(eol + 1, '\n');
+
+        end = neol ? neol : eol + 1 + strlen(eol + 1);
+        eol = neol;
+    }
+
+    f->value_len = (size_t)(end - f->value);
+    *pos = eol ? eol + 1 : end;
+    return 1;
+}
+
+int aept_stanza_field_is(const aept_stanza_field_t *f, const char *name)
+{
+    return strlen(name) == f->name_len && strncasecmp(f->name, name, f->name_len) == 0;
+}
+
+char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines)
+{
+    const char *p = f->value, *end = f->value + f->value_len;
+    char *out, *w, *b;
+    int first = 1;
+
+    /* Folding only ever shortens, so the span is a safe bound. */
+    out = aept_malloc(f->value_len + 1);
+    w = out;
+
+    while (p < end) {
+        const char *eol = memchr(p, '\n', (size_t)(end - p));
+        const char *lend = eol ? eol : end;
+
+        if (first) {
+            while (p < lend && (*p == ' ' || *p == '\t'))
+                p++;
+        } else {
+            /*
+             * The one character that marked the continuation is not
+             * part of the value.  Folding drops the rest of the indent
+             * too and joins with a single space; keeping the lines
+             * leaves it, because in a Description it is the author's.
+             */
+            if (p < lend)
+                p++;
+            if (!keep_lines)
+                while (p < lend && (*p == ' ' || *p == '\t'))
+                    p++;
+            *w++ = keep_lines ? '\n' : ' ';
+        }
+
+        memcpy(w, p, (size_t)(lend - p));
+        w += lend - p;
+        first = 0;
 
         if (!eol)
             break;
         p = eol + 1;
     }
+
+    /* Trim either side: "Depends:  a, b \n" is the same declaration as
+     * "Depends: a, b". */
+    while (w > out && (w[-1] == ' ' || w[-1] == '\t' || w[-1] == '\r'))
+        w--;
+    *w = '\0';
+
+    b = out;
+    while (*b == ' ' || *b == '\t')
+        b++;
+    if (b != out)
+        memmove(out, b, strlen(b) + 1);
+
+    return out;
+}
+
+static char *stanza_field(const char *stanza, const char *field, int keep_lines)
+{
+    const char *pos = stanza;
+    aept_stanza_field_t f;
+
+    while (aept_stanza_next_field(&pos, &f))
+        if (aept_stanza_field_is(&f, field))
+            return aept_stanza_value(&f, keep_lines);
 
     return NULL;
 }
