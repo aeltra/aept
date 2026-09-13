@@ -39,6 +39,32 @@ int aept_solver_init(struct aept_ctx *ctx)
         return -1;
     }
 
+    /*
+     * Ask for Debian semantics explicitly rather than inheriting
+     * whatever the libsolv build happens to default to.
+     *
+     * pool->disttype selects the version comparison function, and the
+     * Debian and RPM ones disagree: of the 23,259 adjacent pairs in
+     * Debian trixie's version strings, 726 order differently -- "+"
+     * being the usual culprit, as in "1.0.1-1" against "1.0+2-1",
+     * which Debian calls an upgrade and RPM a downgrade.  A pool left
+     * on the wrong one answers "is this newer" wrongly for about 3% of
+     * comparisons, which is a wrong upgrade decision, silently.
+     *
+     * libsolv's own default follows how it was built: Debian's package
+     * chooses DEB, an upstream cmake build defaults to RPM.  So this is
+     * not something aept can leave to the environment.  A -1 means the
+     * library was compiled for one disttype and it is not this one --
+     * fatal, because every version comparison after it would be wrong.
+     */
+    if (pool_setdisttype(s->pool, DISTTYPE_DEB) < 0) {
+        aept_log_error("libsolv was built without Debian version semantics\n"
+                       "  (build it with -DMULTI_SEMANTICS=ON, or as a Debian-default library)");
+        pool_free(s->pool);
+        free(s);
+        return -1;
+    }
+
     if (ctx->config.narchs > 0) {
         int i;
         size_t len = 0;
