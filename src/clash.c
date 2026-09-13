@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -21,23 +23,67 @@
 #include "aept/util.h"
 
 /*
- * Whether s may take a path owned by owner_name.
+ * The solvable describing the package that owns a path.  Preferring the
+ * installed repo gives the version actually on disk; a package put
+ * there earlier in this same transaction is not in that repo yet, so
+ * any copy will do -- only the name and Provides are read, and those do
+ * not differ between a repo's copy and the installed one.
  *
- * Debian spells the takeover two ways (Policy 7.6) and aept honours one
- * of them.  "Replaces: X" with "Conflicts: X" is the pair honoured
- * here: X is being removed in this same transaction, solver.c orders
- * the install ahead of that removal, and the fileset threaded through
- * it stops the removal deleting the path just handed over.
- *
- * "Replaces: X" on its own is permission to overwrite X's files while X
- * stays installed.  Honouring that means striking the path from X's
- * .list, or removing X later would delete a file it no longer owns.
- * aept does not rewrite another package's file list, so the bare form
- * is refused rather than half-applied; test_file_clash.sh pins it.
+ * Linear, but reached only for a path two packages both ship, which is
+ * rare and already an error in every case but a declared takeover.
  */
-static int solvable_replaces(Pool *pool, Solvable *s, const char *owner_name)
+static Solvable *owner_solvable(Pool *pool, const char *owner_name)
 {
-    return aept_deb_takes_over(pool, s, pool_str2id(pool, owner_name, 0));
+    Id nid = pool_str2id(pool, owner_name, 0);
+    Solvable *any = NULL;
+    Id p;
+
+    if (!nid)
+        return NULL;
+
+    FOR_POOL_SOLVABLES(p)
+    {
+        Solvable *s = pool_id2solvable(pool, p);
+
+        if (s->name != nid || !s->repo)
+            continue;
+        if (s->repo == pool->installed)
+            return s;
+        if (!any)
+            any = s;
+    }
+
+    return any;
+}
+
+void aept_takeover_list_init(aept_takeover_list_t *tl)
+{
+    tl->entries = NULL;
+    tl->count = 0;
+    tl->alloc = 0;
+}
+
+void aept_takeover_list_free(aept_takeover_list_t *tl)
+{
+    int i;
+
+    for (i = 0; i < tl->count; i++) {
+        free(tl->entries[i].owner);
+        free(tl->entries[i].path);
+    }
+    free(tl->entries);
+    aept_takeover_list_init(tl);
+}
+
+static void takeover_add(aept_takeover_list_t *tl, const char *owner, const char *path)
+{
+    if (tl->count == tl->alloc) {
+        tl->alloc = tl->alloc ? tl->alloc * 2 : 8;
+        tl->entries = aept_realloc(tl->entries, tl->alloc * sizeof(*tl->entries));
+    }
+    tl->entries[tl->count].owner = aept_strdup(owner);
+    tl->entries[tl->count].path = aept_strdup(path);
+    tl->count++;
 }
 
 /* Check whether an on-disk symlink and an archive symlink point to the
@@ -72,7 +118,8 @@ static int same_dir_symlink(const char *disk_path, const char *archive_target)
 }
 
 int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
-                     aept_fileset_t *old_files, aept_owner_index_t *owners)
+                     aept_fileset_t *old_files, aept_owner_index_t *owners,
+                     aept_takeover_list_t *taken)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *pkg_name = pool_id2str(pool, s->name);
@@ -130,9 +177,22 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
         if (strcmp(owner, pkg_name) == 0)
             continue;
 
-        /* New package declares Replaces for the owner */
-        if (solvable_replaces(pool, s, owner))
+        switch (aept_deb_takeover(pool, s, owner_solvable(pool, owner))) {
+        case AEPT_TAKEOVER_SUPERSEDE:
+            /* The owner is being removed in this transaction anyway.
+             * solver.c has ordered that removal after this install, and
+             * the fileset threaded into it stops the removal deleting
+             * the path it just handed over. */
             continue;
+        case AEPT_TAKEOVER_OVERWRITE:
+            /* The owner stays installed, so it has to stop claiming the
+             * path -- recorded here, applied once the install has
+             * succeeded. */
+            takeover_add(taken, owner, stripped);
+            continue;
+        case AEPT_TAKEOVER_NONE:
+            break;
+        }
 
         aept_log_error("package '%s' wants to install '%s'\n"
                        "  but that file is already provided by package '%s'",
@@ -142,4 +202,89 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
 
     aept_ar_file_list_free(&new_files);
     return clashes;
+}
+
+void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken)
+{
+    int i, j;
+
+    for (i = 0; i < taken->count; i++) {
+        const char *owner = taken->entries[i].owner;
+        aept_fileset_t drop;
+        char *list_path = NULL, *tmp_path = NULL;
+        FILE *in, *out;
+        char line[4096];
+        int failed = 0;
+
+        /* Entries are grouped by owner as they are read, so an owner
+         * already handled in an earlier pass is skipped here. */
+        for (j = 0; j < i; j++)
+            if (strcmp(taken->entries[j].owner, owner) == 0)
+                break;
+        if (j < i)
+            continue;
+
+        aept_fileset_init(&drop);
+        for (j = i; j < taken->count; j++)
+            if (strcmp(taken->entries[j].owner, owner) == 0)
+                aept_fileset_add(&drop, taken->entries[j].path);
+        aept_fileset_sort(&drop);
+
+        aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, owner);
+        aept_asprintf(&tmp_path, "%s/%s.list.tmp", ctx->config.info_dir, owner);
+
+        in = fopen(list_path, "r");
+        out = in ? fopen(tmp_path, "w") : NULL;
+        if (!in || !out) {
+            aept_log_warning("cannot rewrite file list '%s': %s", list_path, strerror(errno));
+            failed = 1;
+        }
+
+        while (!failed && fgets(line, sizeof(line), in)) {
+            char *tab, keep[sizeof(line)];
+            const char *path;
+
+            if (aept_fgets_is_truncated(line, sizeof(line))) {
+                aept_fgets_drain_line(in);
+                continue;
+            }
+
+            memcpy(keep, line, sizeof(keep));
+            keep[strcspn(keep, "\n")] = '\0';
+            tab = strchr(keep, '\t');
+            if (tab)
+                *tab = '\0';
+
+            path = keep;
+            while (path[0] == '.' && path[1] == '/')
+                path += 2;
+            while (path[0] == '/')
+                path++;
+
+            if (path[0] != '\0' && aept_fileset_contains(&drop, path))
+                continue;
+
+            if (fputs(line, out) == EOF) {
+                failed = 1;
+                break;
+            }
+        }
+
+        if (in)
+            fclose(in);
+        if (out && (ferror(out) | (fclose(out) != 0)))
+            failed = 1;
+
+        if (failed || rename(tmp_path, list_path) != 0) {
+            if (!failed)
+                aept_log_warning("cannot replace file list '%s': %s", list_path, strerror(errno));
+            unlink(tmp_path);
+        } else {
+            aept_log_debug("'%s' disowned %d path(s) taken over", owner, drop.count);
+        }
+
+        aept_fileset_free(&drop);
+        free(list_path);
+        free(tmp_path);
+    }
 }

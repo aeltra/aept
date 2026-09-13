@@ -474,10 +474,35 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
   how a removal is carried out, not a reason to start one. Read as
   obsoletes, every mail transport agent is an upgrade path for every
   other. So `Replaces` is kept under a repodata key of aept's own
-  (`aept_deb_replaces_key()`), which the solver never reads; clash.c
-  consults it for permission to overwrite and solver.c for the order.
-  `aept_deb_takes_over()` is the single definition of the pair, used by
-  both.
+  (`aept_deb_replaces_key()`), which the solver never reads — and so is
+  `Conflicts`, because `Breaks` is folded into `s->conflicts` as well
+  and after that the solvable cannot say which names came from which
+  field.
+
+  `aept_deb_takeover()` is the single definition, and it implements
+  **Policy 7.6's two disjoint readings**, chosen by whether the two
+  packages conflict:
+
+  - **7.6.2** (`AEPT_TAKEOVER_SUPERSEDE`) — "only takes effect when the
+    two packages *do* conflict". The other package is being removed for
+    this one to be installed and its files may be taken on the way. The
+    replaced package **may be virtual** here; Policy's own example is
+    every MTA declaring `Provides`/`Conflicts`/`Replaces` on
+    `mail-transport-agent`, so the match resolves through `Provides`.
+  - **7.6.1** (`AEPT_TAKEOVER_OVERWRITE`) — "only takes effect when both
+    packages are at least partially on the system at once… not relevant
+    if the packages conflict". Both stay installed and the field decides
+    only who owns the overlapping files. Virtual names **do not** count
+    here, by the same section: "must be mentioned by their real names".
+
+  `Breaks` is deliberately not a `Conflicts` for this (Policy 7.3 against
+  7.4). The documented 7.6.1 idiom is `Breaks` + `Replaces` on a package
+  split, and reading it as a conflict would route it to 7.6.2 and remove
+  a package Debian keeps. For *solving*, `Breaks` still becomes a
+  versioned conflict — which libsolv can satisfy by upgrading the other
+  package, which is what the field asks for. Where no such version
+  exists a versioned conflict has only removal left; dpkg would refuse to
+  configure instead. `tests/test_replaces_overwrite.sh` covers both.
 
   The grammar accepted is the **binary package** one: `name`,
   `name (>= 1.0)`, alternatives joined by `|`, entries separated by `,`.
@@ -543,7 +568,10 @@ gcc -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch -o /tmp/debdiff \
 - **clearsign.c** — Splits a signify clearsigned envelope into message and signature. Splits at the **last** signature marker, because the envelope has no escaping and a package `Description` can contain a line that looks like one. The signature covers the index bytes exactly, trailing newline included.
 - **verify.c** — Invokes usign via the absolute `AEPT_USIGN_BIN`. usign has no clearsign verify mode, only detached `-m message -x sigfile`, which is why clearsign.c splits first. `usign -V -P <dir>` looks the key up by the fingerprint embedded in the signature, expecting `<dir>/<fingerprint>`. Note `aept_config_apply_offline_root()` does not prefix `usign_keydir`, by design — verification always uses the host trust store.
 - **conffile.c** — Conffile hashes in `{info_dir}/{name}.conffiles`. On upgrade, `aept_conffile_resolve_upgrade()` rewrites the file from the *new* set and runs *before* install.c's `remove_info_files()` — which is why that function's extension list deliberately omits `conffiles`.
-- **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps. The takeover rule is `aept_deb_takes_over()`: `Replaces` **and** `Conflicts` naming the same package, read from deb.c's key. Policy 7.6.1's *bare* `Replaces` — overwrite the other package's files while it stays installed — is a **deliberate divergence from dpkg**: honouring it means striking the path from that package's `.list` as well, or removing it later would delete a file it no longer owns, and aept does not rewrite another package's file list. It is refused rather than half-applied; `tests/test_file_clash.sh` pins it.
+- **owner_index.c / clash.c** — In-memory path → owning-package index, built once per transaction and threaded through install/upgrade/remove so later clash checks see earlier steps. The takeover rule is `aept_deb_takeover()` (deb.c), and the two Policy 7.6 readings are handled differently:
+  a **supersede** needs nothing extra — the other package is being removed anyway, solver.c orders that removal after this install, and the fileset threaded into it stops the removal deleting what it handed over.
+  An **overwrite** leaves the other package installed, so it must stop claiming the path: `aept_clash_check()` records `(owner, path)` into an `aept_takeover_list_t` and `aept_clash_commit_takeovers()` rewrites that owner's `.list` **after the install has succeeded** — never before, or a failed install leaves a path owned by nobody. Only non-directories can be taken over, since `aept_ar_list_data_paths()` skips directories, so a shared directory is never struck from anyone's list. Policy's "disappearing" packages — an overwritten package left owning no files at all is marked `Not-Installed` and gets its `postrm` called specially — is **not implemented**.
+
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction. **A failing trigger script never fails the completed transaction, but it never vanishes either**: the matched directories are written to `{name}.triggers-pending` *before* the script runs — so a failure, a crash and a Ctrl-C all leave the same record — and the package's `Status:` is set to `triggers-pending` (restored, and the record removed, on success; the side file is authoritative, the Status line derived from it). Every later transaction retries the record merged with anything newly matched, and `aept triggers` retries on demand. The status feed for libsolv normalizes `triggers-pending` to `installed`, like `unpacked`: the files are on disk and clash detection must see them. The CLI reports the state as **exit 2** ("transaction succeeded, a trigger is owed") via `AEPT_ERR_TRIGGER` in `aept_last_error()`; embedders and the Python bindings read the same channel. The pending scan collects names before running anything — the scripts rewrite files in `info_dir`, and mutating a directory mid-`readdir()` can hand entries back forever. Removal deletes the record with the other info files; the upgrade-side `remove_info_files` deliberately keeps it, so the retry runs the *new* version's script.
 - **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.

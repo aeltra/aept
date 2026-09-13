@@ -51,6 +51,22 @@ static Solvable *parse(const char *body)
     return p ? pool_id2solvable(pool, p) : NULL;
 }
 
+/* Parse one stanza under a chosen name, for the package on the other
+ * side of a takeover. */
+static Solvable *parse_as(const char *pkg, const char *body)
+{
+    char *text;
+    Id p;
+
+    if (asprintf(&text, "Package: %s\nVersion: 1\nArchitecture: all\n%s", pkg, body) < 0)
+        exit(1);
+
+    p = aept_deb_add_control(repo, text);
+    free(text);
+
+    return p ? pool_id2solvable(pool, p) : NULL;
+}
+
 /* The dep array under key, rendered as "a, b, c" for comparison. */
 static char *deps_of(Solvable *s, Id key)
 {
@@ -155,35 +171,99 @@ int main(void)
     test_str_eq(got, "exim", "Conflicts reaches the solver as a conflict");
     free(got);
 
-    test_ok(aept_deb_takes_over(pool, s, pool_str2id(pool, "exim", 0)), "the pair is a takeover");
+    /* ── Policy 7.6: which reading of Replaces applies ──────────── */
+    /*
+     * 7.6.2 "only takes effect when the two packages *do* conflict";
+     * 7.6.1 "is not relevant if the packages conflict".  The two are
+     * disjoint on exactly that, so a takeover is asked about a pair.
+     */
+    {
+        Solvable *exim = parse_as("exim", "");
+        Solvable *legacy = parse_as("chrony-legacy", "");
+        Solvable *mta = parse_as("exim4", "Provides: mail-transport-agent\n");
 
-    s = parse("Replaces: exim\n");
-    test_ok(!aept_deb_takes_over(pool, s, pool_str2id(pool, "exim", 0)),
-            "Replaces alone is not a takeover");
+        s = parse("Conflicts: exim\nReplaces: exim\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_SUPERSEDE,
+                    "Conflicts plus Replaces supersedes (7.6.2)");
 
-    s = parse("Conflicts: exim\n");
-    test_ok(!aept_deb_takes_over(pool, s, pool_str2id(pool, "exim", 0)),
-            "Conflicts alone is not a takeover");
+        s = parse("Replaces: exim\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_OVERWRITE,
+                    "Replaces alone takes the files over (7.6.1)");
 
-    /* Disjoint lists: chrony conflicts with ntp and replaces its own
-     * renamed predecessor.  Neither statement is about the other. */
-    s = parse("Conflicts: ntp\nReplaces: chrony-legacy\n");
-    test_ok(!aept_deb_takes_over(pool, s, pool_str2id(pool, "ntp", 0)),
-            "a conflict that is not also replaced is not a takeover");
-    test_ok(!aept_deb_takes_over(pool, s, pool_str2id(pool, "chrony-legacy", 0)),
-            "a replace that is not also conflicted is not a takeover");
+        s = parse("Conflicts: exim\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_NONE,
+                    "a conflict with no Replaces is a clash");
 
-    /* Partial overlap: the takeover is the intersection, by name. */
-    s = parse("Conflicts: libfoo, libbar\nReplaces: libbar\n");
-    test_ok(aept_deb_takes_over(pool, s, pool_str2id(pool, "libbar", 0)),
-            "the overlap of the two lists is a takeover");
-    test_ok(!aept_deb_takes_over(pool, s, pool_str2id(pool, "libfoo", 0)),
-            "the rest of the conflicts is not");
+        /*
+         * Breaks is not Conflicts (Policy 7.3 against 7.4), so the
+         * documented 7.6.1 idiom -- a file moving on a package split --
+         * must not be read as a supersede and remove the other package.
+         */
+        s = parse("Breaks: exim (<< 2)\nReplaces: exim (<< 2)\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_OVERWRITE,
+                    "Breaks plus Replaces takes over without superseding");
 
-    /* A versioned Replaces still names the package. */
-    s = parse("Conflicts: exim (<< 2)\nReplaces: exim (<< 2)\n");
-    test_ok(aept_deb_takes_over(pool, s, pool_str2id(pool, "exim", 0)),
-            "a versioned pair is matched by name");
+        /* Disjoint lists: the conflict and the replace are unrelated. */
+        s = parse("Conflicts: exim\nReplaces: chrony-legacy\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_NONE,
+                    "a conflict that is not also replaced is a clash");
+        test_int_eq(aept_deb_takeover(pool, s, legacy), AEPT_TAKEOVER_OVERWRITE,
+                    "a replace that is not also conflicted takes over in place");
+
+        /* Partial overlap: only the intersection supersedes. */
+        s = parse("Conflicts: libfoo, libbar\nReplaces: libbar\n");
+        test_int_eq(aept_deb_takeover(pool, s, parse_as("libbar", "")), AEPT_TAKEOVER_SUPERSEDE,
+                    "the overlap of the two lists supersedes");
+        test_int_eq(aept_deb_takeover(pool, s, parse_as("libfoo", "")), AEPT_TAKEOVER_NONE,
+                    "the rest of the conflicts does not");
+
+        /*
+         * 7.6.2 counts virtual packages -- Policy's own example is
+         * every MTA declaring all three on mail-transport-agent -- and
+         * 7.6.1 explicitly does not: "the packages declared as being
+         * replaced must be mentioned by their real names".
+         */
+        s = parse("Provides: mail-transport-agent\n"
+                  "Conflicts: mail-transport-agent\n"
+                  "Replaces: mail-transport-agent\n");
+        test_int_eq(aept_deb_takeover(pool, s, mta), AEPT_TAKEOVER_SUPERSEDE,
+                    "a virtual name supersedes its real provider (7.6.2)");
+
+        s = parse("Replaces: mail-transport-agent\n");
+        test_int_eq(aept_deb_takeover(pool, s, mta), AEPT_TAKEOVER_NONE,
+                    "a virtual name is not a 7.6.1 takeover");
+
+        /* A versioned pair still names the package. */
+        s = parse("Conflicts: exim (<< 2)\nReplaces: exim (<< 2)\n");
+        test_int_eq(aept_deb_takeover(pool, s, exim), AEPT_TAKEOVER_SUPERSEDE,
+                    "a versioned pair is matched by name");
+    }
+
+    /* ── the fields reach the solver as well ─────────────────────── */
+
+    s = parse("Conflicts: exim\nReplaces: exim\n");
+    got = deps_of(s, SOLVABLE_OBSOLETES);
+    test_str_eq(got, "", "Conflicts plus Replaces derives no obsoletes");
+    free(got);
+
+    got = deps_of(s, aept_deb_replaces_key(pool));
+    test_str_eq(got, "exim", "Replaces is kept under aept's own key");
+    free(got);
+
+    got = deps_of(s, SOLVABLE_CONFLICTS);
+    test_str_eq(got, "exim", "Conflicts reaches the solver as a conflict");
+    free(got);
+
+    /* Breaks solves as a conflict but is not recorded as one, which is
+     * what keeps the two Policy 7.6 readings apart. */
+    s = parse("Conflicts: a\nBreaks: b\n");
+    got = deps_of(s, SOLVABLE_CONFLICTS);
+    test_str_eq(got, "b, a", "Breaks joins Conflicts for solving");
+    free(got);
+
+    got = deps_of(s, aept_deb_conflicts_key(pool));
+    test_str_eq(got, "a", "but only Conflicts is recorded as Conflicts");
+    free(got);
 
     /* ── the rest of the stanza ──────────────────────────────────── */
 
@@ -195,12 +275,6 @@ int main(void)
     s = parse("Provides: mail-transport-agent\n");
     got = deps_of(s, SOLVABLE_PROVIDES);
     test_str_eq(got, "mail-transport-agent, p = 1", "a declared provide keeps the implicit one");
-    free(got);
-
-    /* Breaks is a conflict to the solver, and lands in the same array. */
-    s = parse("Conflicts: a\nBreaks: b\n");
-    got = deps_of(s, SOLVABLE_CONFLICTS);
-    test_str_eq(got, "a, b", "Breaks joins Conflicts");
     free(got);
 
     s = parse("Installed-Size: 72\n");

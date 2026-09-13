@@ -24,42 +24,89 @@
 /* Spelled like a control field rather than a libsolv key, so it cannot
  * collide with one libsolv defines later. */
 #define AEPT_REPLACES_KEY "aept:replaces"
+#define AEPT_CONFLICTS_KEY "aept:conflicts"
 
 Id aept_deb_replaces_key(Pool *pool)
 {
     return pool_str2id(pool, AEPT_REPLACES_KEY, 1);
 }
 
-/* Whether one of s's dep arrays names other, matching by name only. */
-static int names(Pool *pool, Solvable *s, Id key, Id other)
+Id aept_deb_conflicts_key(Pool *pool)
+{
+    return pool_str2id(pool, AEPT_CONFLICTS_KEY, 1);
+}
+
+/* The name a dependency is about, with any version relation dropped. */
+static Id dep_name(Pool *pool, Id dep)
+{
+    if (ISRELDEP(dep)) {
+        Reldep *rd = GETRELDEP(pool, dep);
+        return rd->name;
+    }
+    return dep;
+}
+
+/* Whether other answers to name -- as its own name, or via Provides. */
+static int offers(Pool *pool, Solvable *other, Id name)
+{
+    Queue q;
+    int i, hit = 0;
+
+    if (other->name == name)
+        return 1;
+
+    queue_init(&q);
+    solvable_lookup_deparray(other, SOLVABLE_PROVIDES, &q, 0);
+    for (i = 0; i < q.count && !hit; i++)
+        hit = (dep_name(pool, q.elements[i]) == name);
+    queue_free(&q);
+
+    return hit;
+}
+
+/*
+ * Whether the dep array under key names other.  With virtual set, a
+ * name other merely provides counts; without it, only other's own name
+ * does.  Policy 7.6 wants each rule in a different place.
+ */
+static int names_pkg(Pool *pool, Solvable *s, Id key, Solvable *other, int virtual)
 {
     Queue q;
     int i, hit = 0;
 
     queue_init(&q);
     solvable_lookup_deparray(s, key, &q, 0);
-
     for (i = 0; i < q.count && !hit; i++) {
-        Id dep = q.elements[i];
+        Id n = dep_name(pool, q.elements[i]);
 
-        if (ISRELDEP(dep)) {
-            Reldep *rd = GETRELDEP(pool, dep);
-            dep = rd->name;
-        }
-        hit = (dep == other);
+        hit = virtual ? offers(pool, other, n) : (n == other->name);
     }
-
     queue_free(&q);
+
     return hit;
 }
 
-int aept_deb_takes_over(Pool *pool, Solvable *s, Id other)
+aept_takeover_mode_t aept_deb_takeover(Pool *pool, Solvable *s, Solvable *other)
 {
-    if (!other)
-        return 0;
+    if (!s || !other)
+        return AEPT_TAKEOVER_NONE;
 
-    return names(pool, s, aept_deb_replaces_key(pool), other) &&
-           names(pool, s, SOLVABLE_CONFLICTS, other);
+    /*
+     * Conflicts decides which of Policy 7.6's two readings applies, so
+     * it is asked first and its answer is final either way: a conflict
+     * without a matching Replaces is an ordinary clash, not a licence
+     * to fall through to 7.6.1.
+     */
+    if (names_pkg(pool, s, aept_deb_conflicts_key(pool), other, 1)) {
+        if (names_pkg(pool, s, aept_deb_replaces_key(pool), other, 1))
+            return AEPT_TAKEOVER_SUPERSEDE;
+        return AEPT_TAKEOVER_NONE;
+    }
+
+    if (names_pkg(pool, s, aept_deb_replaces_key(pool), other, 0))
+        return AEPT_TAKEOVER_OVERWRITE;
+
+    return AEPT_TAKEOVER_NONE;
 }
 
 static int is_blank(const char *s)
@@ -202,6 +249,21 @@ static int parse_dep_list(Pool *pool, const char *pkg, const char *fieldname, co
     return 0;
 }
 
+/* One field's entries, parsed into out.  Absent is not an error. */
+static int parse_field(Pool *pool, const char *stanza, const char *pkg, const char *fieldname,
+                       Queue *out)
+{
+    char *value = aept_stanza_field(stanza, fieldname);
+    int r;
+
+    if (!value)
+        return 0;
+
+    r = parse_dep_list(pool, pkg, fieldname, value, out);
+    free(value);
+    return r;
+}
+
 static int add_dep_field(Repo *repo, const char *stanza, const char *pkg, const char *fieldname,
                          Offset *deps, Id marker, Queue *scratch)
 {
@@ -273,7 +335,7 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
 {
     Pool *pool = repo->pool;
     Solvable *s;
-    Queue q;
+    Queue q, conf, repl;
     Id p;
     char *name, *v;
     int i, bad;
@@ -308,8 +370,8 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
         {"Pre-Depends", &s->requires,   SOLVABLE_PREREQMARKER },
         {"Recommends",  &s->recommends, 0                     },
         {"Suggests",    &s->suggests,   0                     },
-        {"Conflicts",   &s->conflicts,  0                     },
-        /* Breaks is a conflict as far as solving goes. */
+        /* Breaks is a conflict as far as solving goes.  Conflicts
+         * itself is added below, because it is also kept apart. */
         {"Breaks",      &s->conflicts,  0                     },
         {"Provides",    &s->provides,   0                     },
     };
@@ -319,19 +381,31 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
         bad = add_dep_field(repo, stanza, name, fields[i].field, fields[i].deps, fields[i].marker,
                             &q) < 0;
 
-    /* Replaces goes to aept's own key: see deb.h. */
+    /*
+     * Conflicts and Replaces are kept as the packager wrote them, in
+     * keys of aept's own -- see deb.h.  They are parsed into queues
+     * first and written only once the whole stanza has parsed: a
+     * repodata entry written for a solvable that is then freed would be
+     * inherited by the next one, since the id is reused.
+     */
+    queue_init(&conf);
+    queue_init(&repl);
+    if (!bad)
+        bad = parse_field(pool, stanza, name, "Conflicts", &conf) < 0;
+    if (!bad)
+        bad = parse_field(pool, stanza, name, "Replaces", &repl) < 0;
+
     if (!bad) {
-        v = aept_stanza_field(stanza, "Replaces");
-        if (v) {
-            queue_empty(&q);
-            if (parse_dep_list(pool, name, "Replaces", v, &q) < 0)
-                bad = 1;
-            else if (q.count)
-                repodata_set_idarray(data, p, aept_deb_replaces_key(pool), &q);
-            free(v);
-        }
+        for (i = 0; i < conf.count; i++)
+            s->conflicts = repo_addid_dep(repo, s->conflicts, conf.elements[i], 0);
+        if (conf.count)
+            repodata_set_idarray(data, p, aept_deb_conflicts_key(pool), &conf);
+        if (repl.count)
+            repodata_set_idarray(data, p, aept_deb_replaces_key(pool), &repl);
     }
 
+    queue_free(&conf);
+    queue_free(&repl);
     queue_free(&q);
 
     if (bad) {

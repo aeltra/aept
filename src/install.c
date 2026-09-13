@@ -243,7 +243,11 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     const char *name = pool_id2str(pool, s->name);
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
+    aept_takeover_list_t taken;
     char *tmpdir = NULL;
+
+    aept_takeover_list_init(&taken);
+
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_error("refusing to install package with unsafe name '%s'", name);
         return -1;
@@ -281,7 +285,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         goto cleanup;
 
     /* Check for file conflicts before extraction */
-    r = aept_clash_check(ctx, ipk_path, pool, p, NULL, owners);
+    r = aept_clash_check(ctx, ipk_path, pool, p, NULL, owners, &taken);
     if (r != 0) {
         r = -1;
         goto cleanup;
@@ -403,10 +407,18 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     if (owners && list_path)
         aept_owner_index_add_owner_files(owners, name, list_path);
 
+    /* The files are on disk and this package's .list claims them, so
+     * the packages they came from can stop claiming them now.  The
+     * owner index already reports the new owner: its recent entries
+     * shadow the build-time snapshot. */
+    if (r == 0)
+        aept_clash_commit_takeovers(ctx, &taken);
+
     if (r == 0)
         aept_log_debug("installed %s", name);
 
 cleanup:
+    aept_takeover_list_free(&taken);
     free(list_path);
 
     /* Clean up tmpdir */
@@ -456,9 +468,12 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     char *ctrl_path = NULL;
     char *list_path = NULL;
     aept_conffile_set_t old_cf;
+    aept_takeover_list_t taken;
     int have_old_cf = 0;
     int is_reinstall = old_version && new_version && strcmp(old_version, new_version) == 0;
     int r = -1;
+
+    aept_takeover_list_init(&taken);
 
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_error("refusing to upgrade package with unsafe name '%s'", name);
@@ -541,7 +556,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     if (owners)
         aept_owner_index_drop_owner(owners, name);
 
-    r = aept_clash_check(ctx, ipk_path, pool, p, &old_files, owners);
+    r = aept_clash_check(ctx, ipk_path, pool, p, &old_files, owners, &taken);
     if (r != 0) {
         r = -1;
         goto cleanup_filesets;
@@ -741,6 +756,11 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     if (owners)
         aept_owner_index_add_owner_files(owners, name, list_path);
 
+    /* See do_install_package: the paths are this package's now, so
+     * whoever shipped them before can stop claiming them. */
+    if (r == 0)
+        aept_clash_commit_takeovers(ctx, &taken);
+
     if (r == 0)
         aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
     goto cleanup;
@@ -750,6 +770,7 @@ cleanup_filesets:
     aept_fileset_free(&old_files);
 
 cleanup:
+    aept_takeover_list_free(&taken);
     aept_ar_file_list_free(&extracted);
     if (have_old_cf)
         aept_conffile_set_free(&old_cf);

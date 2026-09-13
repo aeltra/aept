@@ -215,6 +215,7 @@ dist_check_SCRIPTS = \
     test_autoremove.sh \
     test_clean.sh \
     test_mark.sh test_option_order.sh test_show.sh \
+    test_replaces_overwrite.sh \
     test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_pin.sh \
     test_python.sh \

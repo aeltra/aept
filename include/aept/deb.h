@@ -27,9 +27,11 @@
  * other.
  *
  * Replaces is therefore kept under a key of aept's own, which the
- * solver never reads: clash.c consults it for permission to overwrite,
- * install.c for the order of a transaction that both installs and
- * removes.
+ * solver never reads.  So is Conflicts, for a different reason: Breaks
+ * is folded into the solvable's conflict array too, because to a
+ * solver the two are the same thing, and after that the array can no
+ * longer say which names the packager wrote under which field.  Policy
+ * 7.6 turns on exactly that distinction -- see aept_deb_takeover().
  *
  * The grammar accepted is the binary package one: "name",
  * "name (>= 1.0)", alternatives joined by "|", entries separated by
@@ -56,23 +58,43 @@ int aept_deb_add_packages(Repo *repo, FILE *fp);
 Id aept_deb_add_control(Repo *repo, const char *control);
 
 /*
- * The repodata key under which Replaces is stored, as a dep array.
- * Read it with solvable_lookup_deparray().
+ * The repodata keys under which Replaces and Conflicts are stored, as
+ * dep arrays.  Read them with solvable_lookup_deparray().
  */
 Id aept_deb_replaces_key(Pool *pool);
+Id aept_deb_conflicts_key(Pool *pool);
 
 /*
- * Whether s declares both Replaces and Conflicts for the package named
- * by the id other -- the pair that lets s take that package's place
- * (Policy 7.6.2).  Matched by name: a versioned Replaces bounds which
- * versions may be taken over, and the version in hand is whichever one
- * is installed.
+ * What Replaces means when s would overwrite a file owned by other.
  *
- * Two callers, and they are the two halves of one rule: clash.c allows
- * s to overwrite a path the other package owns, and solver.c orders the
- * install ahead of the removal so the overwrite happens before the
- * remainder goes.
+ * Policy 7.6 gives the field two purposes and makes them disjoint, on
+ * whether the two packages conflict:
+ *
+ *   7.6.2, the pair -- "only takes effect when the two packages *do*
+ *   conflict".  other is being removed for s to be installed, and s may
+ *   take its files on the way.  The replaced package may be *virtual*
+ *   here; Policy's own example is every MTA declaring Provides,
+ *   Conflicts and Replaces on mail-transport-agent.
+ *
+ *   7.6.1, Replaces alone -- "only takes effect when both packages are
+ *   at least partially on the system at once.  It is not relevant if
+ *   the packages conflict".  Both stay installed and the field decides
+ *   only who owns the overlapping files; the path stops being listed as
+ *   other's.  Virtual names do *not* count here, by the same section:
+ *   the replaced package must be named for real.
+ *
+ * Breaks is not Conflicts for this purpose (Policy 7.3 against 7.4),
+ * which is why the Conflicts key exists apart from s->conflicts: the
+ * documented 7.6.1 idiom is Breaks with Replaces on a package split,
+ * and reading that as a conflict would route it to 7.6.2 and remove a
+ * package Debian keeps.
  */
-int aept_deb_takes_over(Pool *pool, Solvable *s, Id other);
+typedef enum {
+    AEPT_TAKEOVER_NONE = 0,  /* not permitted; a clash */
+    AEPT_TAKEOVER_OVERWRITE, /* 7.6.1: other stays, and must disown the path */
+    AEPT_TAKEOVER_SUPERSEDE, /* 7.6.2: other is going away anyway */
+} aept_takeover_mode_t;
+
+aept_takeover_mode_t aept_deb_takeover(Pool *pool, Solvable *s, Solvable *other);
 
 #endif

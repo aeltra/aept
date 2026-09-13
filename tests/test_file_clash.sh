@@ -86,28 +86,10 @@ $out"
     || fail "pkga's symlink was repointed by the refused install"
 note "a disagreeing symlink is a clash, and the original survives"
 
-# ── a bare Replaces: does not legitimise the takeover ────────────────
-#
-# Divergence from dpkg, pinned deliberately.  Policy 7.6.1 lets a bare
-# Replaces overwrite the other package's file while that package stays
-# installed, which means striking the path from its .list as well --
-# otherwise removing it later deletes a file it no longer owns.  aept
-# does not rewrite another package's file list, so it refuses the bare
-# form rather than half-applying it.  The takeover below needs the full
-# Replaces + Conflicts pair, where the other package is being removed
-# in the same transaction anyway.
-
-mkdir -p "$work/c/usr/bin"
-printf 'C\n' > "$work/c/usr/bin/shared"
-make_pkg_tree "$work/pkgc_1.0.aeltra" pkgc 1.0 "Replaces: pkga" "$work/c"
-
-out=$(aept_run "$root" install --non-interactive "$work/pkgc_1.0.aeltra" 2>&1)
-rc=$?
-[ "$rc" -ne 0 ] || fail "a bare Replaces: was allowed to take pkga's file:
-$out"
-grep -q '^A$' "$root/usr/bin/shared" \
-    || fail "pkga's file did not survive the bare-Replaces refusal"
-note "a bare Replaces: is refused; takeover needs Conflicts too"
+# A bare Replaces is not a clash either, but it is not this test's
+# subject: it leaves both packages installed and rewrites the old one's
+# file list, which is a lifecycle of its own.  test_replaces_overwrite.sh
+# has it.
 
 # ── Replaces + Conflicts makes the takeover legitimate ───────────────
 #
@@ -122,6 +104,8 @@ note "a bare Replaces: is refused; takeover needs Conflicts too"
 # unpacked, nothing would clash, and the test would pass while proving
 # nothing.  It would also be wrong -- see test_takeover_order.sh.
 
+mkdir -p "$work/c/usr/bin"
+printf 'C\n' > "$work/c/usr/bin/shared"
 make_pkg_tree "$work/pkgc2_1.0.aeltra" pkgc2 1.0 "Replaces: pkga
 Conflicts: pkga" "$work/c"
 

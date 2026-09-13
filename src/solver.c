@@ -228,8 +228,10 @@ static void order_takeovers(Transaction *trans)
 
             if ((type & 0xf0) != SOLVER_TRANSACTION_INSTALL)
                 continue;
-            if (aept_deb_takes_over(pool, pool_id2solvable(pool, ip),
-                                    pool_id2solvable(pool, ep)->name))
+            /* Only a supersede involves a removal to order: Policy
+             * 7.6.1's takeover leaves the other package installed. */
+            if (aept_deb_takeover(pool, pool_id2solvable(pool, ip), pool_id2solvable(pool, ep)) ==
+                AEPT_TAKEOVER_SUPERSEDE)
                 after[i] = j;
         }
     }
