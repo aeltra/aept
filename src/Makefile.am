@@ -92,7 +92,12 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # 0:1:0  aept_set_network_timeout(), aept_last_error()
 libaept_la_LDFLAGS = -version-number 1:0:0 $(COVERAGE_LDFLAGS)
 
-aept_SOURCES = main.c
+aept_SOURCES = \
+    main.c \
+    cmd_maint.c \
+    cmd_query.c \
+    cmd_state.c \
+    cmd_transact.c
 aept_CFLAGS = $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS) \
     -I$(top_builddir) -I$(top_srcdir)/include
 aept_LDADD = libaept.la

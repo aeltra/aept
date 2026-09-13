@@ -72,3 +72,7 @@ file src/libfetch/http.c        plumbing
 file src/libfetch/pctdecode.c   plumbing
 
 file src/main.c                 cli
+file src/cmd_maint.c            cli
+file src/cmd_query.c            cli
+file src/cmd_state.c            cli
+file src/cmd_transact.c         cli

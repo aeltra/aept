@@ -280,7 +280,7 @@ suite:
 ```bash
 gcc -fsanitize=thread -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch \
     -o /tmp/threadrace_tsan tests/threadrace.c \
-    $(ls src/*.c | grep -v main.c) src/libfetch/*.c \
+    $(ls src/*.c | grep -vE 'main\.c|cmd_.*\.c') src/libfetch/*.c \
     $(pkg-config --cflags --libs libarchive openssl) -lsolv -lpthread
 setarch $(uname -m) -R /tmp/threadrace_tsan 20 <root-a> <root-b> <url>
 ```
@@ -471,6 +471,30 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 **Context parameter conventions:** public API and orchestrators take `aept_ctx_t *ctx`; pure config functions take `struct aept_config *cfg`; pure solver accessors take `aept_solver_t *s`; pure utilities take no context.
 
 **Command flow** (main.c): parse CLI opts → `aept_init()` → `aept_load_config(ctx, path)` → dispatch to `aept_update(ctx)`, `aept_install(ctx, ...)`, etc. → `aept_cleanup(ctx)`.
+
+**The CLI is five files.** `main.c` keeps the process-level concerns —
+the global options, the signal handling, `init_aept()`, `cli_cleanup()`,
+`transaction_exit()` and the dispatch on the command word — and each
+group of commands has its own file:
+
+| file | commands |
+|------|----------|
+| `cmd_transact.c` | install, remove, upgrade, autoremove |
+| `cmd_query.c` | list, show, files, owns, print-architecture |
+| `cmd_state.c` | mark, pin, unpin |
+| `cmd_maint.c` | update, clean, triggers |
+
+`include/aept/cli.h` is the seam: the `OPTS_DISPATCH`/`OPTS_LEAF` macros
+and the four shared functions. Each command's **usage text, option table
+and handler live together** in one file — splitting the help text away
+from the `getopt_long` table that implements it is how the two drift
+apart. main.c's file-scope state stays private to it; only `init_aept()`
+and `resolve_conf()` read it, so nothing else needed exporting.
+
+It was one 1488-line file. The split moved no logic: the CLI tier came
+out at 622/771 lines and 266/368 branches, identical on both sides. What
+it bought is per-file visibility — `cmd_transact.c` at 76.3% is the
+weakest part of the CLI, which a single 80.7% figure hid.
 
 **Key subsystems:**
 
