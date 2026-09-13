@@ -26,11 +26,12 @@ static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
     return path;
 }
 
-int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
-                    const char *script, const char *action, const char *version)
+int aept_run_script_args(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
+                         const char *script, const char *const *args)
 {
+    const char *argv[8];
     char *path = NULL;
-    int r;
+    int n = 0, i, r;
 
     if (pkg_name)
         aept_asprintf(&path, "%s/%s.%s", script_dir, pkg_name, script);
@@ -42,23 +43,22 @@ int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pk
         return 0;
     }
 
-    aept_log_debug("running %s for %s %s %s", script, pkg_name ? pkg_name : "(none)",
-                   action ? action : "", version ? version : "");
-
     const char *run_path = path;
     if (ctx->config.offline_root)
         run_path = strip_offline_root(ctx, path);
 
-    if (action && version) {
-        const char *argv[] = {"/bin/sh", run_path, action, version, NULL};
-        r = aept_system_offline_root(ctx, argv);
-    } else if (action) {
-        const char *argv[] = {"/bin/sh", run_path, action, NULL};
-        r = aept_system_offline_root(ctx, argv);
-    } else {
-        const char *argv[] = {"/bin/sh", run_path, NULL};
-        r = aept_system_offline_root(ctx, argv);
-    }
+    argv[n++] = "/bin/sh";
+    argv[n++] = run_path;
+    /* An absent argument ends the list: nothing may follow a NULL, or
+     * the script would be handed an empty operand in its place. */
+    for (i = 0; args && args[i] && n < (int)(sizeof(argv) / sizeof(argv[0])) - 1; i++)
+        argv[n++] = args[i];
+    argv[n] = NULL;
+
+    aept_log_debug("running %s for %s%s%s%s%s", script, pkg_name ? pkg_name : "(none)",
+                   n > 2 ? " " : "", n > 2 ? argv[2] : "", n > 3 ? " " : "", n > 3 ? argv[3] : "");
+
+    r = aept_system_offline_root(ctx, argv);
 
     free(path);
 
@@ -77,4 +77,12 @@ int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pk
     }
 
     return 0;
+}
+
+int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
+                    const char *script, const char *action, const char *version)
+{
+    const char *args[] = {action, version, NULL};
+
+    return aept_run_script_args(ctx, script_dir, pkg_name, script, args);
 }

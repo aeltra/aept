@@ -52,8 +52,13 @@ printf 'new\n' > "$work/new/usr/bin/moved"
 
 # Two more owners, for a package that takes files from both at once.
 mkdir -p "$work/x/usr/bin" "$work/y/usr/bin" "$work/both/usr/bin"
+mkdir -p "$work/x/usr/share/pkgx" "$work/y/usr/share/pkgy"
 printf 'x\n' > "$work/x/usr/bin/x"
 printf 'y\n' > "$work/y/usr/bin/y"
+# Each keeps a file of its own, so neither disappears when the shared
+# one is taken: that case is the last section.
+printf 'keep\n' > "$work/x/usr/share/pkgx/keep"
+printf 'keep\n' > "$work/y/usr/share/pkgy/keep"
 printf 'both-x\n' > "$work/both/usr/bin/x"
 printf 'both-y\n' > "$work/both/usr/bin/y"
 
@@ -232,5 +237,56 @@ owns pkgx 'usr/share/pkgx/after' \
     || fail "the entry after the over-long line was lost in the rewrite"
 grep -q 'zzzz' "$listfile" && fail "a fragment of the over-long line was written back"
 note "an over-long line is dropped whole and the rest of the list survives"
+
+# ── a package left with nothing has disappeared ──────────────────────
+#
+# "If a package is completely replaced in this way, so that dpkg does
+# not know of any files it still contains, it is considered to have
+# disappeared."  It is not removed -- nothing is left to remove, and no
+# prerm runs because nothing knew in advance.  Its postrm is told who
+# took over so it can clean up after itself.
+
+provision_shell "$root" || skip "no shell to run maintainer scripts"
+
+mkdir -p "$work/taker/usr/bin"
+printf 'taken\n' > "$work/taker/usr/bin/vanisher"
+
+make_pkg_script "$work/vanisher_1.0.aeltra" vanisher 1.0 postrm \
+    'printf "%s\n" "$*" > /disappear.args'
+make_pkg_tree "$work/taker_2.5.aeltra" taker 2.5 "Replaces: vanisher" "$work/taker"
+
+aept_run "$root" remove --non-interactive both pkgx pkgy >/dev/null 2>&1
+aept_run "$root" install --non-interactive "$work/vanisher_1.0.aeltra" >/dev/null 2>&1 \
+    || fail "installing vanisher failed"
+installed vanisher || fail "vanisher is not installed to begin with"
+
+out=$(aept_run "$root" install --non-interactive "$work/taker_2.5.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "taking over the last file exited $rc:
+$out"
+
+installed taker || fail "taker was not installed:
+$out"
+installed vanisher && fail "a package owning no files is still installed:
+$out"
+[ -f "$root/usr/bin/vanisher" ] \
+    || fail "the file was deleted; a disappearance must remove nothing:
+$out"
+grep -q '^taken$' "$root/usr/bin/vanisher" || fail "the file was not taken over"
+note "a package whose last file is taken over disappears"
+
+# The postrm is told what happened, and by whom.
+[ -f "$root/disappear.args" ] || fail "the disappearing package's postrm was not run:
+$out"
+args=$(cat "$root/disappear.args")
+[ "$args" = "disappear taker 2.5" ] \
+    || fail "postrm got '$args', expected 'disappear taker 2.5'"
+note "its postrm is called with disappear, the overwriter and its version"
+
+for ext in list control postrm; do
+    [ -f "$root/var/lib/aept/info/vanisher.$ext" ] \
+        && fail "vanisher.$ext outlived the disappearance"
+done
+note "its maintainer scripts and file list are gone"
 
 exit 0

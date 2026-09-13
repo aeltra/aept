@@ -53,7 +53,13 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
  * removing that package later does not delete a file it no longer
  * owns.  Reports failures and carries on: the files are already on
  * disk and belong to the new package whatever happens here.
+ *
+ * An owner left with no files at all has "disappeared" and is handed to
+ * aept_do_disappear(), which is why the overwriting package has to name
+ * itself: its postrm is told who took its files.
  */
-void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken);
+void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken,
+                                 const char *overwriter, const char *overwriter_version,
+                                 aept_owner_index_t *owners);
 
 #endif

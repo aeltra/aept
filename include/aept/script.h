@@ -27,4 +27,11 @@ struct aept_ctx;
 int aept_run_script(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
                     const char *script, const char *action, const char *version);
 
+/* The same, for the calls that carry more operands than an action and a
+ * version -- "postrm disappear <overwriter> <overwriter-version>" is
+ * the only one.  args is NULL-terminated; a NULL ends it, so an absent
+ * operand cannot be followed by a present one. */
+int aept_run_script_args(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
+                         const char *script, const char *const *args);
+
 #endif

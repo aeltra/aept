@@ -20,6 +20,7 @@
 #include "aept/deb.h"
 #include "aept/msg.h"
 #include "aept/owner_index.h"
+#include "aept/remove.h"
 #include "aept/util.h"
 
 /*
@@ -204,7 +205,9 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
     return clashes;
 }
 
-void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken)
+void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken,
+                                 const char *overwriter, const char *overwriter_version,
+                                 aept_owner_index_t *owners)
 {
     int i, j;
 
@@ -214,7 +217,7 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
         char *list_path = NULL, *tmp_path = NULL;
         FILE *in, *out;
         char line[4096];
-        int failed = 0;
+        int failed = 0, kept = 0;
 
         /* Entries are grouped by owner as they are read, so an owner
          * already handled in an earlier pass is skipped here. */
@@ -264,6 +267,12 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
             if (path[0] != '\0' && aept_fileset_contains(&drop, path))
                 continue;
 
+            /* Directories are shared and owned by everyone who ships
+             * into them, so a list holding nothing else describes a
+             * package that has no files left. */
+            if (tab && !S_ISDIR((mode_t)strtoul(tab + 1, NULL, 8)))
+                kept++;
+
             if (fputs(line, out) == EOF) {
                 failed = 1;
                 break;
@@ -281,6 +290,11 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
             unlink(tmp_path);
         } else {
             aept_log_debug("'%s' disowned %d path(s) taken over", owner, drop.count);
+
+            /* Nothing of it is left on disk, so it is not installed any
+             * more -- whatever its status file still says. */
+            if (kept == 0)
+                aept_do_disappear(ctx, owner, overwriter, overwriter_version, owners);
         }
 
         aept_fileset_free(&drop);

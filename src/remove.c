@@ -174,6 +174,54 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
     }
 }
 
+/*
+ * A package whose every file has been taken over by another has
+ * "disappeared": it owns nothing, so there is nothing left to remove,
+ * but it must stop being installed.
+ *
+ * Deliberately not routed through aept_do_remove(), because three of
+ * that function's steps are wrong here:
+ *
+ *   - no prerm, because nothing knew in advance this would happen;
+ *   - no file deletion, because every file it had is now somebody
+ *     else's, which is exactly why it disappeared;
+ *   - its conffile *records* go with the rest of its info files, while
+ *     the conffiles themselves stay on disk -- they were taken over
+ *     too, and belong to the overwriting package now.
+ *
+ * The postrm is told who took over, so it can do its own cleanup.  Its
+ * failure is reported and does not stop the disappearance: the files
+ * are already gone from this package either way, and leaving it marked
+ * installed would describe a state that no longer exists.
+ */
+int aept_do_disappear(struct aept_ctx *ctx, const char *name, const char *overwriter,
+                      const char *overwriter_version, aept_owner_index_t *owners)
+{
+    const char *args[] = {"disappear", overwriter, overwriter_version, NULL};
+
+    if (!aept_pkg_name_is_safe(name)) {
+        aept_log_error("refusing to disappear package with unsafe name '%s'", name);
+        return -1;
+    }
+
+    aept_log_info("%s disappeared, its files taken over by %s", name, overwriter);
+
+    if (aept_run_script_args(ctx, ctx->config.info_dir, name, "postrm", args) != 0)
+        aept_log_warning("postrm failed for disappearing '%s', continuing", name);
+
+    /* Deleting the .control file is what removes the package from the
+     * installed-packages database. */
+    remove_info_files(ctx, name);
+
+    aept_status_unmark_auto(ctx, name);
+    aept_pin_remove(ctx, name);
+
+    if (owners)
+        aept_owner_index_drop_owner(owners, name);
+
+    return 0;
+}
+
 int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_version,
                    aept_fileset_t *protected, aept_owner_index_t *owners)
 {

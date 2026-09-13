@@ -29,4 +29,12 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count);
 int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_version,
                    aept_fileset_t *protected, struct aept_owner_index *owners);
 
+/*
+ * Mark a package as gone whose files were all taken over by another,
+ * running its postrm with "disappear <overwriter> <overwriter-version>".
+ * No prerm, and no file is deleted: see the comment on the definition.
+ */
+int aept_do_disappear(struct aept_ctx *ctx, const char *name, const char *overwriter,
+                      const char *overwriter_version, struct aept_owner_index *owners);
+
 #endif

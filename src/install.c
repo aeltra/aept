@@ -412,7 +412,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
      * owner index already reports the new owner: its recent entries
      * shadow the build-time snapshot. */
     if (r == 0)
-        aept_clash_commit_takeovers(ctx, &taken);
+        aept_clash_commit_takeovers(ctx, &taken, name, pool_id2str(pool, s->evr), owners);
 
     if (r == 0)
         aept_log_debug("installed %s", name);
@@ -759,7 +759,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     /* See do_install_package: the paths are this package's now, so
      * whoever shipped them before can stop claiming them. */
     if (r == 0)
-        aept_clash_commit_takeovers(ctx, &taken);
+        aept_clash_commit_takeovers(ctx, &taken, name, pool_id2str(pool, s->evr), owners);
 
     if (r == 0)
         aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
