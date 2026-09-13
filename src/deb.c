@@ -336,7 +336,7 @@ static int field_id(const aept_stanza_field_t *f)
  * written for a solvable that is then freed would be inherited by the
  * next one, because solvable_free() hands the id straight back.
  */
-static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
+static Id add_stanza(Repo *repo, Repodata *data, const char *stanza, aept_stanza_buf_t *vb)
 {
     Pool *pool = repo->pool;
     Solvable *s;
@@ -356,22 +356,27 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
 
     while (!bad && aept_stanza_next_field(&pos, &f)) {
         int id = field_id(&f);
-        const char *fname;
-        char *v;
+        const char *fname, *v;
 
         if (id == F_NONE)
             continue;
 
-        /* Description is the one field whose line structure carries
-         * meaning; every other is a single logical value. */
-        v = aept_stanza_value(&f, id == F_DESCRIPTION);
+        /*
+         * Description is the one field whose line structure carries
+         * meaning; every other is a single logical value.
+         *
+         * The value lands in the shared buffer, so it is good only
+         * until the next field is read.  Most are used and finished
+         * with inside this iteration; the five kept for the commit
+         * below are copied out of it.
+         */
+        v = aept_stanza_value_into(&f, id == F_DESCRIPTION, vb);
         fname = known_fields[id - 1].name;
 
         switch (id) {
         case F_PACKAGE:
             free(pkg);
-            pkg = v;
-            v = NULL;
+            pkg = aept_strdup(v);
             s->name = pool_str2id(pool, pkg, 1);
             break;
         case F_VERSION:
@@ -413,13 +418,11 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
             break;
         case F_FILENAME:
             free(filename);
-            filename = v;
-            v = NULL;
+            filename = aept_strdup(v);
             break;
         case F_SHA256:
             free(sha256);
-            sha256 = v;
-            v = NULL;
+            sha256 = aept_strdup(v);
             break;
         case F_INSTALLEDSIZE:
             isize = strtoull(v, NULL, 10);
@@ -431,19 +434,15 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
             break;
         case F_HOMEPAGE:
             free(homepage);
-            homepage = v;
-            v = NULL;
+            homepage = aept_strdup(v);
             break;
         case F_DESCRIPTION:
             free(descr);
-            descr = v;
-            v = NULL;
+            descr = aept_strdup(v);
             break;
         default:
             break;
         }
-
-        free(v);
     }
 
     queue_free(&q);
@@ -527,6 +526,7 @@ static Id add_stanza(Repo *repo, Repodata *data, const char *stanza)
 struct add_state {
     Repo *repo;
     Repodata *data;
+    aept_stanza_buf_t vb;
     int count;
 };
 
@@ -534,7 +534,7 @@ static int add_one(const char *stanza, void *user)
 {
     struct add_state *st = user;
 
-    if (add_stanza(st->repo, st->data, stanza))
+    if (add_stanza(st->repo, st->data, stanza, &st->vb))
         st->count++;
     return 0;
 }
@@ -543,14 +543,18 @@ int aept_deb_add_packages(Repo *repo, FILE *fp)
 {
     struct add_state st;
 
+    memset(&st, 0, sizeof(st));
     st.repo = repo;
-    st.data = repo_add_repodata(repo, 0);
-    st.count = 0;
+    st.data = repo_add_repodata(repo, REPO_REUSE_REPODATA);
 
     if (!st.data)
         return -1;
 
+    /* One buffer for the whole index: every field of every stanza
+     * passes through it, so it grows to the largest value once and no
+     * field allocates after that. */
     aept_stanza_foreach(fp, add_one, &st);
+    aept_stanza_buf_free(&st.vb);
     repodata_internalize(st.data);
 
     return 0;
@@ -559,12 +563,14 @@ int aept_deb_add_packages(Repo *repo, FILE *fp)
 Id aept_deb_add_control(Repo *repo, const char *control)
 {
     Repodata *data = repo_add_repodata(repo, REPO_REUSE_REPODATA);
+    aept_stanza_buf_t vb = {NULL, 0};
     Id p;
 
     if (!data)
         return 0;
 
-    p = add_stanza(repo, data, control);
+    p = add_stanza(repo, data, control, &vb);
+    aept_stanza_buf_free(&vb);
     repodata_internalize(data);
 
     return p;

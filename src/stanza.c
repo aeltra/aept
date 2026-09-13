@@ -236,15 +236,12 @@ int aept_stanza_field_is(const aept_stanza_field_t *f, const char *name)
     return strlen(name) == f->name_len && strncasecmp(f->name, name, f->name_len) == 0;
 }
 
-char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines)
+/* Write f's value into out, which must hold value_len + 1 bytes. */
+static void copy_value(const aept_stanza_field_t *f, int keep_lines, char *out)
 {
     const char *p = f->value, *end = f->value + f->value_len;
-    char *out, *w, *b;
+    char *w = out, *b;
     int first = 1;
-
-    /* Folding only ever shortens, so the span is a safe bound. */
-    out = aept_malloc(f->value_len + 1);
-    w = out;
 
     while (p < end) {
         const char *eol = memchr(p, '\n', (size_t)(end - p));
@@ -288,8 +285,38 @@ char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines)
         b++;
     if (b != out)
         memmove(out, b, strlen(b) + 1);
+}
 
+char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines)
+{
+    /* Folding only ever shortens, so the span is a safe bound. */
+    char *out = aept_malloc(f->value_len + 1);
+
+    copy_value(f, keep_lines, out);
     return out;
+}
+
+const char *aept_stanza_value_into(const aept_stanza_field_t *f, int keep_lines,
+                                   aept_stanza_buf_t *b)
+{
+    size_t need = f->value_len + 1;
+
+    if (need > b->cap) {
+        /* Geometric, so an index of growing stanzas does not realloc
+         * for each one. */
+        b->cap = b->cap * 2 > need ? b->cap * 2 : need;
+        b->p = aept_realloc(b->p, b->cap);
+    }
+
+    copy_value(f, keep_lines, b->p);
+    return b->p;
+}
+
+void aept_stanza_buf_free(aept_stanza_buf_t *b)
+{
+    free(b->p);
+    b->p = NULL;
+    b->cap = 0;
 }
 
 static char *stanza_field(const char *stanza, const char *field, int keep_lines)

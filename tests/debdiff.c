@@ -93,10 +93,16 @@ static void cmpnum(Pool *pa, Solvable *a, Solvable *b, Id key, const char *what)
 int main(int argc, char **argv)
 {
     Pool *pa = pool_create(), *pb = pool_create();
-    Repo *ra = repo_create(pa, "solv"), *rb = repo_create(pb, "aept");
+    /* Both pools on Debian semantics, as aept's solver sets them. */
+    Repo *ra, *rb;
     FILE *fp;
     Id p;
     int n = 0;
+
+    pool_setdisttype(pa, DISTTYPE_DEB);
+    pool_setdisttype(pb, DISTTYPE_DEB);
+    ra = repo_create(pa, "solv");
+    rb = repo_create(pb, "aept");
 
     fp = fopen(argv[1], "r");
     repo_add_debpackages(ra, fp, 0);

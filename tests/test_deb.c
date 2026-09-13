@@ -116,6 +116,11 @@ int main(void)
     char *got;
 
     pool = pool_create();
+    /* aept's solver asks for Debian semantics rather than inheriting
+     * the libsolv build's default, and so must anything checking what
+     * it produces: pool->disttype selects both the version comparison
+     * and how pool_dep2str() renders "|" and "<<". */
+    pool_setdisttype(pool, DISTTYPE_DEB);
     repo = repo_create(pool, "test");
 
     /* ── the grammar ─────────────────────────────────────────────── */

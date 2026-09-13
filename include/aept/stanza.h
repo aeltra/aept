@@ -94,4 +94,26 @@ int aept_stanza_field_is(const aept_stanza_field_t *f, const char *name);
  */
 char *aept_stanza_value(const aept_stanza_field_t *f, int keep_lines);
 
+/*
+ * A buffer reused across calls.  Reading every field of every stanza in
+ * an index is the common case and allocating per field is what made it
+ * expensive -- against musl, whose allocator costs about nine times
+ * glibc's for blocks this small, it dominated the parse.  Zero-initialize
+ * it, pass it to as many fields as you like, and free it once.
+ */
+typedef struct {
+    char *p;
+    size_t cap;
+} aept_stanza_buf_t;
+
+/*
+ * f's value in b, valid until the next call against the same buffer.
+ * For a value used and finished with before the next field is read; one
+ * that must outlive it has to be copied out.
+ */
+const char *aept_stanza_value_into(const aept_stanza_field_t *f, int keep_lines,
+                                   aept_stanza_buf_t *b);
+
+void aept_stanza_buf_free(aept_stanza_buf_t *b);
+
 #endif
