@@ -214,6 +214,7 @@ dist_check_SCRIPTS = \
     test_autoremove.sh \
     test_clean.sh \
     test_mark.sh test_option_order.sh test_show.sh \
+    test_supersede.sh test_supersede_disjoint.sh \
     test_pin.sh \
     test_python.sh \
     test_tls_reject.sh \
@@ -276,6 +277,7 @@ AM_TESTS_ENVIRONMENT += AEPT_COVERAGE=1; export AEPT_COVERAGE;
 endif
 
 TESTS = $(unit_tests) $(dist_check_SCRIPTS)
+
 
 # The out-of-memory escape.  --wrap lets the test fail a chosen allocation
 # and see what libaept does about it.
