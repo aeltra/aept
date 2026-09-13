@@ -247,7 +247,7 @@ dist_check_SCRIPTS = \
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
     dribbleserver.py tlsserver.py libaept.abi abi-declarations.sh \
-    coverage-report.py coverage.tiers coverage.baseline debdiff.c
+    coverage-report.py coverage.tiers coverage.baseline
 
 TEST_EXTENSIONS = .sh
 

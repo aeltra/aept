@@ -474,7 +474,7 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
 
 **Key subsystems:**
 
-- **solver.c** — Wraps libsolv pool/repo/solver/transaction. `aept_solver_init()` calls **`pool_setdisttype(pool, DISTTYPE_DEB)` and fails if it cannot**. That is not cosmetic: `pool->disttype` selects the version comparison function, and the Debian and RPM ones disagree on **726 of the 23,259** adjacent pairs in Debian trixie's version strings — about 3% — with `+` the usual culprit (`1.0.1-1` against `1.0+2-1` is an upgrade to Debian and a downgrade to RPM). libsolv's default follows how *it* was built: Debian's package chooses DEB, an upstream cmake build defaults to RPM, so aept must not inherit it. A `-1` return means the library was compiled for a single, different disttype and every later comparison would be wrong, so init refuses. `tests/test_version_order.sh` pins it, and only bites on a non-Debian-default libsolv — which is what `scripts/musl-build.sh` provides, and how this was found. Test harnesses that build their own pool (`test_deb.c`, `tests/debdiff.c`) must set it too; `pool_dep2str()` renders `|` and `<<` under DEB and ` or ` and `<` under RPM. Loads indexes via `aept_deb_add_packages()` (deb.c), not libsolv's own `repo_add_debpackages()`. Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `order_takeovers()` runs last on the step list — after `transaction_order()` and after `reorder_transaction()`, which rebuilds it — and moves the removal of a package that another package in the same transaction replaces to after that package's installation. libsolv orders a conflict's removal first and cannot be asked for the other order: its only primitive for "installs over, then removes" is obsoletes, which also confers update candidacy. `tests/test_takeover_order.sh` pins both directions, including that a *bare* conflict still removes first. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
+- **solver.c** — Wraps libsolv pool/repo/solver/transaction. `aept_solver_init()` calls **`pool_setdisttype(pool, DISTTYPE_DEB)` and fails if it cannot**. That is not cosmetic: `pool->disttype` selects the version comparison function, and the Debian and RPM ones disagree on **726 of the 23,259** adjacent pairs in Debian trixie's version strings — about 3% — with `+` the usual culprit (`1.0.1-1` against `1.0+2-1` is an upgrade to Debian and a downgrade to RPM). libsolv's default follows how *it* was built: Debian's package chooses DEB, an upstream cmake build defaults to RPM, so aept must not inherit it. A `-1` return means the library was compiled for a single, different disttype and every later comparison would be wrong, so init refuses. `tests/test_version_order.sh` pins it, and only bites on a non-Debian-default libsolv — which is what `scripts/musl-build.sh` provides, and how this was found. A test harness that builds its own pool (`test_deb.c`) must set it too; `pool_dep2str()` renders `|` and `<<` under DEB and ` or ` and `<` under RPM. Loads indexes via `aept_deb_add_packages()` (deb.c), not libsolv's own `repo_add_debpackages()`. Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `order_takeovers()` runs last on the step list — after `transaction_order()` and after `reorder_transaction()`, which rebuilds it — and moves the removal of a package that another package in the same transaction replaces to after that package's installation. libsolv orders a conflict's removal first and cannot be asked for the other order: its only primitive for "installs over, then removes" is obsoletes, which also confers update candidacy. `tests/test_takeover_order.sh` pins both directions, including that a *bare* conflict still removes first. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
 - **archive.c** — Two-level extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
@@ -574,20 +574,22 @@ the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
   `Size:` field. `Source` is deliberately not stored — nothing reads it
   from the pool; `show` takes it from the stanza.
 
-  `tests/debdiff.c` is that comparison, kept for the next change to the
-  parser. It is **not** in `make check` and not built by it: aept no
-  longer links libsolvext, and a harness that compares against it would
-  drag the dependency back into every build to serve a check that needs
-  a real index to mean anything. Build it by hand, against a plain
-  index — an `InPackages.gz` with its clearsign envelope stripped:
+  That comparison was a **one-off**, and the harness for it is gone —
+  `git log -- tests/debdiff.c` has it. It proved the takeover and then
+  stayed green through four rewrites of the parser without ever finding
+  anything, while the reasons not to keep it accumulated: it needed
+  libsolvext, the dependency aept had just dropped; the list of
+  deliberate differences to ignore kept growing; and it compared
+  `pool_dep2str()` *text* rather than resolved providers, so a
+  multiarch-qualified `libfoo:any` — a `REL_MULTIARCH` relation to
+  libsolv, a literal package name to us, both rendering as the same
+  string — read as identical when it is not.
 
-```bash
-gcc -g -O1 -D_GNU_SOURCE -I. -Iinclude -Isrc/libfetch -o /tmp/debdiff \
-    tests/debdiff.c src/deb.c src/stanza.c src/util.c src/msg.c \
-    src/config.c src/validator.c src/libfetch/pctdecode.c \
-    $(pkg-config --cflags --libs libarchive openssl) -lsolvext -lsolv
-/tmp/debdiff <index>
-```
+  If a Debian-index comparison is ever wanted again, that last point is
+  the thing to fix first: compare what each dependency *resolves to*,
+  not how it prints, or the harness will certify a parser that is
+  quietly wrong.
+
 - **stanza.c** — reading fields back out of a control stanza. Two
   callers. deb.c parses an index with these, so this is where the format
   is actually read: `aept_stanza_foreach()` splits an index into stanzas
