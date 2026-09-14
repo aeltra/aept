@@ -167,6 +167,32 @@ in_prot lib || fail "reinstalling by name dropped the protection"
 in_auto lib && fail "reinstalling by name marked it auto"
 note "install by name leaves a protected package protected"
 
+# The same for a package file named on the command line, which takes a
+# different path to "this one is explicitly requested".
+aept_run "$root" install --non-interactive --reinstall "$work/lib_2.0.aeltra" >/dev/null 2>&1 \
+    || fail "reinstalling lib from a file failed"
+in_prot lib || fail "reinstalling from a file dropped the protection"
+note "install from a file leaves a protected package protected"
+
+# ── a protected line for a package that is not installed is inert ────
+#
+# The mark outlives nothing -- a removal drops it -- but a hand edit or
+# a root assembled from parts can leave one for a package that is not
+# there.  It must not pull the package in, and must not stop anything.
+
+# rival is in the index and not installed -- a name the solver knows,
+# so "not installed" is the check that has to hold, not "unknown".
+printf 'rival protected\n' >> "$marks_file"
+out=$(aept_run "$root" install --non-interactive lone 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "a protected line for an absent package broke a transaction:
+$out"
+installed rival && fail "a protected line pulled in a package that was not there"
+installed lone || fail "lone was not installed"
+note "a protected line for an absent package changes nothing"
+aept_run "$root" remove --non-interactive lone >/dev/null 2>&1
+sed -i '/^rival protected$/d' "$marks_file"
+
 # ── autoremove never takes it ────────────────────────────────────────
 #
 # lib is protected; make app go away and lib would be an autoremove
@@ -262,6 +288,20 @@ rc=$?
 $out"
 installed init-a || fail "init-a was removed from under base"
 note "the last provider of a protected package's dependency stays"
+
+# Naming the virtual name removes its provider, so a protected provider
+# is refused by that name too, and in words.
+aept_run "$root" mark protected init-a >/dev/null 2>&1 || fail "mark protected init-a failed"
+out=$(aept_run "$root" remove --non-interactive init 2>&1)
+rc=$?
+[ "$rc" -ne 0 ] || fail "removing a protected provider by its virtual name exited 0:
+$out"
+printf '%s\n' "$out" | grep -q "init-a.*protected" \
+    || fail "the refusal by virtual name does not name the protected provider:
+$out"
+installed init-a || fail "init-a was removed by its virtual name"
+aept_run "$root" mark manual init-a >/dev/null 2>&1
+note "remove by a virtual name is refused when the provider is protected"
 
 out=$(aept_run "$root" install --non-interactive init-b 2>&1)
 rc=$?

@@ -241,6 +241,39 @@ int main(void)
         test_ok(1, "aept_cancel() is callable");
     }
 
+    /* ── the marks file is re-read by every call ──────────────────── *
+     *
+     * A context keeps an in-memory copy of the marks file for the
+     * length of one API call.  A long-lived context -- an embedder --
+     * makes many calls, and something else may edit the file between
+     * two of them; each call must start from what is on disk.  The
+     * probe: mark foo auto, change the file to say protected behind
+     * the context's back, then mark it auto again.  A fresh read sees
+     * a change and rewrites the file; a stale copy sees nothing to do
+     * and leaves "protected" standing.
+     */
+    {
+        const char *foo[] = {"foo"};
+        char path[600], line[64] = "";
+        FILE *fp;
+
+        aept_set_flag(ctx, AEPT_FLAG_NOACTION, 0);
+        test_int_eq(aept_mark_auto(ctx, foo, 1), 0, "foo is marked auto");
+
+        write_file("var/lib/aept/marks", "foo protected\n");
+        test_int_eq(aept_mark_auto(ctx, foo, 1), 0, "and marked auto again after a hand edit");
+
+        snprintf(path, sizeof(path), "%s/var/lib/aept/marks", root);
+        fp = fopen(path, "r");
+        if (fp) {
+            if (!fgets(line, sizeof(line), fp))
+                line[0] = '\0';
+            fclose(fp);
+        }
+        test_str_eq(line, "foo auto\n", "the second call read the file afresh and rewrote it");
+        unlink(path);
+    }
+
     aept_cleanup(ctx);
     test_ok(1, "aept_cleanup() returns");
 

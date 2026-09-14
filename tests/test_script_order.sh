@@ -259,6 +259,23 @@ grep -q 'usr/bin/n' "$root/var/lib/aept/info/needed.list" \
 grep -q '^taker2$' "$root/usr/bin/n" || fail "the file was not taken over"
 note "a package another package depends on stays installed, owning nothing"
 
+# Recommends counts as well, as it does for dpkg.
+aept_run "$root" remove --non-interactive taker2 dependant needed >/dev/null 2>&1
+mkdir -p "$work/recommender/usr/bin"
+printf 'r\n' > "$work/recommender/usr/bin/recommender"
+make_pkg_tree "$work/recommender_1.0.aeltra" recommender 1.0 "Recommends: needed" \
+    "$work/recommender"
+aept_run "$root" install --non-interactive "$work/needed_1.0.aeltra" \
+    "$work/recommender_1.0.aeltra" >/dev/null 2>&1 \
+    || fail "installing needed and recommender failed"
+: > "$log"
+aept_run "$root" install --non-interactive "$work/taker2_1.0.aeltra" >/dev/null 2>&1 \
+    || fail "taking over needed's file (recommended) failed"
+installed needed || fail "needed disappeared although recommender recommends it"
+ran "needed postrm disappear taker2 1.0" \
+    && fail "needed's postrm was told it disappeared under a Recommends"
+note "a package another package recommends stays too"
+
 # ── the unwind: a failed step is told to undo itself ─────────────────
 #
 # A prerm that stops a service relies on somebody starting it again if
@@ -521,5 +538,53 @@ mta2 postinst abort-remove'
 [ "$(cat "$log")" = "$expected" ] || fail "wrong sequence when the superseded package stays:
 $(cat "$log")"
 note "supersede, old prerm fails: the new package is left unpacked"
+
+# One package superseding two: both go between its unpack and its
+# configure, and both file sets are taken over.  First the root has to
+# be unstuck: mta2's prerm always fails, so it goes the way svc did --
+# upgraded to a version whose prerm rescues the upgrade -- and mta3,
+# left unpacked, goes with it.
+scripts "$work/s-mta2-fixed" mta2-1.1
+make_pkg_scripts "$work/mta2_1.1.aeltra" mta2 1.1 "Provides: mail-transport-agent
+Conflicts: mail-transport-agent
+Replaces: mail-transport-agent" "$work/mta2" "$work/s-mta2-fixed"
+aept_run "$root" remove --non-interactive mta3 >/dev/null 2>&1 || fail "removing mta3 failed"
+aept_run "$root" install --non-interactive "$work/mta2_1.1.aeltra" >/dev/null 2>&1 \
+    || fail "upgrading past mta2's bad prerm failed"
+aept_run "$root" remove --non-interactive mta2 >/dev/null 2>&1 || fail "removing mta2 failed"
+mkdir -p "$work/left/usr/bin" "$work/right/usr/bin" "$work/both2/usr/bin"
+printf 'left\n' > "$work/left/usr/bin/l"
+printf 'right\n' > "$work/right/usr/bin/r"
+printf 'both\n' > "$work/both2/usr/bin/l"
+printf 'both\n' > "$work/both2/usr/bin/r"
+scripts "$work/s-left" left
+scripts "$work/s-right" right
+scripts "$work/s-both2" both2
+make_pkg_scripts "$work/left_1.0.aeltra" left 1.0 "" "$work/left" "$work/s-left"
+make_pkg_scripts "$work/right_1.0.aeltra" right 1.0 "" "$work/right" "$work/s-right"
+make_pkg_scripts "$work/both2_1.0.aeltra" both2 1.0 "Conflicts: left, right
+Replaces: left, right" "$work/both2" "$work/s-both2"
+
+out=$(aept_run "$root" install --non-interactive "$work/left_1.0.aeltra" "$work/right_1.0.aeltra" 2>&1) \
+    || fail "installing left and right failed:
+$out
+$(aept_run "$root" list --installed 2>&1)"
+: > "$log"
+out=$(aept_run "$root" install --non-interactive "$work/both2_1.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "superseding two packages at once exited $rc:
+$out"
+installed both2 || fail "both2 is not installed"
+installed left && fail "left survived"
+installed right && fail "right survived"
+grep -q '^both$' "$root/usr/bin/l" && grep -q '^both$' "$root/usr/bin/r" \
+    || fail "the files were not both taken over"
+[ "$(head -1 "$log")" = "both2 preinst install" ] || fail "the sequence does not start with the unpack:
+$(cat "$log")"
+[ "$(tail -1 "$log")" = "both2 postinst configure" ] || fail "the sequence does not end with configure:
+$(cat "$log")"
+[ "$(grep -c ' postrm remove$' "$log")" = 2 ] || fail "not both packages were removed in between:
+$(cat "$log")"
+note "supersede: two packages go between one unpack and its configure"
 
 exit 0
