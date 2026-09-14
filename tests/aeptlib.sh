@@ -164,6 +164,48 @@ make_pkg_tree() {
     rm -rf "$_d"
 }
 
+# make_pkg_scripts <out.aeltra> <name> <version> <extra-control> <payload-dir> <scripts-dir>
+#
+# make_pkg_tree with maintainer scripts: every file in <scripts-dir>
+# (preinst, postinst, prerm, postrm, ...) goes into the control archive
+# as it is, executable.  For tests about the *order* the scripts run
+# in, where each one has to record its own name and arguments and a
+# chosen one has to fail.
+make_pkg_scripts() {
+    _out=$1 _name=$2 _ver=$3 _extra=$4 _tree=$5 _scripts=$6
+
+    case $_out in
+        /*) ;;
+         *) _out=$PWD/$_out ;;
+    esac
+    rm -f "$_out"
+
+    _d=$(mktemp -d) || fail "mktemp failed"
+    mkdir -p "$_d/c"
+
+    {
+        printf 'Package: %s\nVersion: %s\nArchitecture: all\nMaintainer: t <t@example.invalid>\n' \
+            "$_name" "$_ver"
+        [ -n "$_extra" ] && printf '%s\n' "$_extra"
+        printf 'Description: aept test fixture\n'
+    } > "$_d/c/control"
+
+    for _f in "$_scripts"/*; do
+        [ -f "$_f" ] || continue
+        cp "$_f" "$_d/c/$(basename "$_f")"
+        chmod 755 "$_d/c/$(basename "$_f")"
+    done
+
+    tar czf "$_d/control.tar.gz" -C "$_d/c" .    || fail "tar control"
+    tar czf "$_d/data.tar.gz"    -C "$_tree" .   || fail "tar data"
+    printf '2.0\n' > "$_d/debian-binary"
+
+    ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
+        || fail "ar failed for $_out"
+
+    rm -rf "$_d"
+}
+
 # packages_stanza <name> <version> <aeltra-file> [extra] — emit one
 # Packages entry.  The solver resolves from this stanza, not from the
 # control inside the package, so dependency fields ("Depends: lib")

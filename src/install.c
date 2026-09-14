@@ -21,6 +21,7 @@
 #include "aept/archive.h"
 #include "aept/clash.h"
 #include "aept/conffile.h"
+#include "aept/deb.h"
 #include "aept/config.h"
 #include "aept/download.h"
 #include "aept/index.h"
@@ -236,8 +237,27 @@ static char *make_control_tmpdir(struct aept_ctx *ctx)
     return tmpdir;
 }
 
+/*
+ * The calls that carry both versions: new-preinst upgrade, and the
+ * failed-upgrade and abort-upgrade calls on the new package's scripts.
+ */
+static int run_script3(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
+                       const char *script, const char *action, const char *v1, const char *v2)
+{
+    const char *args[] = {action, v1, v2, NULL};
+
+    return aept_run_script_args(ctx, script_dir, pkg_name, script, args);
+}
+
+/*
+ * Unpack a package: everything up to, and not including, its postinst.
+ * Leaves it recorded as "unpacked"; configure_package() does the rest.
+ * The two are separate because of what may have to happen in between
+ * -- see remove_superseded().
+ */
 static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
-                              const char *old_version, aept_owner_index_t *owners)
+                              const char *old_version, aept_fileset_t *installed_files,
+                              aept_owner_index_t *owners)
 {
     Solvable *s = pool_id2solvable(pool, p);
     const char *name = pool_id2str(pool, s->name);
@@ -278,16 +298,24 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         goto cleanup;
     }
 
-    /* Run preinst */
-    r = aept_run_script(ctx, tmpdir, NULL, "preinst", old_version ? "upgrade" : "install",
-                        old_version);
-    if (r != 0)
-        goto cleanup;
-
-    /* Check for file conflicts before extraction */
+    /* Check for file conflicts before any script runs.  A clash is an
+     * ordinary refusal, and the check needs only the archive listing
+     * and the owner index, so nothing the preinst does can change its
+     * answer -- but the preinst's own effects would be left behind by
+     * a refusal that came after it. */
     r = aept_clash_check(ctx, ipk_path, pool, p, NULL, owners, &taken);
     if (r != 0) {
         r = -1;
+        goto cleanup;
+    }
+
+    /* Run preinst.  From here on a failure is unwound: the new
+     * package's postrm is told with abort-install, so whatever the
+     * preinst did can be undone. */
+    r = aept_run_script(ctx, tmpdir, NULL, "preinst", old_version ? "upgrade" : "install",
+                        old_version);
+    if (r != 0) {
+        aept_run_script(ctx, tmpdir, NULL, "postrm", "abort-install", NULL);
         goto cleanup;
     }
 
@@ -313,6 +341,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     if (r < 0) {
         aept_log_error("failed to extract data archive");
         aept_ar_file_list_free(&extracted);
+        aept_run_script(ctx, tmpdir, NULL, "postrm", "abort-install", NULL);
         goto cleanup;
     }
 
@@ -329,6 +358,14 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         } else {
             aept_log_warning("failed to write file list '%s'", list_path);
         }
+    }
+
+    /* The files are on disk: a removal later in this transaction must
+     * not delete them, and that includes a removal inside this very
+     * step (remove_superseded). */
+    if (installed_files) {
+        for (int i = 0; i < extracted.count; i++)
+            aept_fileset_add(installed_files, extracted.entries[i].path);
     }
 
     aept_ar_file_list_free(&extracted);
@@ -381,41 +418,30 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         free(trig_src);
     }
 
-    /* Run postinst */
-    const char *state = "installed";
-
-    r = aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "configure", old_version);
-    if (r != 0) {
-        aept_log_error("postinst failed for '%s'", name);
-        state = "unpacked";
-        r = -1;
-    }
-
-    /* Write the .control file with the install state.  This reads the
-     * raw control from tmpdir and writes it to info_dir in one step,
-     * replacing the separate copy + rewrite that used to happen. */
-    {
-        char *ctrl_src = NULL;
-        aept_asprintf(&ctrl_src, "%s/control", tmpdir);
-        aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
-        aept_status_add(ctx, ctrl_src, ctrl_path, state);
-        free(ctrl_src);
-        free(ctrl_path);
-        ctrl_path = NULL;
-    }
-
     if (owners && list_path)
         aept_owner_index_add_owner_files(owners, name, list_path);
 
     /* The files are on disk and this package's .list claims them, so
-     * the packages they came from can stop claiming them now.  The
-     * owner index already reports the new owner: its recent entries
-     * shadow the build-time snapshot. */
-    if (r == 0)
-        aept_clash_commit_takeovers(ctx, &taken, name, pool_id2str(pool, s->evr), owners);
+     * the packages they came from can stop claiming them now -- before
+     * the postinst, whose outcome does not change who owns them.  A
+     * package left with nothing disappears here, ahead of the
+     * configure step, as it would under dpkg.  The owner index already
+     * reports the new owner: its recent entries shadow the build-time
+     * snapshot. */
+    aept_clash_commit_takeovers(ctx, &taken, pool, p, owners);
 
-    if (r == 0)
-        aept_log_debug("installed %s", name);
+    /* Record the package, as unpacked: the .control is the raw control
+     * from tmpdir with a Status line, and configure_package() flips the
+     * state once the postinst has run. */
+    {
+        char *ctrl_src = NULL;
+        aept_asprintf(&ctrl_src, "%s/control", tmpdir);
+        aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
+        r = aept_status_add(ctx, ctrl_src, ctrl_path, "unpacked");
+        free(ctrl_src);
+        free(ctrl_path);
+        ctrl_path = NULL;
+    }
 
 cleanup:
     aept_takeover_list_free(&taken);
@@ -505,19 +531,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         goto cleanup;
     }
 
-    /* 2. Run old-prerm */
-    r = aept_run_script(ctx, ctx->config.info_dir, name, "prerm", "upgrade", new_version);
-    if (r != 0) {
-        aept_log_error("prerm failed for '%s', aborting upgrade", name);
-        goto cleanup;
-    }
-
-    /* 3. Run new-preinst */
-    r = aept_run_script(ctx, tmpdir, NULL, "preinst", "upgrade", old_version);
-    if (r != 0)
-        goto cleanup;
-
-    /* 4. Save old file list before overwriting */
+    /* 2. Save old file list before overwriting */
     aept_fileset_t old_files;
     aept_fileset_t new_files;
     int have_old_files = 0;
@@ -549,7 +563,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         }
     }
 
-    /* 5. Check for file conflicts before extraction.  Drop the old
+    /* 3. Check for file conflicts before any script runs (see
+     * do_install_package; here the old version's prerm would also have
+     * told it it was going away when it is not).  Drop the old
      * version's claim on its files up-front so entries left behind
      * after the upgrade (files not part of the new version) no longer
      * generate false clashes for later packages in the transaction. */
@@ -561,6 +577,26 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         r = -1;
         goto cleanup_filesets;
     }
+
+    /* 4. Run old-prerm.  If it fails, the new version's prerm gets a
+     * chance with failed-upgrade; if that works the upgrade goes on.
+     * Otherwise the old version is told the upgrade is off, so it can
+     * start again whatever its prerm stopped. */
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "prerm", "upgrade", new_version);
+    if (r != 0)
+        r = run_script3(ctx, tmpdir, NULL, "prerm", "failed-upgrade", old_version, new_version);
+    if (r != 0) {
+        aept_log_error("prerm failed for '%s', aborting upgrade", name);
+        aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "abort-upgrade", new_version);
+        goto cleanup_filesets;
+    }
+
+    /* 5. Run new-preinst.  From here on a failure is unwound through
+     * the new version's postrm (abort-upgrade) and then the old
+     * version's postinst (abort-upgrade), in that order. */
+    r = run_script3(ctx, tmpdir, NULL, "preinst", "upgrade", old_version, new_version);
+    if (r != 0)
+        goto abort_upgrade;
 
     /* 5b. Prepare conffile set before extraction */
     {
@@ -579,7 +615,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
             aept_fileset_add(&cf_paths, new_cf.entries[ci].path);
         aept_fileset_sort(&cf_paths);
 
-        /* 6. Extract new data archive — conffiles get .aept-new suffix */
+        /* 5c. Extract new data archive — conffiles get .aept-new suffix */
         data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
         if (!data_ar) {
             aept_log_error("failed to open data archive in '%s'", ipk_path);
@@ -600,7 +636,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         if (r < 0) {
             aept_log_error("failed to extract data archive");
             aept_conffile_set_free(&new_cf);
-            goto cleanup_filesets;
+            goto abort_upgrade;
         }
 
         /* Resolve conffile conflicts.  resolve_upgrade() rewrites
@@ -623,7 +659,16 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
 
     aept_fileset_sort(&new_files);
 
-    /* 7. Remove old files not in new package */
+    /* 7. Run old-postrm, before the files the new version dropped are
+     * deleted: it may still need them.  info_dir still has the old
+     * scripts. */
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "postrm", "upgrade", new_version);
+    if (r != 0)
+        r = run_script3(ctx, tmpdir, NULL, "postrm", "failed-upgrade", old_version, new_version);
+    if (r != 0)
+        aept_log_warning("postrm failed for '%s', continuing", name);
+
+    /* 8. Remove old files not in new package */
     if (have_old_files) {
         for (int i = 0; i < old_files.count; i++) {
             char *path = old_files.paths[i];
@@ -685,12 +730,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     aept_fileset_free(&new_files);
     aept_fileset_free(&old_files);
 
-    /* 7. Run old-postrm (info_dir still has old scripts) */
-    r = aept_run_script(ctx, ctx->config.info_dir, name, "postrm", "upgrade", new_version);
-    if (r != 0)
-        aept_log_warning("postrm failed for '%s', continuing", name);
-
-    /* 8. Replace info files with new versions */
+    /* 9. Replace info files with new versions */
     remove_info_files(ctx, name);
 
     const char *scripts[] = {"preinst", "postinst", "prerm", "postrm", "trigger", NULL};
@@ -732,38 +772,36 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         }
     }
 
-    /* 9. Run new-postinst */
-    const char *state = "installed";
+    if (owners)
+        aept_owner_index_add_owner_files(owners, name, list_path);
 
-    r = aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "configure", old_version);
-    if (r != 0) {
-        aept_log_error("postinst failed for '%s'", name);
-        state = "unpacked";
-        r = -1;
-    }
+    /* 10. See do_install_package: the paths are this package's now, so
+     * whoever shipped them before can stop claiming them. */
+    aept_clash_commit_takeovers(ctx, &taken, pool, p, owners);
 
-    /* 10. Write the .control file with the install state */
+    /* 11. Record the new version, as unpacked (see do_install_package) */
     {
         char *ctrl_src = NULL;
         aept_asprintf(&ctrl_src, "%s/control", tmpdir);
         aept_asprintf(&ctrl_path, "%s/%s.control", ctx->config.info_dir, name);
-        aept_status_add(ctx, ctrl_src, ctrl_path, state);
+        r = aept_status_add(ctx, ctrl_src, ctrl_path, "unpacked");
         free(ctrl_src);
         free(ctrl_path);
         ctrl_path = NULL;
     }
-
-    if (owners)
-        aept_owner_index_add_owner_files(owners, name, list_path);
-
-    /* See do_install_package: the paths are this package's now, so
-     * whoever shipped them before can stop claiming them. */
-    if (r == 0)
-        aept_clash_commit_takeovers(ctx, &taken, name, pool_id2str(pool, s->evr), owners);
-
-    if (r == 0)
-        aept_log_debug("%s %s", is_reinstall ? "reinstalled" : "upgraded", name);
     goto cleanup;
+
+abort_upgrade:
+    /*
+     * The old version stays installed.  Files the unpack already
+     * overwrote are not put back -- there are no backups to put back
+     * from -- so the old postinst may find a version of itself it did
+     * not ship; it is still the only script that can restart what the
+     * old prerm stopped.
+     */
+    run_script3(ctx, tmpdir, NULL, "postrm", "abort-upgrade", old_version, new_version);
+    aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "abort-upgrade", new_version);
+    r = -1;
 
 cleanup_filesets:
     aept_fileset_free(&new_files);
@@ -780,6 +818,78 @@ cleanup:
         const char *rm_argv[] = {AEPT_RM_BIN, "-rf", tmpdir, NULL};
         aept_system(rm_argv);
         free(tmpdir);
+    }
+
+    return r;
+}
+
+/*
+ * Configure an unpacked package: its postinst, then the state.  A
+ * failing postinst leaves it "unpacked", which is what it is.
+ */
+static int configure_package(struct aept_ctx *ctx, const char *name, const char *old_version,
+                             const char *verb)
+{
+    int r;
+
+    r = aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "configure", old_version);
+    if (r != 0) {
+        aept_log_error("postinst failed for '%s'", name);
+        return -1;
+    }
+
+    if (aept_status_set_state(ctx, name, "installed") < 0) {
+        aept_log_error("cannot record '%s' as installed", name);
+        return -1;
+    }
+
+    aept_log_debug("%s %s", verb, name);
+    return 0;
+}
+
+/*
+ * Between a package's unpack and its configure: remove the packages it
+ * supersedes -- those it both conflicts with and replaces.  They have
+ * to be there when it is unpacked, so their files can be taken over
+ * rather than vacated and refilled (solver.c orders their removal
+ * after this install for that reason), and gone before it is
+ * configured: a postinst that starts a daemon or registers an
+ * alternative must not find the package it displaces still holding
+ * the port or the link.  That is the order dpkg keeps by removing a
+ * conflictor inside the unpack of the package that replaces it.
+ *
+ * A removal that fails -- its prerm refused -- leaves this package
+ * unpacked and unconfigured, since configuring it beside the package
+ * it conflicts with is the very thing this order exists to prevent.
+ * Removed steps are marked in done[] so the main loop skips them.
+ */
+static int remove_superseded(struct aept_ctx *ctx, Transaction *trans, Pool *pool, int step,
+                             unsigned char *done, aept_fileset_t *installed_files,
+                             aept_owner_index_t *owners, aept_trigger_ctx_t *tctx)
+{
+    Solvable *s = pool_id2solvable(pool, trans->steps.elements[step]);
+    int j, r = 0;
+
+    for (j = step + 1; j < trans->steps.count; j++) {
+        Id ep = trans->steps.elements[j];
+        Solvable *es;
+        const char *ename;
+
+        if (done[j] ||
+            transaction_type(trans, ep,
+                             SOLVER_TRANSACTION_SHOW_ACTIVE | SOLVER_TRANSACTION_SHOW_ALL) !=
+                SOLVER_TRANSACTION_ERASE)
+            continue;
+
+        es = pool_id2solvable(pool, ep);
+        if (aept_deb_takeover(pool, s, es) != AEPT_TAKEOVER_SUPERSEDE)
+            continue;
+
+        ename = pool_id2str(pool, es->name);
+        done[j] = 1;
+        aept_trigger_ctx_collect_dirs(ctx, tctx, ename);
+        if (aept_do_remove(ctx, ename, NULL, installed_files, owners) < 0)
+            r = -1;
     }
 
     return r;
@@ -828,6 +938,8 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Tra
         }
 
         r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver, NULL, owners);
+        if (r == 0)
+            r = configure_package(ctx, pkg_name, old_ver, "reinstalled");
         if (ctx->config.no_cache && !is_local)
             unlink(ipk_path);
         free(ipk_path);
@@ -1022,6 +1134,11 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     aept_trigger_ctx_t tctx;
     aept_trigger_ctx_init(&tctx);
 
+    /* Steps already carried out from inside another step: the removals
+     * remove_superseded() pulls forward. */
+    unsigned char *done = aept_malloc(trans->steps.count ? trans->steps.count : 1);
+    memset(done, 0, trans->steps.count);
+
     int had_error = 0;
 
     for (i = 0; i < trans->steps.count; i++) {
@@ -1037,6 +1154,9 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
         Solvable *s = pool_id2solvable(pool, p);
         const char *pkg_name = pool_id2str(pool, s->name);
+
+        if (done[i])
+            continue;
 
         if ((type & 0xf0) == SOLVER_TRANSACTION_ERASE) {
             /* Skip upgrades/downgrades/reinstalls — handled by
@@ -1071,15 +1191,18 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
             if (!ipk_paths[i])
                 continue;
 
+            const char *old_ver = NULL;
+            const char *verb = "installed";
+
             if (type == SOLVER_TRANSACTION_UPGRADE || type == SOLVER_TRANSACTION_DOWNGRADE ||
                 type == SOLVER_TRANSACTION_REINSTALL) {
-                const char *old_ver = NULL;
                 const char *new_ver = pool_id2str(pool, s->evr);
                 Id op = transaction_obs_pkg(trans, p);
                 if (op) {
                     Solvable *os = pool_id2solvable(pool, op);
                     old_ver = pool_id2str(pool, os->evr);
                 }
+                verb = type == SOLVER_TRANSACTION_REINSTALL ? "reinstalled" : "upgraded";
 
                 if (!fileset_sorted) {
                     aept_fileset_sort(&installed_files);
@@ -1090,18 +1213,23 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 r = do_upgrade_package(ctx, ipk_paths[i], pool, p, old_ver, new_ver,
                                        &installed_files, &owner_idx);
                 fileset_sorted = 0;
-
-                if (r == 0) {
-                    aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-                    aept_trigger_ctx_add_fresh(&tctx, pkg_name);
-                }
             } else {
-                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL, &owner_idx);
+                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL, &installed_files,
+                                       &owner_idx);
+                fileset_sorted = 0;
+            }
 
-                if (r == 0) {
-                    aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-                    aept_trigger_ctx_add_fresh(&tctx, pkg_name);
-                }
+            /* Unpacked.  What it supersedes goes now, and then it is
+             * configured. */
+            if (r == 0)
+                r = remove_superseded(ctx, trans, pool, i, done, &installed_files, &owner_idx,
+                                      &tctx);
+            if (r == 0)
+                r = configure_package(ctx, pkg_name, old_ver, verb);
+
+            if (r == 0) {
+                aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
+                aept_trigger_ctx_add_fresh(&tctx, pkg_name);
             }
 
             if (r < 0) {
@@ -1141,37 +1269,6 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     aept_status_mark_auto(ctx, pkg_name);
             }
 
-            /* Record installed files for removal protection.
-             * Upgrades/reinstalls already update installed_files
-             * in do_upgrade_package(). */
-            if (type != SOLVER_TRANSACTION_UPGRADE && type != SOLVER_TRANSACTION_DOWNGRADE &&
-                type != SOLVER_TRANSACTION_REINSTALL) {
-                char *list_path = NULL;
-                FILE *lfp;
-                char lbuf[4096];
-
-                aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, pkg_name);
-                lfp = fopen(list_path, "r");
-                free(list_path);
-
-                if (lfp) {
-                    while (fgets(lbuf, sizeof(lbuf), lfp)) {
-                        char *tab;
-                        if (aept_fgets_is_truncated(lbuf, sizeof(lbuf))) {
-                            aept_fgets_drain_line(lfp);
-                            continue;
-                        }
-                        lbuf[strcspn(lbuf, "\n")] = '\0';
-                        tab = strchr(lbuf, '\t');
-                        if (tab)
-                            *tab = '\0';
-                        aept_fileset_add(&installed_files, lbuf);
-                    }
-                    fclose(lfp);
-                    fileset_sorted = 0;
-                }
-            }
-
             if (ctx->config.no_cache) {
                 if (!aept_solver_is_commandline(ctx->solver, p))
                     unlink(ipk_paths[i]);
@@ -1182,6 +1279,8 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     }
 
     aept_fileset_free(&installed_files);
+    free(done);
+    done = NULL;
 
     /* Fire triggers for directories modified during the transaction */
     trigger_failures = aept_trigger_run_all(ctx, &tctx);
@@ -1204,6 +1303,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 fileset_cleanup:
     aept_fileset_free(&installed_files);
     aept_trigger_ctx_free(&tctx);
+    free(done);
 
 owner_cleanup:
     aept_owner_index_free(&owner_idx);

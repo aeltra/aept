@@ -549,9 +549,21 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
                            archive_error_string(ar));
             goto cleanup;
         }
-        if (r == ARCHIVE_WARN)
+        if (r == ARCHIVE_WARN) {
+            struct stat st;
+
+            /* The same code covers "could not restore the mtime" and
+             * "could not create the file at all" -- an entry below a
+             * path that is a regular file comes back this way.  Only
+             * the first is a warning. */
+            if (lstat(archive_entry_pathname(entry), &st) != 0) {
+                aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
+                               archive_error_string(ar));
+                goto cleanup;
+            }
             aept_log_debug("warning extracting '%s': %s", archive_entry_pathname(entry),
                            archive_error_string(ar));
+        }
 
         if (size)
             *size += archive_entry_size(entry);

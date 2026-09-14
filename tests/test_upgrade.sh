@@ -150,10 +150,10 @@ aept_run "$root" install --non-interactive "$work/s_2.0.aeltra" >/dev/null 2>&1 
 grep -q '^1.0 prerm: upgrade 2.0$' "$root/args.log" \
     || fail "the old prerm did not run with 'upgrade <new-version>':
 $(cat "$root/args.log")"
-grep -q '^2.0 preinst: upgrade 1.0$' "$root/args.log" \
-    || fail "the new preinst did not run with 'upgrade <old-version>':
+grep -q '^2.0 preinst: upgrade 1.0 2.0$' "$root/args.log" \
+    || fail "the new preinst did not run with 'upgrade <old-version> <new-version>':
 $(cat "$root/args.log")"
-note "old prerm and new preinst both saw 'upgrade' and the right version"
+note "old prerm and new preinst both saw 'upgrade' and the right versions"
 
 # ── the auto flag survives an upgrade-as-dependency ──────────────────
 #

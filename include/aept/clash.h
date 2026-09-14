@@ -51,15 +51,17 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
 /*
  * Strike each taken-over path from its former owner's .list, so that
  * removing that package later does not delete a file it no longer
- * owns.  Reports failures and carries on: the files are already on
- * disk and belong to the new package whatever happens here.
+ * owns.  Called as soon as the overwriter's files are on disk -- before
+ * its postinst, whose failure changes nothing about who owns them.
+ * Reports failures and carries on: the files are already on disk and
+ * belong to the new package whatever happens here.
  *
  * An owner left with no files at all has "disappeared" and is handed to
- * aept_do_disappear(), which is why the overwriting package has to name
- * itself: its postrm is told who took its files.
+ * aept_do_disappear(), which is why the overwriter is named: its postrm
+ * is told who took its files.  One that another installed package
+ * depends on is kept instead, owning nothing.
  */
-void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken,
-                                 const char *overwriter, const char *overwriter_version,
-                                 aept_owner_index_t *owners);
+void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken, Pool *pool,
+                                 Id overwriter, aept_owner_index_t *owners);
 
 #endif

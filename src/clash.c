@@ -205,10 +205,74 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
     return clashes;
 }
 
-void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken,
-                                 const char *overwriter, const char *overwriter_version,
-                                 aept_owner_index_t *owners)
+/*
+ * Whether an installed package other than the owner itself depends on
+ * the owner -- through any name it provides -- with nothing else
+ * installed to satisfy that dependency.  The overwriter counts as
+ * installed: it is on disk by the time this is asked, though not yet
+ * in the installed repo.  A package erased earlier in this transaction
+ * still is, so a dependency it satisfied reads as satisfied; that errs
+ * towards keeping the owner, which costs an empty package and nothing
+ * else.
+ *
+ * Recommends counts as a dependency here, as it does for dpkg.
+ */
+static int still_depended_on(Pool *pool, Solvable *owner, Id overwriter)
 {
+    Id owner_id = pool_solvable2id(pool, owner);
+    Solvable *s;
+    Id p;
+
+    if (!pool->installed)
+        return 0;
+
+    FOR_REPO_SOLVABLES(pool->installed, p, s)
+    {
+        Offset offs[2] = {s->requires, s->recommends};
+        int k;
+
+        if (p == owner_id || s->name == owner->name)
+            continue;
+
+        for (k = 0; k < 2; k++) {
+            Id *depp, dep;
+
+            if (!offs[k])
+                continue;
+
+            depp = s->repo->idarraydata + offs[k];
+            while ((dep = *depp++) != 0) {
+                Id q, qq;
+                int by_owner = 0, by_other = 0;
+
+                if (dep == SOLVABLE_PREREQMARKER)
+                    continue;
+
+                FOR_PROVIDES(q, qq, dep)
+                {
+                    Solvable *qs = pool_id2solvable(pool, q);
+
+                    if (q == owner_id)
+                        by_owner = 1;
+                    else if (q == overwriter || qs->repo == pool->installed)
+                        by_other = 1;
+                }
+
+                if (by_owner && !by_other)
+                    return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *taken, Pool *pool,
+                                 Id overwriter, aept_owner_index_t *owners)
+{
+    Solvable *ws = pool_id2solvable(pool, overwriter);
+    const char *overwriter_name = pool_id2str(pool, ws->name);
+    const char *overwriter_version = pool_id2str(pool, ws->evr);
     int i, j;
 
     for (i = 0; i < taken->count; i++) {
@@ -292,9 +356,16 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
             aept_log_debug("'%s' disowned %d path(s) taken over", owner, drop.count);
 
             /* Nothing of it is left on disk, so it is not installed any
-             * more -- whatever its status file still says. */
-            if (kept == 0)
-                aept_do_disappear(ctx, owner, overwriter, overwriter_version, owners);
+             * more -- whatever its status file still says -- unless
+             * something depends on it, in which case it stays, empty. */
+            if (kept == 0) {
+                Solvable *os = owner_solvable(pool, owner);
+
+                if (os && still_depended_on(pool, os, overwriter))
+                    aept_log_warning("not disappearing '%s', it is still depended on", owner);
+                else
+                    aept_do_disappear(ctx, owner, overwriter_name, overwriter_version, owners);
+            }
         }
 
         aept_fileset_free(&drop);

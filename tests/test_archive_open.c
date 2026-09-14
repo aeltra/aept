@@ -404,6 +404,65 @@ int main(void)
         free(second);
     }
 
+    /* ── an entry that could not be written is a failure ─────────── *
+     *
+     * libarchive reports an entry it could not create below a path
+     * that is a regular file as ARCHIVE_WARN, the same code it uses
+     * for "could not restore the mtime".  Taken as success, the
+     * extraction "completes" and the file list records a path with
+     * nothing at it.  A warning is only tolerable when the object is
+     * actually there.
+     */
+    {
+        size_t len;
+        void *nested = make_targz("usr/lib/blocker/inner", "inner\n", &len);
+        char *exdir, *sub, *blocker;
+        FILE *fp;
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    nested,  len                },
+        };
+
+        path = fixture_path("blocked.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("blocked.d");
+        mkdir(exdir, 0755);
+        sub = fixture_path("blocked.d/usr");
+        mkdir(sub, 0755);
+        free(sub);
+        sub = fixture_path("blocked.d/usr/lib");
+        mkdir(sub, 0755);
+        blocker = fixture_path("blocked.d/usr/lib/blocker");
+        fp = fopen(blocker, "w");
+        if (fp) {
+            fputs("in the way\n", fp);
+            fclose(fp);
+        }
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        test_ok(ar != NULL, "a data.tar with an entry below a file opens");
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), -1,
+                        "extracting an entry below a regular file fails");
+            aept_ar_close(ar);
+        }
+
+        unlink(path);
+        free(path);
+        unlink(blocker);
+        free(blocker);
+        rmdir(sub);
+        free(sub);
+        sub = fixture_path("blocked.d/usr");
+        rmdir(sub);
+        free(sub);
+        rmdir(exdir);
+        free(exdir);
+        free(nested);
+    }
+
     free(ctrl);
     free(data);
     rmdir(dir);

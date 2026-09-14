@@ -226,6 +226,7 @@ dist_check_SCRIPTS = \
     test_clean.sh \
     test_mark.sh test_option_order.sh test_show.sh \
     test_replaces_overwrite.sh \
+    test_script_order.sh \
     test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_version_order.sh \
     test_pin.sh \

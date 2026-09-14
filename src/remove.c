@@ -239,6 +239,7 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_versi
                         new_version ? "upgrade" : "remove", new_version);
     if (r != 0) {
         aept_log_error("prerm failed for '%s', aborting removal", name);
+        aept_run_script(ctx, ctx->config.info_dir, name, "postinst", "abort-remove", NULL);
         return -1;
     }
 
