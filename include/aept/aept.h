@@ -205,9 +205,16 @@ AEPT_API int aept_triggers(aept_ctx_t *ctx);
 
 AEPT_API int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
 AEPT_API int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
+/* The three marks an installed package can carry, one at a time.
+ * auto: installed to satisfy a dependency, autoremove may take it.
+ * manual: asked for, kept until removed.  protected: may not be
+ * removed at all -- not by name, not to satisfy a conflict, not by an
+ * upgrade -- until marked manual again.  A name not installed is
+ * skipped; a name explicitly installed later keeps its protection. */
 AEPT_API int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
 AEPT_API int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
 AEPT_API int aept_mark_manual_all(aept_ctx_t *ctx);
+AEPT_API int aept_mark_protected(aept_ctx_t *ctx, const char **names, int count);
 
 /* --- Query: list --------------------------------------------------------- */
 

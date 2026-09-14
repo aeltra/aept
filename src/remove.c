@@ -213,7 +213,7 @@ int aept_do_disappear(struct aept_ctx *ctx, const char *name, const char *overwr
      * installed-packages database. */
     remove_info_files(ctx, name);
 
-    aept_status_unmark_auto(ctx, name);
+    aept_status_set_mark(ctx, name, AEPT_MARK_MANUAL);
     aept_pin_remove(ctx, name);
 
     if (owners)
@@ -256,7 +256,7 @@ int aept_do_remove(struct aept_ctx *ctx, const char *name, const char *new_versi
      * package from the installed-packages database. */
     remove_info_files(ctx, name);
 
-    aept_status_unmark_auto(ctx, name);
+    aept_status_set_mark(ctx, name, AEPT_MARK_MANUAL);
     aept_pin_remove(ctx, name);
 
     if (owners)
@@ -281,12 +281,40 @@ int aept_op_remove(struct aept_ctx *ctx, const char **names, int count)
     if (r < 0)
         goto out;
 
+    /* A protected package named outright is refused here, in words,
+     * rather than as the solver problem it would otherwise become.
+     * The solver still holds the line for everything not named: a
+     * dependant of the request, a conflict.  The name is resolved the
+     * way the removal job is, through Provides, so naming a virtual
+     * name whose installed provider is protected is refused too. */
+    pool = aept_solver_pool(ctx->solver);
+    pool_createwhatprovides(pool);
+    for (i = 0; i < count; i++) {
+        Id nameid = pool_str2id(pool, names[i], 0);
+        Id p, pp;
+
+        if (!nameid)
+            continue;
+        FOR_PROVIDES(p, pp, nameid)
+        {
+            Solvable *s = pool_id2solvable(pool, p);
+            const char *pname = pool_id2str(pool, s->name);
+
+            if (s->repo != pool->installed ||
+                aept_status_get_mark(ctx, pname) != AEPT_MARK_PROTECTED)
+                continue;
+            aept_log_error("'%s' is protected; 'aept mark manual %s' first to remove it", pname,
+                           pname);
+            r = -1;
+            goto out;
+        }
+    }
+
     r = aept_solver_resolve_remove(ctx, names, count);
     if (r < 0)
         goto out;
 
     trans = aept_solver_transaction(ctx->solver);
-    pool = aept_solver_pool(ctx->solver);
 
     if (!trans || trans->steps.count == 0) {
         aept_log_info("nothing to do");

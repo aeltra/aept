@@ -29,8 +29,8 @@ void aept_config_set_defaults(struct aept_config *cfg)
     cfg->tmp_dir = aept_strdup("/tmp");
     cfg->lock_file = aept_strdup("/var/lib/aept/lock");
     cfg->usign_keydir = aept_strdup("/etc/aept/usign/trustdb");
-    cfg->auto_file = aept_strdup("/var/lib/aept/auto-installed");
     cfg->pin_file = aept_strdup("/var/lib/aept/pinned-packages");
+    cfg->marks_file = aept_strdup("/var/lib/aept/marks");
 
     cfg->check_signature = 1;
     cfg->check_index_expiry = 0;
@@ -148,10 +148,10 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
         strp = &cfg->lock_file;
     else if (strcmp(key, "usign_keydir") == 0)
         strp = &cfg->usign_keydir;
-    else if (strcmp(key, "auto_file") == 0)
-        strp = &cfg->auto_file;
     else if (strcmp(key, "pin_file") == 0)
         strp = &cfg->pin_file;
+    else if (strcmp(key, "marks_file") == 0)
+        strp = &cfg->marks_file;
     else if (strcmp(key, "ssl_client_cert") == 0)
         strp = &cfg->ssl_client_cert;
     else if (strcmp(key, "ssl_client_key") == 0)
@@ -222,13 +222,13 @@ void aept_config_apply_offline_root(struct aept_config *cfg)
     free(cfg->lock_file);
     cfg->lock_file = tmp;
 
-    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->auto_file);
-    free(cfg->auto_file);
-    cfg->auto_file = tmp;
-
     aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->pin_file);
     free(cfg->pin_file);
     cfg->pin_file = tmp;
+
+    aept_asprintf(&tmp, "%s%s", cfg->offline_root, cfg->marks_file);
+    free(cfg->marks_file);
+    cfg->marks_file = tmp;
 }
 
 int aept_config_load(struct aept_config *cfg, const char *filename)
@@ -357,8 +357,8 @@ void aept_config_free(struct aept_config *cfg)
     free(cfg->tmp_dir);
     free(cfg->lock_file);
     free(cfg->usign_keydir);
-    free(cfg->auto_file);
     free(cfg->pin_file);
+    free(cfg->marks_file);
     free(cfg->ssl_client_cert);
     free(cfg->ssl_client_key);
 

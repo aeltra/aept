@@ -953,6 +953,14 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Tra
     return had_error ? -1 : 0;
 }
 
+/* A package asked for by name is manual from then on; a protected one
+ * stays protected, since only "mark" moves a package off that. */
+static void auto_to_manual(struct aept_ctx *ctx, const char *name)
+{
+    if (aept_status_get_mark(ctx, name) == AEPT_MARK_AUTO)
+        aept_status_set_mark(ctx, name, AEPT_MARK_MANUAL);
+}
+
 int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     const char **local_paths, int local_count)
 {
@@ -1028,12 +1036,13 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
     trans = aept_solver_transaction(ctx->solver);
 
-    /* Explicitly named packages become manually installed.
-     * Resolve through provides so that e.g. "python" correctly
-     * unmarks "python3.9" when python3.9 provides python. */
+    /* Explicitly named packages become manually installed -- unless
+     * they are protected, which only "mark" changes.  Resolve through
+     * provides so that e.g. "python" correctly unmarks "python3.9"
+     * when python3.9 provides python. */
     if (names && !ctx->config.noaction) {
         for (i = 0; i < name_count; i++) {
-            aept_status_unmark_auto(ctx, names[i]);
+            auto_to_manual(ctx, names[i]);
             Id nameid = pool_str2id(pool, names[i], 0);
             if (nameid) {
                 Id p2, pp2;
@@ -1041,7 +1050,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 {
                     Solvable *s2 = pool_id2solvable(pool, p2);
                     if (s2->repo == pool->installed)
-                        aept_status_unmark_auto(ctx, pool_id2str(pool, s2->name));
+                        auto_to_manual(ctx, pool_id2str(pool, s2->name));
                 }
             }
         }
@@ -1051,7 +1060,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     if (local_ids && !ctx->config.noaction) {
         for (i = 0; i < n_local_ids; i++) {
             Solvable *s = pool_id2solvable(pool, local_ids[i]);
-            aept_status_unmark_auto(ctx, pool_id2str(pool, s->name));
+            auto_to_manual(ctx, pool_id2str(pool, s->name));
         }
     }
 
@@ -1266,7 +1275,7 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                     }
                 }
                 if (!is_explicit)
-                    aept_status_mark_auto(ctx, pkg_name);
+                    aept_status_set_mark(ctx, pkg_name, AEPT_MARK_AUTO);
             }
 
             if (ctx->config.no_cache) {

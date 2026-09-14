@@ -207,16 +207,35 @@ that have been pinned (see *pin*) are held back and not upgraded.
 ## mark manual [--all] <packages...>
 
 Mark one or more installed packages as manually installed. Manually installed
-packages are never candidates for removal by *autoremove*.
+packages are never candidates for removal by *autoremove*. A protected package
+marked manual loses its protection.
 
 *--all*
-	Mark all installed packages as manually installed.
+	Mark all auto-installed packages as manually installed. Protected
+	packages are left as they are.
 
 ## mark auto <packages...>
 
 Mark one or more installed packages as automatically installed. Auto-installed
 packages become candidates for removal by *autoremove* once no manually
 installed package depends on them.
+
+## mark protected <packages...>
+
+Mark one or more installed packages as protected. A protected package cannot
+be removed: not by name, not to satisfy a conflict, and not by an *upgrade*
+that would have to drop it -- such a transaction is refused as a whole. It can
+still be upgraded. The protection is lifted with *mark manual*.
+
+An installed package carries exactly one of the three marks; a package the
+solver installed to satisfy a dependency starts out auto, one named on the
+command line starts out manual. Installing a protected package again by name
+does not change its mark.
+
+To protect a set of packages by what they provide rather than by name, protect
+a package that depends on them: with _base_ depending on _init_, protecting
+_base_ keeps some provider of _init_ installed while still allowing one
+provider to replace another.
 
 ## pin <packages...>
 
@@ -359,12 +378,12 @@ The following keys are recognized:
 |  usign_keydir
 :  /etc/aept/usign/trustdb
 :  Directory containing trusted public keys
-|  auto_file
-:  /var/lib/aept/auto-installed
-:  Path to the auto-installed packages tracking file
 |  pin_file
 :  /var/lib/aept/pinned-packages
 :  Path to the version pins file
+|  marks_file
+:  /var/lib/aept/marks
+:  Path to the package marks file
 |  check_signature
 :  1
 :  Set to 0 to disable signature verification
@@ -423,7 +442,7 @@ option check_signature 1
 When an offline root is set (via *--offline-root* or the *offline_root* config
 option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 (unless *--conf* is given explicitly) and all state directories (lists, cache,
-info, status, tmp, lock, auto-installed, pinned-packages) are automatically
+info, status, tmp, lock, marks, pinned-packages) are automatically
 prefixed with the offline root path.
 
 The exception is *--cache-dir* on the command line (or *AEPT_CACHE_DIR* in
@@ -587,9 +606,11 @@ _/var/lib/aept/info/_
 _/var/lib/aept/lists/_
 	Downloaded package lists, one file per source.
 
-_/var/lib/aept/auto-installed_
-	Tracks which packages were pulled in automatically as dependencies.
-	Used by *autoremove* to decide removal candidates.
+_/var/lib/aept/marks_
+	The mark each package carries, one _name mark_ line per package that
+	is *auto* or *protected*; a package with no line is manual. Read by
+	*autoremove* for its candidates and by every transaction for what
+	may not be removed. Managed by the *mark* command.
 
 _/var/lib/aept/pinned-packages_
 	Version pins, one _name version_ pair per line. Pinned packages are

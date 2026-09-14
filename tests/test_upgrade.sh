@@ -168,7 +168,7 @@ note "old prerm and new preinst both saw 'upgrade' and the right versions"
 
 require_tools sha256sum
 
-auto_file=$root/var/lib/aept/auto-installed
+marks_file=$root/var/lib/aept/marks
 cache=$root/var/cache/aept
 list=$root/var/lib/aept/lists/testrepo
 mkdir -p "$cache"
@@ -189,10 +189,10 @@ cp "$work/dep_1.0.aeltra" "$cache/"
 aept_run "$root" install --non-interactive "$work/app_1.0.aeltra" >/dev/null 2>&1 \
     || fail "installing app with dep from the repo failed"
 [ "$(version_of dep)" = "1.0" ] || fail "dep was not pulled in: '$(version_of dep)'"
-grep -q '^dep$' "$auto_file" \
+grep -q '^dep auto$' "$marks_file" \
     || fail "dep, pulled in as a dependency, was not marked auto:
-$(cat "$auto_file" 2>/dev/null)"
-grep -q '^app$' "$auto_file" \
+$(cat "$marks_file" 2>/dev/null)"
+grep -q '^app auto$' "$marks_file" \
     && fail "app, asked for by name, was marked auto"
 
 packages_stanza dep 2.0 "$work/dep_2.0.aeltra" > "$list"
@@ -201,9 +201,9 @@ cp "$work/dep_2.0.aeltra" "$cache/"
 aept_run "$root" install --non-interactive "$work/app_2.0.aeltra" >/dev/null 2>&1 \
     || fail "upgrading app (and dep with it) failed"
 [ "$(version_of dep)" = "2.0" ] || fail "dep was not upgraded: '$(version_of dep)'"
-grep -q '^dep$' "$auto_file" \
+grep -q '^dep auto$' "$marks_file" \
     || fail "dep lost its auto mark across the upgrade:
-$(cat "$auto_file" 2>/dev/null)"
+$(cat "$marks_file" 2>/dev/null)"
 note "dep stays auto-installed through an upgrade as a dependency"
 
 exit 0

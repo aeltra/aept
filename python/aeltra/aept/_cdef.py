@@ -98,6 +98,7 @@ int aept_unpin(aept_ctx_t *ctx, const char **names, int count);
 int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
 int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
 int aept_mark_manual_all(aept_ctx_t *ctx);
+int aept_mark_protected(aept_ctx_t *ctx, const char **names, int count);
 
 /* --- Query: list --------------------------------------------------------- */
 

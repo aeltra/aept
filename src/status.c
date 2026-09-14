@@ -200,81 +200,145 @@ int aept_status_add(struct aept_ctx *ctx, const char *control_src, const char *d
     return r;
 }
 
-int aept_status_mark_auto(struct aept_ctx *ctx, const char *name)
+/*
+ * The marks file: one "name mark" line per package that is auto or
+ * protected.  Manual is the absence of a line, so a fresh root has no
+ * file and an installed package nobody has marked reads as manual.
+ * Every write rewrites the whole file, dropping the name's line and
+ * appending the new one -- so a name has one line by construction and
+ * there is no second file for a first one to disagree with.
+ *
+ * A line that does not parse -- a name too long, a third word, a mark
+ * word that is not one of the two -- is dropped on the next write and
+ * ignored on read, like a damaged pin line: it costs that line and
+ * nothing else.
+ */
+static const char *mark_word(aept_mark_t mark)
 {
-    if (aept_status_is_auto(ctx, name))
-        return 0;
-
-    FILE *fp = fopen(ctx->config.auto_file, "a");
-    if (!fp) {
-        aept_log_error("cannot open auto-installed file '%s': %s", ctx->config.auto_file,
-                       strerror(errno));
-        return -1;
+    switch (mark) {
+    case AEPT_MARK_AUTO:
+        return "auto";
+    case AEPT_MARK_PROTECTED:
+        return "protected";
+    case AEPT_MARK_MANUAL:
+        break;
     }
+    return NULL;
+}
 
-    fprintf(fp, "%s\n", name);
+/* Parse one line into name and mark.  Returns 0 on a well-formed
+ * line, -1 on one to ignore. */
+static int mark_parse(const char *line, char name[256], aept_mark_t *mark)
+{
+    char word[16], extra[2];
+    int n = sscanf(line, "%255s %15s %1s", name, word, extra);
 
-    int err = ferror(fp);
-    if (fclose(fp) != 0 || err) {
-        aept_log_error("failed to write auto-installed file '%s'", ctx->config.auto_file);
+    if (n != 2)
         return -1;
-    }
-
+    if (strcmp(word, "auto") == 0)
+        *mark = AEPT_MARK_AUTO;
+    else if (strcmp(word, "protected") == 0)
+        *mark = AEPT_MARK_PROTECTED;
+    else
+        return -1;
     return 0;
 }
 
-int aept_status_unmark_auto(struct aept_ctx *ctx, const char *name)
+aept_mark_t aept_status_get_mark(struct aept_ctx *ctx, const char *name)
 {
-    FILE *fp, *tmp;
-    char *tmp_path = NULL;
-    char buf[256];
-    int found = 0;
+    FILE *fp;
+    char buf[512];
 
-    fp = fopen(ctx->config.auto_file, "r");
+    fp = fopen(ctx->config.marks_file, "r");
     if (!fp)
-        return 0;
-
-    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.auto_file);
-    tmp = fopen(tmp_path, "w");
-    if (!tmp) {
-        fclose(fp);
-        free(tmp_path);
-        return -1;
-    }
+        return AEPT_MARK_MANUAL;
 
     while (fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        aept_mark_t mark;
+
         if (aept_fgets_is_truncated(buf, sizeof(buf))) {
             aept_fgets_drain_line(fp);
             continue;
         }
-        char pkg_name[256];
-        if (sscanf(buf, "%255s", pkg_name) != 1)
+        if (mark_parse(buf, pkg_name, &mark) < 0)
             continue;
         if (strcmp(pkg_name, name) == 0) {
-            found = 1;
-            continue;
+            fclose(fp);
+            return mark;
         }
-        fputs(buf, tmp);
     }
 
     fclose(fp);
+    return AEPT_MARK_MANUAL;
+}
 
-    if (!found) {
-        fclose(tmp);
-        unlink(tmp_path);
-        free(tmp_path);
-        return 0;
+/*
+ * Rewrite the marks file dropping every line for drop_name and every
+ * line carrying drop_mark (MANUAL: none, since no line carries it),
+ * then appending "append_name append_word" if given.
+ */
+static int marks_rewrite(struct aept_ctx *ctx, const char *drop_name, aept_mark_t drop_mark,
+                         const char *append_name, const char *append_word)
+{
+    FILE *fp, *tmp;
+    char *tmp_path = NULL;
+    char buf[512];
+
+    fp = fopen(ctx->config.marks_file, "r");
+    if (!fp) {
+        if (errno != ENOENT) {
+            aept_log_error("cannot read marks file '%s': %s", ctx->config.marks_file,
+                           strerror(errno));
+            return -1;
+        }
+        /* Nothing recorded: nothing to drop, and only something to
+         * append makes the file worth creating. */
+        if (!append_name)
+            return 0;
     }
 
+    aept_asprintf(&tmp_path, "%s.tmp", ctx->config.marks_file);
+    tmp = fopen(tmp_path, "w");
+    if (!tmp) {
+        aept_log_error("cannot write marks file '%s': %s", tmp_path, strerror(errno));
+        if (fp)
+            fclose(fp);
+        free(tmp_path);
+        return -1;
+    }
+
+    while (fp && fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        aept_mark_t mark;
+
+        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
+            aept_fgets_drain_line(fp);
+            continue;
+        }
+        if (mark_parse(buf, pkg_name, &mark) < 0)
+            continue;
+        if (drop_name && strcmp(pkg_name, drop_name) == 0)
+            continue;
+        if (drop_mark != AEPT_MARK_MANUAL && mark == drop_mark)
+            continue;
+        fputs(buf, tmp);
+    }
+    if (fp)
+        fclose(fp);
+
+    if (append_name)
+        fprintf(tmp, "%s %s\n", append_name, append_word);
+
     if (ferror(tmp) || fclose(tmp) != 0) {
-        aept_log_error("failed to write auto-installed file '%s'", tmp_path);
+        aept_log_error("failed to write marks file '%s'", tmp_path);
         unlink(tmp_path);
         free(tmp_path);
         return -1;
     }
 
-    if (rename(tmp_path, ctx->config.auto_file) < 0) {
-        aept_log_error("cannot rename auto-installed file: %s", strerror(errno));
+    if (rename(tmp_path, ctx->config.marks_file) < 0) {
+        aept_log_error("cannot rename marks file: %s", strerror(errno));
         unlink(tmp_path);
         free(tmp_path);
         return -1;
@@ -284,67 +348,42 @@ int aept_status_unmark_auto(struct aept_ctx *ctx, const char *name)
     return 0;
 }
 
-int aept_status_is_auto(struct aept_ctx *ctx, const char *name)
+int aept_status_set_mark(struct aept_ctx *ctx, const char *name, aept_mark_t mark)
+{
+    const char *word = mark_word(mark);
+
+    return marks_rewrite(ctx, name, AEPT_MARK_MANUAL, word ? name : NULL, word);
+}
+
+int aept_status_load_marked(struct aept_ctx *ctx, aept_mark_t mark, aept_fileset_t *set)
 {
     FILE *fp;
-    char buf[256];
+    char buf[512];
 
-    fp = fopen(ctx->config.auto_file, "r");
+    fp = fopen(ctx->config.marks_file, "r");
     if (!fp)
         return 0;
 
     while (fgets(buf, sizeof(buf), fp)) {
+        char pkg_name[256];
+        aept_mark_t m;
+
         if (aept_fgets_is_truncated(buf, sizeof(buf))) {
             aept_fgets_drain_line(fp);
             continue;
         }
-        char pkg_name[256];
-        if (sscanf(buf, "%255s", pkg_name) != 1)
-            continue;
-        if (strcmp(pkg_name, name) == 0) {
-            fclose(fp);
-            return 1;
-        }
-    }
-
-    fclose(fp);
-    return 0;
-}
-
-int aept_status_clear_auto(struct aept_ctx *ctx)
-{
-    FILE *fp = fopen(ctx->config.auto_file, "w");
-    if (!fp) {
-        aept_log_error("cannot open auto-installed file '%s': %s", ctx->config.auto_file,
-                       strerror(errno));
-        return -1;
-    }
-    fclose(fp);
-    return 0;
-}
-
-int aept_status_load_auto_set(struct aept_ctx *ctx, aept_fileset_t *set)
-{
-    FILE *fp;
-    char buf[256];
-
-    fp = fopen(ctx->config.auto_file, "r");
-    if (!fp)
-        return 0;
-
-    while (fgets(buf, sizeof(buf), fp)) {
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-        char pkg_name[256];
-        if (sscanf(buf, "%255s", pkg_name) == 1)
+        if (mark_parse(buf, pkg_name, &m) == 0 && m == mark)
             aept_fileset_add(set, pkg_name);
     }
 
     fclose(fp);
     aept_fileset_sort(set);
     return 0;
+}
+
+int aept_status_clear_auto(struct aept_ctx *ctx)
+{
+    return marks_rewrite(ctx, NULL, AEPT_MARK_AUTO, NULL, NULL);
 }
 
 /*

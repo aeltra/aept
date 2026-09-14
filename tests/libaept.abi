@@ -60,6 +60,7 @@ func:aept_malloc: AEPT_EXPORT void *aept_malloc(size_t size);
 func:aept_mark_auto: AEPT_EXPORT int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count);
 func:aept_mark_manual: AEPT_EXPORT int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count);
 func:aept_mark_manual_all: AEPT_EXPORT int aept_mark_manual_all(aept_ctx_t *ctx);
+func:aept_mark_protected: AEPT_EXPORT int aept_mark_protected(aept_ctx_t *ctx, const char **names, int count);
 func:aept_owns: AEPT_EXPORT int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_out);
 func:aept_pin: AEPT_EXPORT int aept_pin(aept_ctx_t *ctx, const char **specs, int count);
 func:aept_pkg_info_free: AEPT_EXPORT void aept_pkg_info_free(aept_pkg_info_t *info);

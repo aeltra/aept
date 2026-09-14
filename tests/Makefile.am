@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
+    test_no_proxy test_validator test_url_sanitize test_marks test_api \
     test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
     test_deb test_iofail \
     test_oom
@@ -181,10 +181,10 @@ test_api_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Links the library rather than individual modules: status.c's database
 # half pulls in the solver and through it libsolv.
-test_auto_flags_SOURCES = test_auto_flags.c
-test_auto_flags_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
-test_auto_flags_LDADD = $(top_builddir)/src/libaept.la
-test_auto_flags_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+test_marks_SOURCES = test_marks.c
+test_marks_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_marks_LDADD = $(top_builddir)/src/libaept.la
+test_marks_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Links the library rather than individual modules: aept_download()
 # pulls in libfetch and its OpenSSL dependency.
@@ -230,6 +230,7 @@ dist_check_SCRIPTS = \
     test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_version_order.sh \
     test_pin.sh \
+    test_protected.sh \
     test_python.sh \
     test_tls_reject.sh \
     test_tls_verify.sh \

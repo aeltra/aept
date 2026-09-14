@@ -37,7 +37,7 @@ int main(void)
     test_str_eq(cfg.lists_dir, ROOT "/var/lib/aept/lists", "lists_dir prefixed");
     test_str_eq(cfg.cache_dir, ROOT "/var/cache/aept", "cache_dir prefixed");
     test_str_eq(cfg.lock_file, ROOT "/var/lib/aept/lock", "lock_file prefixed");
-    test_str_eq(cfg.auto_file, ROOT "/var/lib/aept/auto-installed", "auto_file prefixed");
+    test_str_eq(cfg.marks_file, ROOT "/var/lib/aept/marks", "marks_file prefixed");
     test_str_eq(cfg.pin_file, ROOT "/var/lib/aept/pinned-packages", "pin_file prefixed");
 
     /*

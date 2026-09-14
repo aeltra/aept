@@ -21,6 +21,7 @@
 #include "aept/msg.h"
 #include "aept/owner_index.h"
 #include "aept/remove.h"
+#include "aept/status.h"
 #include "aept/util.h"
 
 /*
@@ -361,7 +362,9 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
             if (kept == 0) {
                 Solvable *os = owner_solvable(pool, owner);
 
-                if (os && still_depended_on(pool, os, overwriter))
+                if (aept_status_get_mark(ctx, owner) == AEPT_MARK_PROTECTED)
+                    aept_log_warning("not disappearing '%s', it is protected", owner);
+                else if (os && still_depended_on(pool, os, overwriter))
                     aept_log_warning("not disappearing '%s', it is still depended on", owner);
                 else
                     aept_do_disappear(ctx, owner, overwriter_name, overwriter_version, owners);

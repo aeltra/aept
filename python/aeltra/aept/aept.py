@@ -399,6 +399,11 @@ class Aept:
         self._call(lib.aept_mark_manual_all(self._ctx),
                    "aept_mark_manual_all() failed")
 
+    def mark_protected(self, names: List[str]):
+        c_names, ka, count = str_list_to_c(names)
+        self._call(lib.aept_mark_protected(self._ctx, c_names, count),
+                   "aept_mark_protected() failed")
+
     # --- Query: list ------------------------------------------------------
 
     def list_packages(self, pattern: Optional[str] = None, *,

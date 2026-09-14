@@ -28,10 +28,10 @@ trap 'rm -rf "$work"' EXIT
 root=$work/root
 new_root "$root"
 
-# mark reads the auto-installed set, and new_root writes only the config;
+# mark reads the marks file, and new_root writes only the config;
 # its absence is an error unrelated to anything tested here.
 mkdir -p "$root/var/lib/aept"
-: > "$root/var/lib/aept/auto-installed"
+: > "$root/var/lib/aept/marks"
 
 # ── leaves permute ───────────────────────────────────────────────────
 

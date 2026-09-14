@@ -513,7 +513,14 @@ int aept_unpin(aept_ctx_t *ctx, const char **names, int count)
     return r;
 }
 
-static int api_mark_auto(aept_ctx_t *ctx, const char **names, int count)
+/*
+ * One mark per package: set_mark() replaces whatever the package
+ * carried, so there is no clearing to do here.  A name that is not
+ * installed is skipped -- silently for auto and manual, which are
+ * harmless to miss, with a warning for protected, since a protection
+ * that quietly did not take is the failure the mark exists to prevent.
+ */
+static int api_set_marks(aept_ctx_t *ctx, const char **names, int count, aept_mark_t mark)
 {
     int i, r = 0;
 
@@ -521,11 +528,13 @@ static int api_mark_auto(aept_ctx_t *ctx, const char **names, int count)
         char *list_path = NULL;
         aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, names[i]);
         if (!aept_file_exists(list_path)) {
+            if (mark == AEPT_MARK_PROTECTED)
+                aept_log_warning("'%s' is not installed, not marking it protected", names[i]);
             free(list_path);
             continue;
         }
         free(list_path);
-        if (aept_status_mark_auto(ctx, names[i]) < 0)
+        if (aept_status_set_mark(ctx, names[i], mark) < 0)
             r = -1;
     }
 
@@ -537,27 +546,8 @@ int aept_mark_auto(aept_ctx_t *ctx, const char **names, int count)
     int r;
     AEPT_OOM_ENTER(ctx, -1);
 
-    r = api_mark_auto(ctx, names, count);
+    r = api_set_marks(ctx, names, count, AEPT_MARK_AUTO);
     AEPT_OOM_LEAVE(ctx);
-    return r;
-}
-
-static int api_mark_manual(aept_ctx_t *ctx, const char **names, int count)
-{
-    int i, r = 0;
-
-    for (i = 0; i < count; i++) {
-        char *list_path = NULL;
-        aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, names[i]);
-        if (!aept_file_exists(list_path)) {
-            free(list_path);
-            continue;
-        }
-        free(list_path);
-        if (aept_status_unmark_auto(ctx, names[i]) < 0)
-            r = -1;
-    }
-
     return r;
 }
 
@@ -566,22 +556,30 @@ int aept_mark_manual(aept_ctx_t *ctx, const char **names, int count)
     int r;
     AEPT_OOM_ENTER(ctx, -1);
 
-    r = api_mark_manual(ctx, names, count);
+    r = api_set_marks(ctx, names, count, AEPT_MARK_MANUAL);
     AEPT_OOM_LEAVE(ctx);
     return r;
 }
 
-static int api_mark_manual_all(aept_ctx_t *ctx)
-{
-    return aept_status_clear_auto(ctx);
-}
-
+/* Every auto mark becomes manual; protected ones are left alone, since
+ * "manual" is a step down from protected and --all means the other
+ * direction. */
 int aept_mark_manual_all(aept_ctx_t *ctx)
 {
     int r;
     AEPT_OOM_ENTER(ctx, -1);
 
-    r = api_mark_manual_all(ctx);
+    r = aept_status_clear_auto(ctx);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+int aept_mark_protected(aept_ctx_t *ctx, const char **names, int count)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = api_set_marks(ctx, names, count, AEPT_MARK_PROTECTED);
     AEPT_OOM_LEAVE(ctx);
     return r;
 }

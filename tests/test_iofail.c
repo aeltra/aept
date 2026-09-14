@@ -258,8 +258,8 @@ static void make_root(void)
              "option cache_dir %s/cache\n"
              "option tmp_dir %s/tmp\n"
              "option lock_file %s/lock\n"
-             "option auto_file %s/auto-installed\n"
              "option pin_file %s/pinned-packages\n"
+             "option marks_file %s/marks\n"
              "option check_signature 0\n"
              "arch all 1\n"
              "arch x86_64 10\n"
@@ -281,7 +281,7 @@ static void make_root(void)
 
     /* The records mark and pin rewrite; without these they reach for
      * /var/lib/aept and fail before the injection is even relevant. */
-    snprintf(p, sizeof(p), "%s/auto-installed", dir);
+    snprintf(p, sizeof(p), "%s/marks", dir);
     spit(p, "");
     snprintf(p, sizeof(p), "%s/pinned-packages", dir);
     spit(p, "");
@@ -466,6 +466,10 @@ static int call_mark_manual_all(aept_ctx_t *c)
 {
     return aept_mark_manual_all(c);
 }
+static int call_mark_protected(aept_ctx_t *c)
+{
+    return aept_mark_protected(c, alpha, 1);
+}
 static int call_pin(aept_ctx_t *c)
 {
     return aept_pin(c, alpha, 1);
@@ -508,6 +512,7 @@ static const struct {
     {"aept_mark_auto",       call_mark_auto      },
     {"aept_mark_manual",     call_mark_manual    },
     {"aept_mark_manual_all", call_mark_manual_all},
+    {"aept_mark_protected",  call_mark_protected },
     {"aept_pin",             call_pin            },
     {"aept_unpin",           call_unpin          },
     {"aept_clean",           call_clean          },

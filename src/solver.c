@@ -25,6 +25,7 @@
 #include "aept/solver.h"
 #include "aept/archive.h"
 #include "aept/deb.h"
+#include "aept/status.h"
 #include "aept/util.h"
 
 int aept_solver_init(struct aept_ctx *ctx)
@@ -281,12 +282,55 @@ static void order_takeovers(Transaction *trans)
     solv_free(after);
 }
 
+/*
+ * Keep every protected package installed: one SOLVER_INSTALL job by
+ * name for each, so that no transaction can end without it -- not a
+ * removal by name, not a conflict the solver would otherwise resolve
+ * by removing it, not an upgrade that would have to drop it.  Any
+ * version satisfies the job, so it may still be upgraded.  Only names
+ * that are installed get a job: a protected name that is not there is
+ * not pulled in.
+ *
+ * Added to every job list rather than checked afterwards, so the
+ * solver reports the conflict as a problem naming the package instead
+ * of aept discovering a removal in a finished transaction.
+ */
+static void keep_protected(struct aept_ctx *ctx, Queue *job)
+{
+    aept_solver_t *s = ctx->solver;
+    aept_fileset_t set;
+    int i;
+
+    aept_fileset_init(&set);
+    aept_status_load_marked(ctx, AEPT_MARK_PROTECTED, &set);
+
+    for (i = 0; i < set.count; i++) {
+        Id nameid = pool_str2id(s->pool, set.paths[i], 0);
+        Solvable *is;
+        Id p;
+
+        if (!nameid || !s->pool->installed)
+            continue;
+
+        FOR_REPO_SOLVABLES(s->pool->installed, p, is)
+        {
+            if (is->name == nameid) {
+                queue_push2(job, SOLVER_INSTALL | SOLVER_SOLVABLE_NAME, nameid);
+                break;
+            }
+        }
+    }
+
+    aept_fileset_free(&set);
+}
+
 static int do_solve(struct aept_ctx *ctx, Queue *job, int keep_orderdata)
 {
     aept_solver_t *s = ctx->solver;
     int problems;
     Id problem;
 
+    keep_protected(ctx, job);
     pool_createwhatprovides(s->pool);
 
     s->solv = solver_create(s->pool);

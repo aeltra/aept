@@ -75,6 +75,25 @@ rc=$?
 [ "$rc" -eq 1 ] || fail "'mark frobnicate' exited $rc, not 1"
 note "mark without or with an unknown action refuses"
 
+for action in auto manual protected; do
+    out=$(aept_run "$root" mark "$action" 2>&1)
+    rc=$?
+    [ "$rc" -eq 1 ] || fail "bare 'mark $action' exited $rc, not 1"
+    printf '%s\n' "$out" | grep -q "requires" \
+        || fail "bare 'mark $action' did not say what it requires:
+$out"
+    out=$(aept_run "$root" mark "$action" --help 2>&1)
+    rc=$?
+    [ "$rc" -eq 0 ] || fail "'mark $action --help' exited $rc, not 0"
+    printf '%s\n' "$out" | grep -q "^Usage:" \
+        || fail "'mark $action --help' printed no usage:
+$out"
+    out=$(aept_run "$root" mark "$action" --no-such-option x 2>&1)
+    rc=$?
+    [ "$rc" -eq 1 ] || fail "'mark $action --no-such-option' exited $rc, not 1"
+done
+note "each mark action refuses without names, helps, and rejects unknown options"
+
 # ── the unknown and the absent command ───────────────────────────────
 
 out=$(aept_run "$root" no-such-command 2>"$work/err")

@@ -308,6 +308,10 @@ static int call_mark_auto(aept_ctx_t *c)
 {
     return aept_mark_auto(c, one_name, 1);
 }
+static int call_mark_protected(aept_ctx_t *c)
+{
+    return aept_mark_protected(c, one_name, 1);
+}
 static int call_mark_manual(aept_ctx_t *c)
 {
     return aept_mark_manual(c, one_name, 1);
@@ -421,6 +425,7 @@ static const struct {
     {"aept_mark_auto",        call_mark_auto,        1},
     {"aept_mark_manual",      call_mark_manual,      1},
     {"aept_mark_manual_all",  call_mark_manual_all,  1},
+    {"aept_mark_protected",   call_mark_protected,   1},
     {"aept_pin",              call_pin,              1},
     {"aept_unpin",            call_unpin,            1},
 };

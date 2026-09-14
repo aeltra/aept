@@ -21,13 +21,16 @@ static void usage_mark(FILE *out)
 {
     fprintf(out, "Usage: aept mark manual [--all] <packages...>\n"
                  "       aept mark auto <packages...>\n"
+                 "       aept mark protected <packages...>\n"
                  "\n"
-                 "Control auto-installed package marks.\n"
+                 "Set the mark an installed package carries: auto (autoremove may\n"
+                 "take it), manual (kept until removed), or protected (may not be\n"
+                 "removed at all until marked manual again).\n"
                  "\n"
                  "Options:\n"
                  "  -h, --help  Show this help\n"
                  "\n"
-                 "  --all       Mark all packages as manually installed\n");
+                 "  --all       Mark all auto-installed packages as manual\n");
 }
 
 static void usage_pin(FILE *out)
@@ -54,6 +57,7 @@ static struct option mark_manual_options[] = {
     {NULL,   0,           NULL, 0    }
 };
 
+/* mark auto and mark protected take the same options. */
 static struct option mark_auto_options[] = {
     {"help", no_argument, NULL, 'h'},
     {NULL,   0,           NULL, 0  }
@@ -134,13 +138,44 @@ static int cmd_mark_auto(int argc, char *argv[])
     return r != 0 ? 1 : 0;
 }
 
+static int cmd_mark_protected(int argc, char *argv[])
+{
+    int opt, r;
+
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), mark_auto_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h':
+            usage_mark(stdout);
+            return 0;
+        default:
+            usage_mark(stderr);
+            return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        aept_log_error("mark protected requires package names");
+        return 1;
+    }
+
+    aept_ctx_t *ctx = init_aept();
+    if (!ctx)
+        return 1;
+
+    r = aept_mark_protected(ctx, (const char **)&argv[optind], argc - optind);
+
+    cli_cleanup(ctx);
+    return r != 0 ? 1 : 0;
+}
+
 int cmd_mark(int argc, char *argv[])
 {
     const char *action;
     int opt;
 
     /* Dispatching, so OPTS_DISPATCH: everything after the action word
-     * belongs to cmd_mark_manual() or cmd_mark_auto(). */
+     * belongs to one of the cmd_mark_*() handlers. */
     optind = 0;
     while ((opt = getopt_long(argc, argv, OPTS_DISPATCH("h"), mark_options, NULL)) != -1) {
         switch (opt) {
@@ -164,6 +199,8 @@ int cmd_mark(int argc, char *argv[])
         return cmd_mark_manual(argc - optind, argv + optind);
     if (strcmp(action, "auto") == 0)
         return cmd_mark_auto(argc - optind, argv + optind);
+    if (strcmp(action, "protected") == 0)
+        return cmd_mark_protected(argc - optind, argv + optind);
 
     aept_log_error("unknown mark action '%s'", action);
     usage_mark(stderr);

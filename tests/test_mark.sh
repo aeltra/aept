@@ -1,5 +1,5 @@
 #!/bin/sh
-# test_mark.sh - the mark command edits the auto-installed set that
+# test_mark.sh - the mark command edits the marks file that
 # autoremove reasons from: auto makes a package eligible, manual
 # protects it, --all protects everything at once.
 #
@@ -18,9 +18,9 @@ trap 'rm -rf "$work"' EXIT
 
 root=$work/root
 new_root "$root"
-auto_file=$root/var/lib/aept/auto-installed
+marks_file=$root/var/lib/aept/marks
 
-is_auto() { grep -q "^$1\$" "$auto_file" 2>/dev/null; }
+is_auto() { grep -q "^$1 auto\$" "$marks_file" 2>/dev/null; }
 installed() { aept_run "$root" list --installed 2>/dev/null | grep -q "^$1 "; }
 
 make_pkg "$work/one_1.0.aeltra" one 1.0
@@ -85,7 +85,7 @@ rc=$?
 $out"
 note "mark manual without names or --all is refused"
 
-# ── a damaged auto-installed file ────────────────────────────────────
+# ── a damaged marks file ─────────────────────────────────────────────
 #
 # The file is what autoremove reasons from, so a line it cannot parse
 # must cost that line and nothing else.  Reading a long line back in
@@ -94,58 +94,48 @@ note "mark manual without names or --all is refused"
 
 aept_run "$root" mark auto one >/dev/null 2>&1 || fail "marking one auto failed"
 {
-    printf 'keeper\n'
-    awk 'BEGIN { while (i++ < 300) printf "verylongname"; printf "\n" }'
+    printf 'keeper auto\n'
+    awk 'BEGIN { while (i++ < 300) printf "verylongname"; printf " auto\n" }'
     printf '\n'
-    printf 'two\n'
-} > "$auto_file"
+    printf 'two auto\n'
+} > "$marks_file"
 
 # mark manual is the operation that rewrites the file, so it is the one
 # that has to survive the damage.
 aept_run "$root" mark manual two >/dev/null 2>&1 || fail "unmarking two failed"
-grep -q '^keeper$' "$auto_file" || fail "an entry before the long line was lost:
-$(cat "$auto_file")"
-grep -q '^two$' "$auto_file" && fail "mark manual did not remove the entry:
-$(cat "$auto_file")"
-grep -q 'verylongnameverylongname' "$auto_file" \
+grep -q '^keeper auto$' "$marks_file" || fail "an entry before the long line was lost:
+$(cat "$marks_file")"
+grep -q '^two ' "$marks_file" && fail "mark manual did not remove the entry:
+$(cat "$marks_file")"
+grep -q 'verylongnameverylongname' "$marks_file" \
     && fail "the unparseable line survived the rewrite:
-$(cat "$auto_file")"
-note "an unparseable auto-installed line is dropped whole, neighbours kept"
+$(cat "$marks_file")"
+note "an unparseable marks line is dropped whole, neighbours kept"
 
-# Nowhere to write: reported, not silently lost.
-# "one" is installed and, after the rewrite above, no longer marked --
-# both are needed, or the call returns before it opens the file: an
-# unknown name is skipped, and an already-marked one short-circuits.
-#
-# The file itself is made read-only, not its directory: marking appends
-# to a file that already exists, and a read-only directory still permits
-# that.
-chmod 400 "$auto_file"
-out=$(aept_run "$root" mark auto one 2>&1)
-rc=$?
-chmod 600 "$auto_file"
-if [ "$rc" -eq 0 ]; then
-    note "SKIP: the auto-installed file stayed writable (running as root?)"
-else
-    case $out in
-        *auto-installed*) ;;
-        *) fail "an unwritable auto-installed file gave no useful error:
-$out" ;;
-    esac
-    note "an unwritable auto-installed file is reported, not ignored"
-fi
-
-# Rewriting needs to create a temporary beside it, which a read-only
-# directory does prevent.  The name has to be an installed one, or the
-# call skips it before reaching the file at all.
+# Nowhere to write: reported, not silently lost.  Every write rewrites
+# the file through a temporary beside it, so the directory is what has
+# to refuse; a read-only file alone would be renamed over.  The name
+# has to be an installed one, or the call skips it before reaching the
+# file at all.
 chmod 500 "$root/var/lib/aept"
-out=$(aept_run "$root" mark manual one 2>&1)
+out=$(aept_run "$root" mark auto one 2>&1)
 rc=$?
 chmod 700 "$root/var/lib/aept"
 if [ "$rc" -eq 0 ]; then
     note "SKIP: the state directory stayed writable (running as root?)"
 else
-    note "a rewrite with nowhere for its temporary file fails rather than truncating"
+    case $out in
+        *marks*) ;;
+        *) fail "an unwritable marks file gave no useful error:
+$out" ;;
+    esac
+    note "an unwritable marks file is reported, not ignored"
 fi
+
+# ... and the original is intact after the refused rewrite.
+grep -q '^keeper auto$' "$marks_file" \
+    || fail "a refused rewrite damaged the file:
+$(cat "$marks_file")"
+note "a rewrite with nowhere for its temporary file fails rather than truncating"
 
 exit 0

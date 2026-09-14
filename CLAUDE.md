@@ -102,7 +102,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
-exports **38** symbols: the 35 in `aept.h`, plus `aept_log()`,
+exports **39** symbols: the 36 in `aept.h`, plus `aept_log()`,
 `aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
 `libaept` like any other consumer. Before this it exported 139, including every
 internal helper, and `src/libfetch/` stayed hidden only because its names
@@ -111,7 +111,7 @@ link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
 hidden visibility does not apply.
 
 **The ABI baseline.** `tests/libaept.abi` records the ABI as *declarations*,
-not as names — 50 interfaces: the 38 exported functions, plus every type and
+not as names — 51 interfaces: the 39 exported functions, plus every type and
 enum in `aept.h`. `tests/test_abi_symbols.sh` checks it, and
 `tests/abi-declarations.sh` extracts the current one by preprocessing the
 headers with `-DAEPT_API=AEPT_EXPORT` (everything from `aept.h`, since it is
@@ -319,7 +319,7 @@ binary.
 Its fixture carries an installed package, a status database and an index
 offering a newer version, because `test_oom.c`'s package-less one stopped
 a handful of calls in. It sweeps 368 I/O calls against 105 allocations.
-**Set every path option** — `auto_file` and `pin_file` default to
+**Set every path option** — `marks_file` and `pin_file` default to
 `/var/lib/aept/...`, and a fixture that forgets them tests only the
 already-failing path.
 
@@ -525,7 +525,7 @@ partial state `exit()` left, only the process survives to run recovery).
 This is why **nothing in `msg.c` may allocate** — it is the path the failure
 is reported along. `tests/test_oom.c` holds the contract down by wrapping the
 allocators (`-Wl,--wrap`) and failing the *n*-th allocation for every *n*
-across **all 21 public entry points that arm the escape** — driving only
+across **all 22 public entry points that arm the escape** — driving only
 one of them left the other twenty with their `AEPT_OOM_ENTER`/`LEAVE`
 pair half-covered, the arming side exercised and the returning side never
 reached.
@@ -738,5 +738,7 @@ weakest part of the CLI, which a single 80.7% figure hid.
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction. **A failing trigger script never fails the completed transaction, but it never vanishes either**: the matched directories are written to `{name}.triggers-pending` *before* the script runs — so a failure, a crash and a Ctrl-C all leave the same record — and the package's `Status:` is set to `triggers-pending` (restored, and the record removed, on success; the side file is authoritative, the Status line derived from it). Every later transaction retries the record merged with anything newly matched, and `aept triggers` retries on demand. The status feed for libsolv normalizes `triggers-pending` to `installed`, like `unpacked`: the files are on disk and clash detection must see them. The CLI reports the state as **exit 2** ("transaction succeeded, a trigger is owed") via `AEPT_ERR_TRIGGER` in `aept_last_error()`; embedders and the Python bindings read the same channel. The pending scan collects names before running anything — the scripts rewrite files in `info_dir`, and mutating a directory mid-`readdir()` can hand entries back forever. Removal deletes the record with the other info files; the upgrade-side `remove_info_files` deliberately keeps it, so the retry runs the *new* version's script.
 - **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.
+
+  **The three marks.** An installed package is auto, manual or protected — one of the three, never two — and the file makes that structural: `{marks_file}` (default `/var/lib/aept/marks`) holds one `name mark` line per package that is auto or protected, **manual is the absence of a line**, and every write (`marks_rewrite()` in status.c) drops the name's line before appending the new one, so a name has one line by construction. It replaced two separate name lists (`auto-installed` and a protected file), which were independent sets that a hand edit could put a package in both of — and a package in both was removable by autoremove, which takes its candidates from the auto set and calls `aept_do_remove()` without the solver. The API is `aept_status_get_mark()` / `set_mark()` / `load_marked()`; `aept_mark_auto/manual/protected()` are one `set_mark` each. A line that does not parse is ignored on read and dropped on the next write, like a damaged pin line; a hand-made duplicate reads by its first line. Autoremove needs no protected check of its own: its candidates are the auto set. **Protected is enforced in the solver**, not per command: `keep_protected()` (solver.c) adds `SOLVER_INSTALL | SOLVER_SOLVABLE_NAME` for every protected name that is installed to *every* job list, so a removal by name, a dependant of a removal, a conflict, and an upgrade that would have to drop it all come back as solver problems, and any version still satisfies the job so upgrades go through. `aept_op_remove()` refuses a typed name (resolved through Provides, like the removal job) up front in words, naming `mark manual` as the way out; the disappear gate in clash.c keeps a protected package that has lost all its files. The mark is on a package, not on a virtual name — "keep a provider of init" is a dependency, and the documented answer is to protect a package that depends on `init`. `aept install <name>` of a protected package leaves it protected; only `mark` changes the mark. There is no force flag: the config-free override is `mark manual`, which is what makes "protected" mean what the image said rather than what the last operator typed. `tests/test_protected.sh` covers every row of that, each shown red with its enforcement point disabled.
 - **util.c** — `aept_system()` / `aept_system_offline_root()` for subprocess execution. Offline root uses `unshare(CLONE_NEWUSER)` + uid/gid mapping + chroot for non-root installs. Also the `aept_fgets_is_truncated()` / `aept_fgets_drain_line()` pair every line reader in the tree uses to drop over-long lines rather than parse them in pieces.
 - **script.c** — Runs maintainer scripts (preinst/postinst/prerm/postrm) via `/bin/sh` through `aept_system_offline_root()`. No environment is set for them: with an offline root the script runs chrooted, so it already sees that root as `/` and needs no prefix variable (unlike opkg, which does not chroot and passes `$PKG_ROOT` instead).

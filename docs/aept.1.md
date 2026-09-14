@@ -246,17 +246,37 @@ that have been pinned (see **pin**) are held back and not upgraded.
 ## mark manual \[--all\] \<packages...\>
 
 Mark one or more installed packages as manually installed. Manually
-installed packages are never candidates for removal by **autoremove**.
+installed packages are never candidates for removal by **autoremove**. A
+protected package marked manual loses its protection.
 
 **--all**
 
-> Mark all installed packages as manually installed.
+> Mark all auto-installed packages as manually installed. Protected
+> packages are left as they are.
 
 ## mark auto \<packages...\>
 
 Mark one or more installed packages as automatically installed.
 Auto-installed packages become candidates for removal by **autoremove**
 once no manually installed package depends on them.
+
+## mark protected \<packages...\>
+
+Mark one or more installed packages as protected. A protected package
+cannot be removed: not by name, not to satisfy a conflict, and not by an
+**upgrade** that would have to drop it -- such a transaction is refused
+as a whole. It can still be upgraded. The protection is lifted with
+**mark manual**.
+
+An installed package carries exactly one of the three marks; a package
+the solver installed to satisfy a dependency starts out auto, one named
+on the command line starts out manual. Installing a protected package
+again by name does not change its mark.
+
+To protect a set of packages by what they provide rather than by name,
+protect a package that depends on them: with *base* depending on *init*,
+protecting *base* keeps some provider of *init* installed while still
+allowing one provider to replace another.
 
 ## pin \<packages...\>
 
@@ -391,8 +411,8 @@ The following keys are recognized:
 | tmp_dir            | /tmp                          | Temporary directory                                                                                                                                                                                                                                                                  |
 | lock_file          | /var/lib/aept/lock            | Path to the lock file                                                                                                                                                                                                                                                                |
 | usign_keydir       | /etc/aept/usign/trustdb       | Directory containing trusted public keys                                                                                                                                                                                                                                             |
-| auto_file          | /var/lib/aept/auto-installed  | Path to the auto-installed packages tracking file                                                                                                                                                                                                                                    |
 | pin_file           | /var/lib/aept/pinned-packages | Path to the version pins file                                                                                                                                                                                                                                                        |
+| marks_file         | /var/lib/aept/marks           | Path to the package marks file                                                                                                                                                                                                                                                       |
 | check_signature    | 1                             | Set to 0 to disable signature verification                                                                                                                                                                                                                                           |
 | ignore_uid         | 0                             | Set to 1 to not preserve file ownership during extraction. Files will be owned by the calling user instead of the uid/gid recorded in the package.                                                                                                                                   |
 | ssl_client_cert    | (none)                        | Path to a PEM client certificate for HTTPS                                                                                                                                                                                                                                           |
@@ -421,9 +441,8 @@ The following keys are recognized:
 When an offline root is set (via **--offline-root** or the
 **offline_root** config option), the configuration file is read from
 *\<dir\>/etc/aept/aept.conf* (unless **--conf** is given explicitly) and
-all state directories (lists, cache, info, status, tmp, lock,
-auto-installed, pinned-packages) are automatically prefixed with the
-offline root path.
+all state directories (lists, cache, info, status, tmp, lock, marks,
+pinned-packages) are automatically prefixed with the offline root path.
 
 The exception is **--cache-dir** on the command line (or
 **AEPT_CACHE_DIR** in the environment): an override given there is used
@@ -596,10 +615,12 @@ inspect packages:
 
 > Downloaded package lists, one file per source.
 
-*/var/lib/aept/auto-installed*
+*/var/lib/aept/marks*
 
-> Tracks which packages were pulled in automatically as dependencies.
-> Used by **autoremove** to decide removal candidates.
+> The mark each package carries, one *name mark* line per package that
+> is **auto** or **protected**; a package with no line is manual. Read
+> by **autoremove** for its candidates and by every transaction for what
+> may not be removed. Managed by the **mark** command.
 
 */var/lib/aept/pinned-packages*
 

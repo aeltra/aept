@@ -21,7 +21,7 @@ root=$work/root
 new_root "$root"
 cache=$root/var/cache/aept
 list=$root/var/lib/aept/lists/testrepo
-auto_file=$root/var/lib/aept/auto-installed
+marks_file=$root/var/lib/aept/marks
 mkdir -p "$cache"
 
 installed() { aept_run "$root" list --installed 2>/dev/null | grep -q "^$1 "; }
@@ -48,8 +48,8 @@ setup() {
         || fail "installing app with its chain failed"
     installed libx || fail "libx was not pulled in"
     installed liby || fail "liby was not pulled in"
-    grep -q '^libx$' "$auto_file" || fail "libx is not marked auto"
-    grep -q '^liby$' "$auto_file" || fail "liby is not marked auto"
+    grep -q '^libx auto$' "$marks_file" || fail "libx is not marked auto"
+    grep -q '^liby auto$' "$marks_file" || fail "liby is not marked auto"
 }
 
 setup
@@ -94,7 +94,7 @@ installed libx && fail "libx survived autoremove"
 installed liby && fail "liby survived autoremove"
 [ ! -f "$root/usr/share/libx/f" ] || fail "libx's payload survived"
 [ ! -f "$root/usr/share/liby/f" ] || fail "liby's payload survived"
-grep -q '^libx$' "$auto_file" 2>/dev/null && fail "libx still in the auto file"
+grep -q '^libx auto$' "$marks_file" 2>/dev/null && fail "libx still marked auto"
 note "orphaned libx and liby removed together, chain and all"
 
 # ── a package the user asked for by name is never a candidate ────────
@@ -107,7 +107,7 @@ out=$(aept_run "$root" install --non-interactive liby 2>&1)
 rc=$?
 [ "$rc" -eq 0 ] || fail "installing liby by name exited $rc:
 $out"
-grep -q '^liby$' "$auto_file" 2>/dev/null \
+grep -q '^liby auto$' "$marks_file" 2>/dev/null \
     && fail "an explicitly requested package was marked auto"
 
 out=$(aept_run "$root" autoremove --non-interactive 2>&1)
@@ -140,9 +140,9 @@ rc=$?
 $out"
 installed postfix || fail "installing mta did not bring in postfix:
 $out"
-grep -q '^postfix$' "$auto_file" 2>/dev/null \
+grep -q '^postfix auto$' "$marks_file" 2>/dev/null \
     && fail "the package that satisfied the requested virtual name was marked auto:
-$(cat "$auto_file" 2>/dev/null)"
+$(cat "$marks_file" 2>/dev/null)"
 note "installing a virtual name marks its provider manual, not auto"
 
 out=$(aept_run "$root" autoremove --non-interactive 2>&1)

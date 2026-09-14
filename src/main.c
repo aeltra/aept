@@ -172,7 +172,7 @@ static void usage_main(FILE *out)
             "  upgrade             Upgrade all installed packages\n"
             "  list [pattern]      List packages\n"
             "  show <pkg>          Show package information\n"
-            "  mark <action>       Control auto-installed package marks\n"
+            "  mark <action>       Mark packages auto, manual or protected\n"
             "  pin <pkgs...>       Pin packages to a specific version\n"
             "  unpin <pkgs...>     Remove version pins\n"
             "  clean               Remove cached package files\n"

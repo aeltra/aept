@@ -94,7 +94,7 @@ int aept_op_autoremove(struct aept_ctx *ctx)
     pool_createwhatprovides(pool);
 
     aept_fileset_init(&auto_set);
-    r = aept_status_load_auto_set(ctx, &auto_set);
+    r = aept_status_load_marked(ctx, AEPT_MARK_AUTO, &auto_set);
     if (r < 0)
         goto out_fileset;
 
