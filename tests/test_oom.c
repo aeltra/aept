@@ -528,6 +528,25 @@ int main(void)
     test_int_eq(aept_load_config(ctx, conf_path), 0, "the context still works afterwards");
     aept_cleanup(ctx);
 
+    /*
+     * A classification belongs to the call that produced it.  Fail one
+     * call so AEPT_ERR_NOMEM is set, then make a second call that
+     * succeeds: the second must not still be carrying the first one's
+     * answer, or a caller asking after it would act on a condition that
+     * happened to something else.
+     */
+    ctx = aept_init();
+    aept_set_log_fn(ctx, quiet_log, NULL);
+    write_conf();
+    arm(1);
+    test_int_eq(aept_set_cache_dir(ctx, "/somewhere"), -1, "the first call fails");
+    disarm();
+    test_int_eq(aept_last_error(ctx), AEPT_ERR_NOMEM, "and reports why");
+    test_int_eq(aept_load_config(ctx, conf_path), 0, "a later call succeeds");
+    test_int_eq(aept_last_error(ctx), AEPT_ERR_NONE,
+                "and does not carry the earlier call's classification");
+    aept_cleanup(ctx);
+
     /* Still here. */
     test_ok(1, "the process survived every injected failure");
 

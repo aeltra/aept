@@ -101,8 +101,22 @@ enum {
     AEPT_ERR_NOMEM,
 };
 
-/* Why the most recent call on this context failed.  Meaningful
- * immediately after a call that returned non-zero. */
+/*
+ * Which specific condition the most recent call on this context ran
+ * into, or AEPT_ERR_NONE for a call that hit none of them.
+ *
+ * This is not a general "why did it fail": a call that returns non-zero
+ * has already said it failed, and for most failures there is nothing to
+ * add.  What the field distinguishes are the conditions a caller may
+ * want to act on differently -- a timeout worth retrying, a trigger
+ * owed after a transaction that otherwise succeeded, an allocation that
+ * could not be met.  AEPT_ERR_NONE beside a non-zero return means the
+ * call failed for a reason with no such classification, not that it
+ * succeeded.
+ *
+ * Cleared when the call is entered, so what it holds is always about
+ * that call and never left over from an earlier one.
+ */
 AEPT_API int aept_last_error(aept_ctx_t *ctx);
 
 /* --- Flags --------------------------------------------------------------- */

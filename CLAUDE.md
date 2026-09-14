@@ -196,6 +196,17 @@ The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
 - OOM-safe allocators: `aept_malloc()`, `aept_realloc()`, `aept_strdup()`,
   `aept_asprintf()`. They never return NULL, so no call site checks — see
   **The out-of-memory escape** for where a failure goes instead
+- **`last_error` classifies, it does not explain.** It names the
+  conditions a caller may want to act on differently — a timeout worth
+  retrying, a trigger owed, an allocation that could not be met — and
+  `AEPT_ERR_NONE` beside a non-zero return means the failure had no such
+  classification, not that the call succeeded. Filling that gap with a
+  catch-all was tried and reverted: `AEPT_ERR_GENERAL` tells a caller
+  exactly what `-1` already told them, and it *masked* the real problem
+  below by making every failure look alike. What `AEPT_OOM_ENTER` does
+  keep is clearing the field on entry, so a caller is never handed a
+  condition that happened to an earlier call on the same context;
+  `tests/test_oom.c` pins that
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
 - License: MIT; file headers include SPDX and copyright. **Generated files are
@@ -270,6 +281,30 @@ run by Automake's harness.
   shell test after a plain `make` runs the *previous* binary, so a revert probe
   can come out green on a fix that is no longer there. This has now happened
   twice. Build the harness first: `make -C tests stallclient`, or `make check`.
+
+**I/O failures.** `tests/test_iofail.c` is `test_oom.c` one layer down:
+the I/O calls aept makes are wrapped (`-Wl,--wrap` on `fopen`, `fgets`,
+`fwrite`, `fputs`, `fprintf`, `fclose`, `rename`, `mkdir`, `opendir`,
+`readdir`, `stat`, `lstat`), the *n*-th call of the function under test
+is failed for every *n*, and each iteration must return — having neither
+crashed nor spun — and leave a context `aept_cleanup()` can still take
+apart. Whether the call reports the failure or carries on is not
+asserted: a directory that will not open is how "nothing is installed"
+legitimately looks. `--wrap` only rewrites call sites
+in the objects linked into the test, so the injection reaches aept's own
+code and leaves libsolv, libarchive and OpenSSL working normally — which
+also means the shell tests cannot use it, since they drive the installed
+binary.
+
+Its fixture carries an installed package, a status database and an index
+offering a newer version, because `test_oom.c`'s package-less one stopped
+a handful of calls in. It sweeps 368 I/O calls against 105 allocations.
+**Set every path option** — `auto_file` and `pin_file` default to
+`/var/lib/aept/...`, and a fixture that forgets them tests only the
+already-failing path.
+
+Like `test_oom.c` it asserts behaviour and never counts: how many calls
+anything makes depends on the build and on the filesystem.
 
 **Data races.** `make check` catches crashes and wrong answers, but a race that
 happens to come out right passes silently — this was demonstrated: with the

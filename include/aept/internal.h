@@ -102,7 +102,7 @@ struct aept_ctx {
     _Atomic int cancelled;
     int use_color;
     int config_loaded;
-    int last_error; /* AEPT_ERR_*, meaningful right after a failed call */
+    int last_error; /* AEPT_ERR_*; see aept_last_error() in aept.h */
 
     /* Where an allocation failure lands.  See AEPT_OOM_ENTER below. */
     jmp_buf oom_jmp;
@@ -142,6 +142,10 @@ struct aept_ctx {
             return failval;                                                                        \
         }                                                                                          \
         (ctx)->oom_armed = 1;                                                                      \
+        /* This call's classification starts empty, so a caller asking\
+         * after it is never handed a condition that happened to an\
+         * earlier call on the same context. */                            \
+        (ctx)->last_error = AEPT_ERR_NONE;                                                         \
     }
 
 #define AEPT_OOM_LEAVE(ctx)                                                                        \

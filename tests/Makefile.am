@@ -11,7 +11,7 @@ unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_auto_flags test_api \
     test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
-    test_deb \
+    test_deb test_iofail \
     test_oom
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
@@ -301,6 +301,12 @@ test_oom_LDADD = $(top_builddir)/src/libaept.la
 test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
     -Wl,--wrap=strdup -Wl,--wrap=vasprintf
+
+test_iofail_SOURCES = test_iofail.c
+test_iofail_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_iofail_LDADD = $(top_builddir)/src/libaept.la
+test_iofail_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
+    -Wl,--wrap=fopen -Wl,--wrap=fgets -Wl,--wrap=fwrite -Wl,--wrap=fputs -Wl,--wrap=fprintf -Wl,--wrap=fclose -Wl,--wrap=rename -Wl,--wrap=mkdir -Wl,--wrap=opendir -Wl,--wrap=readdir -Wl,--wrap=stat -Wl,--wrap=lstat
 
 test_deb_SOURCES = \
     test_deb.c \
