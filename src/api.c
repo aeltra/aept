@@ -73,6 +73,7 @@ void aept_cleanup(aept_ctx_t *ctx)
         return;
 
     libfetch_ctx_free(ctx->http);
+    aept_marks_reset(ctx);
     ctx->http = NULL;
 
     if (ctx->config_loaded) {

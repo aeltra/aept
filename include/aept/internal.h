@@ -107,7 +107,15 @@ struct aept_ctx {
     /* Where an allocation failure lands.  See AEPT_OOM_ENTER below. */
     jmp_buf oom_jmp;
     int oom_armed;
+
+    /* The marks file, read once per API call and kept in step with
+     * every write to it -- see aept_marks_reset().  Owned by status.c. */
+    struct aept_marks *marks;
 };
+
+/* Drop the in-memory copy of the marks file, so the next use re-reads
+ * it.  Called on entry to every public API call and at cleanup. */
+void aept_marks_reset(struct aept_ctx *ctx);
 
 /*
  * The out-of-memory escape.
@@ -146,6 +154,7 @@ struct aept_ctx {
          * after it is never handed a condition that happened to an\
          * earlier call on the same context. */                            \
         (ctx)->last_error = AEPT_ERR_NONE;                                                         \
+        aept_marks_reset(ctx);                                                                     \
     }
 
 #define AEPT_OOM_LEAVE(ctx)                                                                        \

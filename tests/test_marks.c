@@ -62,6 +62,9 @@ static int line_count(void)
     return n;
 }
 
+/* A hand edit, as far as the context is concerned: the file changes
+ * behind its back, so its copy has to be dropped as a new API call
+ * would. */
 static void write_file(const char *text)
 {
     FILE *fp = fopen(ctx.config.marks_file, "w");
@@ -70,6 +73,7 @@ static void write_file(const char *text)
         fputs(text, fp);
         fclose(fp);
     }
+    aept_marks_reset(&ctx);
 }
 
 int main(void)
@@ -166,7 +170,17 @@ int main(void)
     test_int_eq(line_count(), 3, "the rewrite kept only the well-formed lines, dup once");
     test_int_eq(aept_status_get_mark(&ctx, "dup"), AEPT_MARK_PROTECTED, "and dup reads as set");
 
+    /* ── appending to a file without its final newline ────────────── */
+
+    write_file("last protected");
+    test_int_eq(aept_status_set_mark(&ctx, "new", AEPT_MARK_AUTO), 0, "new is marked after it");
+    test_int_eq(aept_status_get_mark(&ctx, "last"), AEPT_MARK_PROTECTED,
+                "the unterminated last line kept its mark");
+    test_int_eq(aept_status_get_mark(&ctx, "new"), AEPT_MARK_AUTO, "and the new one reads");
+    test_int_eq(line_count(), 2, "on two lines");
+
     /* Cleanup */
+    aept_marks_reset(&ctx);
     unlink(ctx.config.marks_file);
     free(ctx.config.marks_file);
     rmdir(dir);

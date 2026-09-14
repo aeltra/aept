@@ -112,13 +112,32 @@ grep -q 'verylongnameverylongname' "$marks_file" \
 $(cat "$marks_file")"
 note "an unparseable marks line is dropped whole, neighbours kept"
 
-# Nowhere to write: reported, not silently lost.  Every write rewrites
-# the file through a temporary beside it, so the directory is what has
-# to refuse; a read-only file alone would be renamed over.  The name
-# has to be an installed one, or the call skips it before reaching the
-# file at all.
-chmod 500 "$root/var/lib/aept"
+# Nowhere to write: reported, not silently lost.  There are two
+# writes: a new mark for a name with no line is appended to the file,
+# so a read-only file refuses it; a change of mark rewrites the file
+# through a temporary beside it, so a read-only directory refuses that
+# one -- the file itself being read-only would just be renamed over.
+# The name has to be an installed one, or the call skips it before
+# reaching the file at all.
+chmod 400 "$marks_file"
 out=$(aept_run "$root" mark auto one 2>&1)
+rc=$?
+chmod 600 "$marks_file"
+if [ "$rc" -eq 0 ]; then
+    note "SKIP: the marks file stayed writable (running as root?)"
+else
+    case $out in
+        *marks*) ;;
+        *) fail "an unwritable marks file gave no useful error:
+$out" ;;
+    esac
+    grep -q '^one ' "$marks_file" && fail "the refused append landed anyway"
+    note "an append to an unwritable marks file is reported, not ignored"
+fi
+
+aept_run "$root" mark auto one >/dev/null 2>&1 || fail "marking one auto failed"
+chmod 500 "$root/var/lib/aept"
+out=$(aept_run "$root" mark manual one 2>&1)
 rc=$?
 chmod 700 "$root/var/lib/aept"
 if [ "$rc" -eq 0 ]; then
@@ -126,16 +145,13 @@ if [ "$rc" -eq 0 ]; then
 else
     case $out in
         *marks*) ;;
-        *) fail "an unwritable marks file gave no useful error:
+        *) fail "a refused rewrite gave no useful error:
 $out" ;;
     esac
-    note "an unwritable marks file is reported, not ignored"
-fi
-
-# ... and the original is intact after the refused rewrite.
-grep -q '^keeper auto$' "$marks_file" \
-    || fail "a refused rewrite damaged the file:
+    grep -q '^one auto$' "$marks_file" && grep -q '^keeper auto$' "$marks_file" \
+        || fail "a refused rewrite damaged the file:
 $(cat "$marks_file")"
-note "a rewrite with nowhere for its temporary file fails rather than truncating"
+    note "a rewrite with nowhere for its temporary file fails rather than truncating"
+fi
 
 exit 0

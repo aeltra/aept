@@ -204,15 +204,30 @@ int aept_status_add(struct aept_ctx *ctx, const char *control_src, const char *d
  * The marks file: one "name mark" line per package that is auto or
  * protected.  Manual is the absence of a line, so a fresh root has no
  * file and an installed package nobody has marked reads as manual.
- * Every write rewrites the whole file, dropping the name's line and
- * appending the new one -- so a name has one line by construction and
- * there is no second file for a first one to disagree with.
+ *
+ * It is read once per API call into ctx->marks and every lookup is
+ * answered from there; every write keeps the copy in step, so a
+ * transaction that marks each of its N packages as it goes reads the
+ * file once rather than N times.  The copy is safe because the
+ * transaction lock keeps anything else from editing the file under
+ * it, and it is dropped on entry to the next API call (AEPT_OOM_ENTER)
+ * so no call trusts what an earlier one saw.
  *
  * A line that does not parse -- a name too long, a third word, a mark
- * word that is not one of the two -- is dropped on the next write and
- * ignored on read, like a damaged pin line: it costs that line and
- * nothing else.
+ * word that is not one of the two -- is ignored on read and dropped
+ * by the next rewrite, like a damaged pin line: it costs that line and
+ * nothing else.  A duplicated name reads by its first line.
  */
+struct aept_mark_entry {
+    char *name;
+    aept_mark_t mark;
+};
+
+struct aept_marks {
+    struct aept_mark_entry *e;
+    int count, alloc;
+};
+
 static const char *mark_word(aept_mark_t mark)
 {
     switch (mark) {
@@ -244,146 +259,194 @@ static int mark_parse(const char *line, char name[256], aept_mark_t *mark)
     return 0;
 }
 
-aept_mark_t aept_status_get_mark(struct aept_ctx *ctx, const char *name)
+void aept_marks_reset(struct aept_ctx *ctx)
 {
+    struct aept_marks *m = ctx->marks;
+    int i;
+
+    if (!m)
+        return;
+    for (i = 0; i < m->count; i++)
+        free(m->e[i].name);
+    free(m->e);
+    free(m);
+    ctx->marks = NULL;
+}
+
+static int marks_find(struct aept_marks *m, const char *name)
+{
+    int i;
+
+    for (i = 0; i < m->count; i++)
+        if (strcmp(m->e[i].name, name) == 0)
+            return i;
+    return -1;
+}
+
+static void marks_add(struct aept_marks *m, const char *name, aept_mark_t mark)
+{
+    if (m->count >= m->alloc) {
+        m->alloc = m->alloc ? m->alloc * 2 : 64;
+        m->e = aept_realloc(m->e, m->alloc * sizeof(*m->e));
+    }
+    m->e[m->count].name = aept_strdup(name);
+    m->e[m->count].mark = mark;
+    m->count++;
+}
+
+static struct aept_marks *marks_load(struct aept_ctx *ctx)
+{
+    struct aept_marks *m;
     FILE *fp;
     char buf[512];
 
+    if (ctx->marks)
+        return ctx->marks;
+
+    m = aept_malloc(sizeof(*m));
+    memset(m, 0, sizeof(*m));
+    ctx->marks = m;
+
     fp = fopen(ctx->config.marks_file, "r");
     if (!fp)
-        return AEPT_MARK_MANUAL;
+        return m;
 
     while (fgets(buf, sizeof(buf), fp)) {
-        char pkg_name[256];
+        char name[256];
         aept_mark_t mark;
 
         if (aept_fgets_is_truncated(buf, sizeof(buf))) {
             aept_fgets_drain_line(fp);
             continue;
         }
-        if (mark_parse(buf, pkg_name, &mark) < 0)
+        if (mark_parse(buf, name, &mark) < 0 || marks_find(m, name) >= 0)
             continue;
-        if (strcmp(pkg_name, name) == 0) {
-            fclose(fp);
-            return mark;
-        }
+        marks_add(m, name, mark);
     }
 
     fclose(fp);
-    return AEPT_MARK_MANUAL;
+    return m;
 }
 
-/*
- * Rewrite the marks file dropping every line for drop_name and every
- * line carrying drop_mark (MANUAL: none, since no line carries it),
- * then appending "append_name append_word" if given.
- */
-static int marks_rewrite(struct aept_ctx *ctx, const char *drop_name, aept_mark_t drop_mark,
-                         const char *append_name, const char *append_word)
+/* Write the whole file from the copy, aside and renamed.  On failure
+ * the copy is dropped, so the next use re-reads what is really there. */
+static int marks_save(struct aept_ctx *ctx)
 {
-    FILE *fp, *tmp;
+    struct aept_marks *m = ctx->marks;
     char *tmp_path = NULL;
-    char buf[512];
-
-    fp = fopen(ctx->config.marks_file, "r");
-    if (!fp) {
-        if (errno != ENOENT) {
-            aept_log_error("cannot read marks file '%s': %s", ctx->config.marks_file,
-                           strerror(errno));
-            return -1;
-        }
-        /* Nothing recorded: nothing to drop, and only something to
-         * append makes the file worth creating. */
-        if (!append_name)
-            return 0;
-    }
+    FILE *tmp;
+    int i, failed = 0;
 
     aept_asprintf(&tmp_path, "%s.tmp", ctx->config.marks_file);
     tmp = fopen(tmp_path, "w");
     if (!tmp) {
         aept_log_error("cannot write marks file '%s': %s", tmp_path, strerror(errno));
-        if (fp)
-            fclose(fp);
         free(tmp_path);
+        aept_marks_reset(ctx);
         return -1;
     }
 
-    while (fp && fgets(buf, sizeof(buf), fp)) {
-        char pkg_name[256];
-        aept_mark_t mark;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-        if (mark_parse(buf, pkg_name, &mark) < 0)
-            continue;
-        if (drop_name && strcmp(pkg_name, drop_name) == 0)
-            continue;
-        if (drop_mark != AEPT_MARK_MANUAL && mark == drop_mark)
-            continue;
-        fputs(buf, tmp);
-    }
-    if (fp)
-        fclose(fp);
-
-    if (append_name)
-        fprintf(tmp, "%s %s\n", append_name, append_word);
+    for (i = 0; i < m->count; i++)
+        fprintf(tmp, "%s %s\n", m->e[i].name, mark_word(m->e[i].mark));
 
     if (ferror(tmp) || fclose(tmp) != 0) {
         aept_log_error("failed to write marks file '%s'", tmp_path);
-        unlink(tmp_path);
-        free(tmp_path);
-        return -1;
-    }
-
-    if (rename(tmp_path, ctx->config.marks_file) < 0) {
+        failed = 1;
+    } else if (rename(tmp_path, ctx->config.marks_file) < 0) {
         aept_log_error("cannot rename marks file: %s", strerror(errno));
-        unlink(tmp_path);
-        free(tmp_path);
-        return -1;
+        failed = 1;
     }
 
+    if (failed) {
+        unlink(tmp_path);
+        aept_marks_reset(ctx);
+    }
     free(tmp_path);
+    return failed ? -1 : 0;
+}
+
+/* Add one line for a name the file has no line for: O(1), against the
+ * O(n) of a rewrite.  A hand-edited file may lack its final newline;
+ * appending to that would fuse the new line onto the last one and cost
+ * both, so one is supplied first. */
+static int marks_append(struct aept_ctx *ctx, const char *name, aept_mark_t mark)
+{
+    FILE *fp = fopen(ctx->config.marks_file, "a+");
+
+    if (!fp) {
+        aept_log_error("cannot open marks file '%s': %s", ctx->config.marks_file, strerror(errno));
+        return -1;
+    }
+    if (fseek(fp, -1, SEEK_END) == 0 && fgetc(fp) != '\n')
+        fputc('\n', fp);
+    fprintf(fp, "%s %s\n", name, mark_word(mark));
+    if (ferror(fp) || fclose(fp) != 0) {
+        aept_log_error("failed to write marks file '%s'", ctx->config.marks_file);
+        aept_marks_reset(ctx);
+        return -1;
+    }
+    marks_add(ctx->marks, name, mark);
     return 0;
+}
+
+aept_mark_t aept_status_get_mark(struct aept_ctx *ctx, const char *name)
+{
+    struct aept_marks *m = marks_load(ctx);
+    int i = marks_find(m, name);
+
+    return i < 0 ? AEPT_MARK_MANUAL : m->e[i].mark;
 }
 
 int aept_status_set_mark(struct aept_ctx *ctx, const char *name, aept_mark_t mark)
 {
-    const char *word = mark_word(mark);
+    struct aept_marks *m = marks_load(ctx);
+    int i = marks_find(m, name);
 
-    return marks_rewrite(ctx, name, AEPT_MARK_MANUAL, word ? name : NULL, word);
+    /* Only a change of mark rewrites the file: a mark already held and
+     * manual on a name with no line (every removal asks for that) cost
+     * nothing, and a new mark for a name with no line is an append. */
+    if (i < 0)
+        return mark == AEPT_MARK_MANUAL ? 0 : marks_append(ctx, name, mark);
+    if (m->e[i].mark == mark)
+        return 0;
+
+    if (mark == AEPT_MARK_MANUAL) {
+        free(m->e[i].name);
+        memmove(&m->e[i], &m->e[i + 1], (m->count - i - 1) * sizeof(*m->e));
+        m->count--;
+    } else {
+        m->e[i].mark = mark;
+    }
+    return marks_save(ctx);
 }
 
 int aept_status_load_marked(struct aept_ctx *ctx, aept_mark_t mark, aept_fileset_t *set)
 {
-    FILE *fp;
-    char buf[512];
+    struct aept_marks *m = marks_load(ctx);
+    int i;
 
-    fp = fopen(ctx->config.marks_file, "r");
-    if (!fp)
-        return 0;
-
-    while (fgets(buf, sizeof(buf), fp)) {
-        char pkg_name[256];
-        aept_mark_t m;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-        if (mark_parse(buf, pkg_name, &m) == 0 && m == mark)
-            aept_fileset_add(set, pkg_name);
-    }
-
-    fclose(fp);
+    for (i = 0; i < m->count; i++)
+        if (m->e[i].mark == mark)
+            aept_fileset_add(set, m->e[i].name);
     aept_fileset_sort(set);
     return 0;
 }
 
 int aept_status_clear_auto(struct aept_ctx *ctx)
 {
-    return marks_rewrite(ctx, NULL, AEPT_MARK_AUTO, NULL, NULL);
+    struct aept_marks *m = marks_load(ctx);
+    int i, kept = 0;
+
+    for (i = 0; i < m->count; i++) {
+        if (m->e[i].mark == AEPT_MARK_AUTO)
+            free(m->e[i].name);
+        else
+            m->e[kept++] = m->e[i];
+    }
+    if (kept == m->count)
+        return 0;
+    m->count = kept;
+    return marks_save(ctx);
 }
 
 /*
