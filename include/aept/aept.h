@@ -87,7 +87,20 @@ AEPT_API void aept_set_network_timeout(aept_ctx_t *ctx, int seconds);
 
 enum {
     AEPT_ERR_NONE = 0,
+    /* A download failed and there is nothing to be gained by trying
+     * again this instant: the peer refused, the body was short, the
+     * name did not resolve -- or an update lost one or more sources for
+     * any mix of reasons, the detail being in the log.  Despite the
+     * name this is not a catch-all: a failure with no more specific
+     * classification leaves AEPT_ERR_NONE, because "it failed" is
+     * already what the non-zero return said. */
     AEPT_ERR_GENERAL,
+    /* A transfer gave up waiting, and the operation stopped there.  The
+     * one an embedding application is likely to retry rather than
+     * report.  Only reported by operations that abort at the first
+     * failed download -- install, upgrade, remove -- so that it always
+     * means "this is why we stopped, just now"; an update, which carries
+     * on past a failed source, reports AEPT_ERR_GENERAL instead. */
     AEPT_ERR_TIMEOUT,
     /* The operation succeeded, but one or more trigger scripts
      * failed.  The failure is recorded in the status area and retried

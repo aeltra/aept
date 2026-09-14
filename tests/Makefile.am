@@ -14,7 +14,8 @@ unit_tests = test_archive_path test_script test_config_root \
     test_deb test_iofail \
     test_oom
 
-check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget
+check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget \
+    updateerr
 
 noinst_HEADERS = test.h
 
@@ -57,6 +58,11 @@ stallclient_SOURCES = stallclient.c
 stallclient_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 stallclient_LDADD = $(top_builddir)/src/libaept.la
 stallclient_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
+updateerr_SOURCES = updateerr.c
+updateerr_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+updateerr_LDADD = $(top_builddir)/src/libaept.la
+updateerr_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Also a harness, driven by test_threads.sh.
 threadrace_SOURCES = threadrace.c
@@ -231,6 +237,7 @@ dist_check_SCRIPTS = \
     test_offline_root_tmp.sh \
     test_install_local_noop.sh \
     test_update_inpackages.sh \
+    test_update_error.sh \
     test_update_failures.sh \
     test_install_options.sh \
     test_signature_reject.sh \
@@ -267,6 +274,7 @@ AM_TESTS_ENVIRONMENT = \
     RAWGET='$(abs_builddir)/rawget'; export RAWGET; \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
     STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
+    UPDATEERR='$(abs_builddir)/updateerr'; export UPDATEERR; \
     TLSGET='$(abs_builddir)/tlsget'; export TLSGET; \
     LIBAEPT_SO='$(abs_top_builddir)/src/.libs/libaept.so'; export LIBAEPT_SO; \
     NM='$(NM)'; export NM; \

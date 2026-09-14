@@ -27,6 +27,13 @@
  * Record why a transfer failed, so a caller can tell "the peer went
  * quiet" from "the peer said no".  A timeout is the one an embedding
  * application is likely to want to retry rather than report.
+ *
+ * Nothing clears the field here.  It is cleared once, when the public
+ * entry point this runs under was entered (AEPT_OOM_ENTER), and a call
+ * may make many transfers -- aept_update() walks every source.  Clearing
+ * per transfer meant a later success erased what an earlier failure
+ * recorded, so an update whose first source timed out and whose second
+ * succeeded reported a timeout as nothing in particular.
  */
 static int record_error(struct aept_ctx *ctx)
 {
@@ -60,18 +67,6 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
 
     if (unchanged)
         *unchanged = 0;
-
-    /*
-     * Only when this transfer is the whole call.  A public API entry
-     * point clears last_error on the way in (AEPT_OOM_ENTER), and
-     * ctx->oom_armed is how we know we are inside one: there, several
-     * transfers share the call, and a later one succeeding must not
-     * erase what an earlier failure recorded.  A caller using
-     * aept_download() directly is its own outermost call and still
-     * starts clean.
-     */
-    if (!ctx->oom_armed)
-        ctx->last_error = AEPT_ERR_NONE;
 
     /*
      * Hand the client certificate to this context's fetch state.  It

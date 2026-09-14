@@ -405,5 +405,24 @@ int aept_op_update(struct aept_ctx *ctx)
 
     prune_stale_lists(ctx);
 
+    /*
+     * An update carries on past a source that fails, so what it returns
+     * is an aggregate, and no single source's classification describes
+     * one.  A timeout in particular must not be passed up: it says
+     * "momentary, just now, try again", and by the time this returns it
+     * may have happened thirty seconds and two successful sources ago.
+     * Worse, which source's failure came last depends on the order they
+     * are configured in, so the same set of failures would report
+     * differently from one config to the next.
+     *
+     * AEPT_ERR_TIMEOUT is therefore reported only by operations that
+     * stop at it -- install, upgrade and remove, which abort at the
+     * first download that fails, so there it means exactly "this is why
+     * we stopped".  An update that lost any source reports the general
+     * download failure and leaves the per-source detail to the log.
+     */
+    if (errors)
+        ctx->last_error = AEPT_ERR_GENERAL;
+
     return errors ? -1 : 0;
 }
