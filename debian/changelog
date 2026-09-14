@@ -1,3 +1,72 @@
+aept (0.6.0-1) unstable; urgency=medium
+
+  * Change: maintainer scripts run in the order dpkg runs them, and a
+    failed step is unwound. The file-clash check now runs before any
+    script, so a refused install has no prerm or preinst to undo. On an
+    upgrade the old postrm runs before the files the new version dropped
+    are deleted, not after. A preinst or unpack that fails is followed by
+    "postrm abort-install", or "postrm abort-upgrade" and then the old
+    version's "postinst abort-upgrade" -- the call that restarts what the
+    old prerm stopped. An old prerm that fails gives the new version's
+    "prerm failed-upgrade" a chance before the upgrade is abandoned; an
+    old postrm that fails gives "postrm failed-upgrade" one and carries
+    on; a "prerm remove" that fails is followed by "postinst
+    abort-remove". "preinst upgrade" now receives both versions. None of
+    these calls were made before.
+  * Change: unpacking and configuring are separate steps, and a package
+    that a new package both conflicts with and replaces is removed in
+    between: after the new package is unpacked, so its files can be taken
+    over, and before its postinst runs, so the daemon it starts does not
+    find the old one still on the port. Previously the new package was
+    configured first and the old one removed afterwards. If the old
+    package's prerm refuses, the new one is left unpacked rather than
+    configured beside a package it conflicts with. A package is recorded
+    as "unpacked" from the moment its files are on disk and as
+    "installed" once its postinst has run.
+  * Change: a file taken over under "Replaces" leaves the old owner's
+    file list as soon as it is on disk, whether or not the new package's
+    postinst then succeeds. It used to wait for the postinst, so a failed
+    one left the old owner still claiming a file that was not its, and
+    removing that owner later deleted it. A package whose last file is
+    taken over disappears before the overwriter is configured, not after,
+    and does not disappear at all while another installed package depends
+    on or recommends it -- it stays, owning nothing.
+  * Fix: extraction failed to fail when an entry could not be created
+    because a regular file stood where its parent directory should be.
+    libarchive reports that with the same warning code it uses for a
+    timestamp it could not restore, and the install completed with a file
+    list naming a file that was never written. A warning is now accepted
+    only if the entry is actually on disk.
+  * New: "aept mark protected". A protected package cannot be removed:
+    not by name, not to satisfy a conflict, not as a dependant of
+    something else being removed, and not by an upgrade that would have
+    to drop it -- such a transaction is refused as a whole, and a removal
+    typed by name is refused in words. It can still be upgraded, and
+    installing it again by name leaves it protected. There is no force
+    flag; "aept mark manual" lifts the protection. Marks apply to real
+    package names: to keep "some provider of init", protect a package
+    that depends on init. The C API gains aept_mark_protected() and the
+    Python bindings mark_protected().
+  * Change: the marks are kept in one file, /var/lib/aept/marks, one
+    "name mark" line per package that is auto or protected; a package
+    with no line is manual. It replaces /var/lib/aept/auto-installed and
+    the "auto_file" option, which is now "marks_file". There is no
+    migration, since nothing has been distributed; a root assembled with
+    an earlier aept converts with
+      sed 's/$/ auto/' auto-installed > marks
+    A damaged line costs that line and nothing else; a duplicated name
+    reads by its first line and is written back once. The file is read
+    once per API call, so a transaction marking each of its packages as
+    it goes no longer re-reads it per package.
+  * Change: libaept's interface version is 1:1:0 (one function added,
+    none changed).
+  * Tests: test_script_order.sh asserts the complete maintainer-script
+    sequence for every path, including each failure point's unwind;
+    test_protected.sh covers every route by which a protected package
+    could otherwise be removed; test_marks.c the marks file.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Tue, 15 Sep 2026 01:18:24 +0300
+
 aept (0.5.0-1) unstable; urgency=medium
 
   * Change: Recommends are no longer installed. libsolv satisfies them by
