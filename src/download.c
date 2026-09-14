@@ -28,13 +28,15 @@
  * quiet" from "the peer said no".  A timeout is the one an embedding
  * application is likely to want to retry rather than report.
  */
-static void record_error(struct aept_ctx *ctx)
+static int record_error(struct aept_ctx *ctx)
 {
     if (libfetch_last_error.category == LIBFETCH_ERRCAT_FETCH &&
         libfetch_last_error.code == LIBFETCH_ERR_TIMEOUT)
         ctx->last_error = AEPT_ERR_TIMEOUT;
     else
         ctx->last_error = AEPT_ERR_GENERAL;
+
+    return ctx->last_error;
 }
 
 int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, const char *name,
@@ -59,7 +61,17 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
     if (unchanged)
         *unchanged = 0;
 
-    ctx->last_error = AEPT_ERR_NONE;
+    /*
+     * Only when this transfer is the whole call.  A public API entry
+     * point clears last_error on the way in (AEPT_OOM_ENTER), and
+     * ctx->oom_armed is how we know we are inside one: there, several
+     * transfers share the call, and a later one succeeding must not
+     * erase what an earlier failure recorded.  A caller using
+     * aept_download() directly is its own outermost call and still
+     * starts clean.
+     */
+    if (!ctx->oom_armed)
+        ctx->last_error = AEPT_ERR_NONE;
 
     /*
      * Hand the client certificate to this context's fetch state.  It
@@ -105,8 +117,7 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
             goto cleanup;
         }
 
-        record_error(ctx);
-        if (ctx->last_error == AEPT_ERR_TIMEOUT)
+        if (record_error(ctx) == AEPT_ERR_TIMEOUT)
             aept_log_error("timed out downloading '%s'", shown_url);
         else
             aept_log_error("failed to download '%s'", shown_url);
@@ -141,8 +152,7 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
              */
             if (errno == EINTR)
                 continue;
-            record_error(ctx);
-            if (ctx->last_error == AEPT_ERR_TIMEOUT)
+            if (record_error(ctx) == AEPT_ERR_TIMEOUT)
                 aept_log_error("timed out downloading '%s'", shown_url);
             else
                 aept_log_error("failed to download '%s'", shown_url);

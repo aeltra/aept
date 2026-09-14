@@ -483,7 +483,13 @@ was always part of the API.
 only setters that do, being the only ones that allocate. `aept_last_error()`
 alone does not serve here: the header documents that field for a call that
 *returned non-zero*, which a `void` function never does, and
-`aept_download()` resets it on every transfer. A failure keeps the previous
+`aept_download()` clears it per transfer only when the transfer *is* the
+call: inside a public entry point (`ctx->oom_armed`) the field was
+cleared on the way in and belongs to that call, so a later transfer
+succeeding cannot erase what an earlier failure recorded. Without that,
+`aept_update()` fetching several sources would lose an `AEPT_ERR_TIMEOUT`
+to the next source's success and report a timeout as an unclassified
+failure — which the Python bindings turn into the wrong exception. A failure keeps the previous
 value, so a caller that ignores the result carries on with the path it had.
 
 Only the outermost entry point arms the jump (`AEPT_OOM_ENTER` /
