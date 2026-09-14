@@ -1,3 +1,87 @@
+aept (0.5.0-1) unstable; urgency=medium
+
+  * Change: Recommends are no longer installed. libsolv satisfies them by
+    default, which is apt's behaviour and the wrong one for a small root:
+    a package pulled in whatever its recommends named, transitively, and
+    nothing chose that, documented it, or could switch it off. Set
+    "option install_recommends 1" for apt's behaviour. Suggests were never
+    followed and still are not.
+  * Change: "Conflicts: X" with "Replaces: X" no longer makes a package an
+    update candidate for X. libsolv's Debian reader files Replaces under
+    obsoletes, and to libsolv an obsoletes is a supersede -- so every mail
+    transport agent was an upgrade path for every other, and a plain
+    "aept upgrade" could swap one for another nobody asked for. The pair
+    now means what Debian says it means: X must go for this package to be
+    installed, and this package may take X's files on the way. That
+    ordering -- install over, then remove what is left -- is aept's own,
+    since libsolv orders a conflict's removal first.
+  * New: "Replaces: X" on its own -- the file-move form, normally paired
+    with a versioned Breaks on a package split -- is honoured rather than
+    refused. Both packages stay installed, the path leaves X's file list
+    so removing X later does not delete it, and a package left owning no
+    files at all disappears: its postrm is called with "disappear
+    <overwriter> <version>" and its records are cleared. Breaks is not
+    read as a conflict for this purpose; a versioned Breaks is satisfied
+    by moving the other package on, as the field asks.
+  * New: aept parses package indexes itself, through libsolv's own
+    solvable API, instead of calling libsolvext's Debian reader. That
+    reader is what folded Replaces into obsoletes, and owning the parse
+    is what lets Replaces and Conflicts be kept as the packager wrote
+    them. It accepts the binary-package grammar -- names, version
+    relations, alternatives -- and refuses what it cannot represent,
+    dropping the package rather than silently weakening a dependency.
+    Verified field-for-field against the archive index and against
+    Debian trixie's 68,825 packages. libsolvext is no longer needed to
+    build or run aept.
+  * Fix: version comparison followed whatever libsolv had been built for.
+    Debian's package chooses Debian semantics; an upstream cmake build
+    defaults to RPM's, which orders 726 of 23,259 real Debian version
+    pairs differently -- "1.0.1-1" against "1.0+2-1" is an upgrade to one
+    and a downgrade to the other. aept now asks for Debian semantics and
+    refuses to start against a libsolv that cannot provide them.
+  * Fix: "aept mark manual --all" died in the subcommand's option parser
+    on glibc and worked on musl. Dispatching parsers stop at the first
+    non-option and leaf parsers permute; both reset with optind = 0.
+  * Fix: the signal handler could read a context that aept_cleanup() had
+    already freed.
+  * Fix: aept_architectures() returned -1 with no error recorded, and
+    handed back an array with a NULL in it when strdup() failed. api.c
+    now uses the allocators that cannot fail.
+  * Fix: aept show reported Installed-Size in bytes as kB, printed the
+    description twice, and named fields as libsolv had rendered them.
+    It now prints the candidate version (every version under -a), reads
+    the relationship fields from the control stanza as the packager
+    wrote them, and adds Section, Source, Maintainer and Download-Size.
+    aept list agrees with install on which version is the candidate.
+  * Fix: a download that succeeded erased the classification of one that
+    had failed earlier in the same call, so an update that lost a source
+    to a timeout reported nothing in particular. aept_last_error() is
+    now cleared once, when a call is entered, and set only by failures.
+    An update that lost any source reports AEPT_ERR_GENERAL rather than
+    passing up a per-source timeout that may have happened a successful
+    source ago, and whose choice depended on the order of the sources.
+  * New: libaept no longer ends its embedder's process on allocation
+    failure. A failed allocation unwinds to the public entry point, which
+    returns -1 with AEPT_ERR_NOMEM; the Python bindings raise
+    AeptNoMemory. Partial state is not rolled back, only the process
+    survives.
+  * New: "option clean_cache 0" makes clean leave the cache directory
+    alone, for a cache shared with something outside the root.
+  * New: "aept show" takes -a/--all to print every offered version.
+  * Tests: every relationship field has a contract test, every public
+    entry point is swept for allocation and I/O failure at every point,
+    and the suite runs under musl in a container (scripts/musl-build.sh),
+    which is how the version-comparison bug was found. The package build
+    runs the format and coverage gates.
+  * ABI: libaept goes from 0:3:0 to 1:0:0 (libaept1). aept_set_offline_root()
+    and aept_set_cache_dir() return int, being the only setters that can
+    fail; aept_pkg_info_t gained section, source, maintainer and
+    download_size; aept_show_all(), aept_pkg_info_list_t and
+    AEPT_ERR_NOMEM are added. The Python bindings expose the new fields,
+    show_all(), and AeptNoMemory.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Mon, 14 Sep 2026 11:40:29 +0300
+
 aept (0.4.1-1) unstable; urgency=medium
 
   * Fix: the connection cache never engaged against an HTTP/1.1 server
