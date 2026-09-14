@@ -229,12 +229,14 @@ static long sweep(const char *what, oom_call_fn call, int expect, int load_confi
             continue;
         }
         /*
-         * A reported failure must be one the caller can classify.
-         * AEPT_ERR_NOMEM is what the escape sets, and what a site using
-         * the aept_*() allocators produces; a site that calls malloc()
-         * directly may report its own error instead, which is honest.
-         * AEPT_ERR_NONE beside a -1 is not: it says the call failed and
-         * leaves nothing to read about why.
+         * AEPT_ERR_NOMEM is what the escape sets, and api.c uses the
+         * aept_*() allocators throughout, so an injected allocation
+         * failure that reaches the caller as -1 must carry it -- or a
+         * more specific code a site set on the way.  A -1 with nothing
+         * set is not wrong in general (aept.h documents it for a failure
+         * with no classification); here it means a plain malloc() has
+         * crept back into api.c and its failure never reached the
+         * escape.  That is how api_architectures() was found.
          */
         if (aept_last_error(ctx) == AEPT_ERR_NONE) {
             printf("#   %s: allocation %ld failed, returned -1, last_error is NONE\n", what, n);

@@ -102,7 +102,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
-exports **36** symbols: the 33 in `aept.h`, plus `aept_log()`,
+exports **38** symbols: the 35 in `aept.h`, plus `aept_log()`,
 `aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
 `libaept` like any other consumer. Before this it exported 139, including every
 internal helper, and `src/libfetch/` stayed hidden only because its names
@@ -111,7 +111,7 @@ link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
 hidden visibility does not apply.
 
 **The ABI baseline.** `tests/libaept.abi` records the ABI as *declarations*,
-not as names — 46 interfaces: the 35 `AEPT_API` functions, plus every type and
+not as names — 50 interfaces: the 38 exported functions, plus every type and
 enum in `aept.h`. `tests/test_abi_symbols.sh` checks it, and
 `tests/abi-declarations.sh` extracts the current one by preprocessing the
 headers with `-DAEPT_API=AEPT_EXPORT` (everything from `aept.h`, since it is
@@ -200,13 +200,12 @@ The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
   conditions a caller may want to act on differently — a timeout worth
   retrying, a trigger owed, an allocation that could not be met — and
   `AEPT_ERR_NONE` beside a non-zero return means the failure had no such
-  classification, not that the call succeeded. Filling that gap with a
-  catch-all was tried and reverted: `AEPT_ERR_GENERAL` tells a caller
-  exactly what `-1` already told them, and it *masked* the real problem
-  below by making every failure look alike. What `AEPT_OOM_ENTER` does
-  keep is clearing the field on entry, so a caller is never handed a
-  condition that happened to an earlier call on the same context;
-  `tests/test_oom.c` pins that
+  classification, not that the call succeeded. Do not fill that gap with
+  a catch-all: `AEPT_ERR_GENERAL` would tell a caller exactly what `-1`
+  already told them, and making every failure look alike hides the ones
+  that are misclassified. `AEPT_OOM_ENTER` clears the field on entry, so
+  a caller is never handed a condition that happened to an earlier call
+  on the same context; `tests/test_oom.c` pins that
 - Types use `_t` suffix: `aept_config_t`, `aept_source_t`
 - `_GNU_SOURCE` defined in configure.ac (needed for `unshare`, `CLONE_NEWUSER`)
 - License: MIT; file headers include SPDX and copyright. **Generated files are
@@ -258,6 +257,22 @@ run by Automake's harness.
   with the certificate it is given: the rejection tests hand it one that
   nothing trusts, and `test_tls_verify.sh` one signed by a CA the test
   minted itself and injected through `tlsget -C`.
+- **Every relationship field has a contract test**, because a resolver
+  that reads one of them slightly wrong fails silently. `test_depends.sh`
+  (version bounds both ways, the `<<` boundary, alternatives including
+  the fall-back to the second side), `test_provides.sh` (a dependency
+  satisfied by a virtual name, installing a virtual name, several
+  providers, a conflict reaching a provider), `test_conflicts.sh`
+  (versioned conflicts firing inside their range *and not outside it*,
+  `Breaks` satisfied by an upgrade), `test_weak_deps.sh`
+  (`Recommends`/`Suggests`), and for `Replaces` the three named under
+  clash.c. A fixture subtlety: a package's relationships once
+  *installed* come from its own control file via the status database —
+  `packages_stanza` sets only what the index offers, so a declaration
+  that must survive installation has to be in `make_pkg_tree`'s control
+  argument. An index-only `Provides` disappears exactly when the package
+  becomes the installed one, which is precisely when a conflict against
+  it has to see it.
 - Register new tests in `check_PROGRAMS` or `dist_check_SCRIPTS` in
   `tests/Makefile.am`; new headers go in `noinst_HEADERS` in the top-level
   `Makefile.am`, or `make distcheck` breaks.
@@ -340,11 +355,10 @@ which files slipped, but *which lines*. It reads whatever the `.gcda`
 already hold, so run `make coverage` first; add
 `COVERAGE_LINES_FLAGS=--branches` to list branches never taken as well.
 
-Use it rather than running `gcov` by hand and parsing the output, which
-has cost real time three times over. Text `.gcov` marks a partly-executed
-line **`5*`**, which a naive parser reads as *uncovered* — that sent me
-hunting a bug in a function the tests were exercising perfectly well. And
-gcov writes one file per object, so the libtool double-compile has to be
+Use it rather than running `gcov` by hand and parsing the text output.
+Text `.gcov` marks a partly-executed line **`5*`**, which a parser
+expecting a bare count reads as *uncovered* — a covered function then
+looks like a bug to chase. And gcov writes one file per object, so the libtool double-compile has to be
 unioned by hand or half the hits vanish. `coverage-report.py` parses
 gcov's **JSON** instead, which has exact counts and is already summed.
 
@@ -367,9 +381,9 @@ gate against the tier targets — it was built when most tiers were well short o
 target, and a check that is red from the first day is a check that gets ignored.
 The figures are measured at `-O0` (see the flag-ordering note further
 down; an optimised build reads about 2.3 points higher and is wrong).
-**Every tier is at or over its target** — security 90.3 against 90,
-transaction 85.0 against 85, plumbing 84.4 against 80, CLI 80.5 against a
-60 cap — and 85.0% overall. **Every security-tier file is over its 85%
+**Every tier is at or over its target** — security 91.2 against 90,
+transaction 86.5 against 85, plumbing 86.3 against 80, CLI 80.7 against a
+60 cap — and 86.7% overall. **Every security-tier file is over its 85%
 floor**, so all the floors are hard gates. The rule is unchanged: a file
 or tier dropping more than two points below its recorded figure fails, and
 so does a file slipping back under a floor it has reached.
@@ -439,7 +453,7 @@ Seven things about the measurement, each of which has cost a wrong number:
   more than it.
 
 Branch coverage is reported beside lines and never gated. It runs below
-lines (~11 points: 85.0 vs 73.6), and the gap sits where the error handling is — a tier whose lines climb while its
+lines (~10 points: 86.7 vs 76.4), and the gap sits where the error handling is — a tier whose lines climb while its
 branches do not is a tier whose new tests assert success and nothing else.
 
 ## Architecture
@@ -482,17 +496,18 @@ was always part of the API.
 `aept_set_offline_root()` and `aept_set_cache_dir()` **return `int`** — the
 only setters that do, being the only ones that allocate. `aept_last_error()`
 alone does not serve here: the header documents that field for a call that
-*returned non-zero*, which a `void` function never does, and
-nothing clears `last_error` again once a call has begun: **it is cleared
-exactly once, by the public entry point.** `download.c` used to reset it
-per transfer, which let a *success* erase an earlier failure — a partly
-failed `aept_update()` lost its `AEPT_ERR_TIMEOUT` to the next source
-and reported an unclassified failure, which the Python bindings turn
-into the wrong exception. The guard that replaced it was narrower than
-it looked (`aept_download()` is not exported, and every production
-caller is already inside an armed entry point), so the reset is simply
-gone. A failure keeps the previous
-value, so a caller that ignores the result carries on with the path it had.
+*returned non-zero*, which a `void` function never does. A failure keeps
+the previous value, so a caller that ignores the result carries on with
+the path it had.
+
+**`last_error` is cleared exactly once, by the public entry point**
+(`AEPT_OOM_ENTER`), and nothing clears it again once a call has begun:
+failures set it, successes leave it alone. `download.c` used to reset it
+per transfer, which let a success erase an earlier failure — an
+`aept_update()` that lost one source to a timeout and then fetched the
+next reported nothing in particular. `aept_download()` is not exported and
+every production caller is inside an armed entry point, so the reset is
+gone rather than guarded.
 
 Only the outermost entry point arms the jump (`AEPT_OOM_ENTER` /
 `AEPT_OOM_LEAVE`), so a nested call cannot overwrite a live `jmp_buf`, and
@@ -510,23 +525,27 @@ one of them left the other twenty with their `AEPT_OOM_ENTER`/`LEAVE`
 pair half-covered, the arming side exercised and the returning side never
 reached.
 
-The contract it asserts is deliberately not "every injected failure
-reports `AEPT_ERR_NOMEM`". The wrapper catches every allocation in aept's
-own objects, which is more than the `aept_*()` allocators, and a site
-calling `malloc()` directly may legitimately handle the failure itself or
-report an error of its own. What is *not* allowed is a `-1` beside
-`AEPT_ERR_NONE`: a failure the caller cannot classify. That is what
-caught `api_architectures()` returning `-1` with no error set — and, in
-the same function, an unchecked `strdup()` putting a NULL into the array
-it handed back, which is worse than an error return because it fails in
-the caller. `api.c` now uses the `aept_*()` allocators throughout; the
-one plain `malloc()` left is `aept_init()`'s own context, whose NULL
-return is the documented API.
+The wrapper catches every allocation in aept's own objects, not only
+the `aept_*()` allocators, and a site calling `malloc()` directly may
+handle the failure itself or report its own error. So the sweep does not
+demand `AEPT_ERR_NOMEM` from every injected failure. What it does refuse
+is a `-1` beside `AEPT_ERR_NONE` **after an injected allocation
+failure** — not because that pairing is wrong in general (see
+`last_error` under Coding Conventions: it is the documented answer for a
+failure with no classification), but because `api.c` uses the `aept_*()`
+allocators throughout, so any allocation failure there reaches the escape
+and sets `NOMEM`. A `-1`/`NONE` from this sweep therefore means a plain
+`malloc()` has crept back in. That is how `api_architectures()` was
+found returning `-1` with no error set, with an unchecked `strdup()`
+beside it putting a NULL into the array it handed back — a failure in
+the caller, which is worse than one in the callee. The one plain
+`malloc()` left is `aept_init()`'s own context, whose NULL return is the
+documented API. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)`
+into `calloc()` at `-O2`, and `aept_init()` is that shape.
 
 The sweeps are shallow for the transaction calls — that fixture has no
 packages and no network, so install and remove bail out after a handful
-of allocations. What they still prove is the contract at the entry point. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)` into
-`calloc()` at `-O2`, and `aept_init()` is that shape.
+of allocations. What they still prove is the contract at the entry point.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 
@@ -560,7 +579,7 @@ weakest part of the CLI, which a single 80.7% figure hid.
 
 **Key subsystems:**
 
-- **solver.c** — Wraps libsolv pool/repo/solver/transaction. `aept_solver_init()` calls **`pool_setdisttype(pool, DISTTYPE_DEB)` and fails if it cannot**. That is not cosmetic: `pool->disttype` selects the version comparison function, and the Debian and RPM ones disagree on **726 of the 23,259** adjacent pairs in Debian trixie's version strings — about 3% — with `+` the usual culprit (`1.0.1-1` against `1.0+2-1` is an upgrade to Debian and a downgrade to RPM). libsolv's default follows how *it* was built: Debian's package chooses DEB, an upstream cmake build defaults to RPM, so aept must not inherit it. A `-1` return means the library was compiled for a single, different disttype and every later comparison would be wrong, so init refuses. `tests/test_version_order.sh` pins it, and only bites on a non-Debian-default libsolv — which is what `scripts/musl-build.sh` provides, and how this was found. A test harness that builds its own pool (`test_deb.c`) must set it too; `pool_dep2str()` renders `|` and `<<` under DEB and ` or ` and `<` under RPM. Loads indexes via `aept_deb_add_packages()` (deb.c), not libsolv's own `repo_add_debpackages()`. Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `order_takeovers()` runs last on the step list — after `transaction_order()` and after `reorder_transaction()`, which rebuilds it — and moves the removal of a package that another package in the same transaction replaces to after that package's installation. libsolv orders a conflict's removal first and cannot be asked for the other order: its only primitive for "installs over, then removes" is obsoletes, which also confers update candidacy. `tests/test_takeover_order.sh` pins both directions, including that a *bare* conflict still removes first. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
+- **solver.c** — Wraps libsolv pool/repo/solver/transaction. **Recommends are not installed**: `SOLVER_FLAG_IGNORE_RECOMMENDED` is set unless `option install_recommends 1`. libsolv satisfies them by default — apt's behaviour — so before this `aept install` pulled in whatever a package recommended, transitively, with nothing having chosen that and no way to turn it off; a small root rarely wants it. `Suggests` is never followed either way. `tests/test_weak_deps.sh` pins both settings. `aept_solver_init()` calls **`pool_setdisttype(pool, DISTTYPE_DEB)` and fails if it cannot**. That is not cosmetic: `pool->disttype` selects the version comparison function, and the Debian and RPM ones disagree on **726 of the 23,259** adjacent pairs in Debian trixie's version strings — about 3% — with `+` the usual culprit (`1.0.1-1` against `1.0+2-1` is an upgrade to Debian and a downgrade to RPM). libsolv's default follows how *it* was built: Debian's package chooses DEB, an upstream cmake build defaults to RPM, so aept must not inherit it. A `-1` return means the library was compiled for a single, different disttype and every later comparison would be wrong, so init refuses. `tests/test_version_order.sh` pins it, and only bites on a non-Debian-default libsolv — which is what `scripts/musl-build.sh` provides, and how this was found. A test harness that builds its own pool (`test_deb.c`) must set it too; `pool_dep2str()` renders `|` and `<<` under DEB and ` or ` and `<` under RPM. Loads indexes via `aept_deb_add_packages()` (deb.c), not libsolv's own `repo_add_debpackages()`. Retrieves download filenames via `solvable_lookup_location()`. Max 64 repos. `order_takeovers()` runs last on the step list — after `transaction_order()` and after `reorder_transaction()`, which rebuilds it — and moves the removal of a package that another package in the same transaction replaces to after that package's installation. libsolv orders a conflict's removal first and cannot be asked for the other order: its only primitive for "installs over, then removes" is obsoletes, which also confers update candidacy. `tests/test_takeover_order.sh` pins both directions, including that a *bare* conflict still removes first. `aept_solver_resolve_install()` creates the whatprovides index *before* building the job, not only in `do_solve()`: the pin branch walks `FOR_PROVIDES` during job construction, and without the index that lookup segfaults — which it did, undetected, until the first test ever pinned a version and installed by name. Local files are also gated here against downgrades (see `--allow-downgrade`): an explicit solvable job is carried out by libsolv regardless of `SOLVER_FLAG_ALLOW_DOWNGRADE`, so the flag has to be enforced before the job exists.
 - **archive.c** — Two-level extraction (outer AR → inner tar), the `.deb`/`.ipk` container layout. Handles nested decompression with libarchive callbacks. Originally adapted from opkg and GPL-licensed; **rewritten from scratch and relicensed MIT in `4f0989d`** — do not reintroduce opkg code here. Compression support (gzip always; xz/bzip2/lz4/zstd compile-time via `HAVE_*`).
 - **install.c** — Orchestrates: load repos → solve → download → extract control → preinst → extract data → record file list → postinst → update status.
 - **remove.c** — Orchestrates: solve removal → prerm → delete files from .list → postrm → clean info dir → update status.
@@ -628,28 +647,25 @@ weakest part of the CLI, which a single 80.7% figure hid.
   trade. `tests/test_deb.c` pins the grammar and every refusal.
 
   `add_stanza()` makes **one pass** over the stanza, dispatching each
-  field by name. It was written on `aept_stanza_field()` first — a
-  *lookup*, called once per field — which meant seventeen scans per
-  stanza, and the absent fields were the expensive ones because a field
-  that is not there is found only at the end. That turned out **not** to
-  be the cost: the profile put it in allocation, 61 mallocs per stanza
-  against libsolv's 2, because the iterator copied every field name and
-  value including the ones nothing wanted. `aept_stanza_next_field()` is
-  therefore zero-copy — it points into the stanza — and
-  `aept_stanza_value()` is the only thing that allocates, called for the
-  fields worth keeping. Then the block reader above. Against libsolv,
-  per index load:
+  field by name, and `aept_stanza_next_field()` is zero-copy — it points
+  into the stanza — with `aept_stanza_value()` the only allocation,
+  made for the fields worth keeping. Each of those was a measured
+  change: the first version scanned the stanza once per field (seventeen
+  times, and absent fields cost a full scan each), and the first iterator
+  copied every name and value, 61 mallocs per stanza against libsolv's
+  2. With the block reader above, against libsolv per index load:
 
   |                     | glibc | musl  |
   |---------------------|-------|-------|
   | Aeltra, 502 pkgs    | 1.31x | 1.09x |
   | Debian, 68,825 pkgs | 1.11x | 0.80x |
 
-  **Measure before optimising here.** Three plausible diagnoses in a row
-  were wrong: the seventeen stanza scans were nearly free, a 28%
-  allocation cut bought ~10% and nothing at scale, and a bump allocator
-  showed allocation costs aept and libsolv *the same* -- the gap was the
-  extra copy, which nothing in the allocation numbers pointed to.
+  **Measure before optimising here** — the intuitive diagnoses were each
+  wrong: the seventeen scans were nearly free, a 28% cut in allocations
+  bought ~10% on the small index and nothing at scale, and a bump
+  allocator showed allocation costs aept and libsolv *the same*. The gap
+  was the extra copy of the index, which no allocation figure pointed
+  to.
 
   Equivalence with libsolv's reader was established against the real
   archive index (502 packages, 354 versioned relations, 3 alternatives):
