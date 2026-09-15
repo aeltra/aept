@@ -67,7 +67,29 @@ static void write_ar(const char *path, const struct ar_member *m, int n)
     fclose(fp);
 }
 
-/* Build a gzip-compressed tar holding one regular file. */
+/* Entries for every directory above `name`, as a package ships them:
+ * aept makes no directory it is not told about. */
+static void write_parent_dirs(struct archive *a, const char *name)
+{
+    char *path = aept_strdup(name);
+    char *p;
+
+    for (p = strchr(path, '/'); p; p = strchr(p + 1, '/')) {
+        struct archive_entry *e = archive_entry_new();
+
+        *p = '\0';
+        archive_entry_set_pathname(e, path);
+        archive_entry_set_filetype(e, AE_IFDIR);
+        archive_entry_set_perm(e, 0755);
+        archive_write_header(a, e);
+        archive_entry_free(e);
+        *p = '/';
+    }
+    free(path);
+}
+
+/* Build a gzip-compressed tar holding one regular file, with its
+ * directories. */
 static void *make_targz(const char *name, const char *content, size_t *out_len)
 {
     struct archive *a = archive_write_new();
@@ -80,6 +102,7 @@ static void *make_targz(const char *name, const char *content, size_t *out_len)
     archive_write_set_format_ustar(a);
     archive_write_open_memory(a, buf, cap, &used);
 
+    write_parent_dirs(a, name);
     e = archive_entry_new();
     archive_entry_set_pathname(e, name);
     archive_entry_set_size(e, (la_int64_t)strlen(content));
@@ -87,6 +110,42 @@ static void *make_targz(const char *name, const char *content, size_t *out_len)
     archive_entry_set_perm(e, 0644);
     archive_write_header(a, e);
     archive_write_data(a, content, strlen(content));
+    archive_entry_free(e);
+
+    archive_write_close(a);
+    archive_write_free(a);
+
+    *out_len = used;
+    return buf;
+}
+
+/* Like make_targz, for an entry of any type: a directory, a device
+ * node, a FIFO.  Content is written only for a regular file. */
+static void *make_targz_typed(const char *name, unsigned int filetype, const char *content,
+                              size_t *out_len)
+{
+    struct archive *a = archive_write_new();
+    struct archive_entry *e;
+    size_t cap = 64 * 1024;
+    void *buf = aept_malloc(cap);
+    size_t used = 0;
+
+    archive_write_add_filter_gzip(a);
+    archive_write_set_format_ustar(a);
+    archive_write_open_memory(a, buf, cap, &used);
+
+    write_parent_dirs(a, name);
+    e = archive_entry_new();
+    archive_entry_set_pathname(e, name);
+    archive_entry_set_filetype(e, filetype);
+    archive_entry_set_perm(e, filetype == AE_IFDIR ? 0755 : 0644);
+    if (filetype == AE_IFREG)
+        archive_entry_set_size(e, (la_int64_t)strlen(content));
+    if (filetype == AE_IFCHR || filetype == AE_IFBLK)
+        archive_entry_set_rdev(e, 0);
+    archive_write_header(a, e);
+    if (filetype == AE_IFREG)
+        archive_write_data(a, content, strlen(content));
     archive_entry_free(e);
 
     archive_write_close(a);
@@ -392,6 +451,9 @@ int main(void)
 
         unlink(payload);
         free(payload);
+        payload = fixture_path("dupdata.d/usr/bin/t.aept-new");
+        test_int_eq(access(payload, F_OK), -1, "no .aept-new is left beside an extracted file");
+        free(payload);
         path = fixture_path("dupdata.d/usr/bin");
         rmdir(path);
         free(path);
@@ -461,6 +523,237 @@ int main(void)
         rmdir(exdir);
         free(exdir);
         free(nested);
+    }
+
+    /* ── a file where a directory is: refused, directory kept ────── *
+     *
+     * The mirror image of the case above.  A file is written aside and
+     * renamed over its path, and rename() will not replace a directory
+     * with a file, so this is an explicit failure now rather than
+     * NO_OVERWRITE silently keeping the directory.
+     */
+    {
+        size_t len;
+        void *over = make_targz("usr/lib/keep", "file\n", &len);
+        char *exdir, *sub, *keep;
+        struct stat st;
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    over,    len                },
+        };
+
+        path = fixture_path("overdir.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("overdir.d");
+        mkdir(exdir, 0755);
+        sub = fixture_path("overdir.d/usr");
+        mkdir(sub, 0755);
+        free(sub);
+        sub = fixture_path("overdir.d/usr/lib");
+        mkdir(sub, 0755);
+        keep = fixture_path("overdir.d/usr/lib/keep");
+        mkdir(keep, 0755);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), -1,
+                        "a file over an existing directory is refused");
+            aept_ar_close(ar);
+        }
+        test_ok(lstat(keep, &st) == 0 && S_ISDIR(st.st_mode), "and the directory survives");
+        {
+            char *aside = fixture_path("overdir.d/usr/lib/keep.aept-new");
+            test_int_eq(access(aside, F_OK), -1, "with no .aept-new left beside it");
+            free(aside);
+        }
+
+        unlink(path);
+        free(path);
+        rmdir(keep);
+        free(keep);
+        rmdir(sub);
+        free(sub);
+        sub = fixture_path("overdir.d/usr");
+        rmdir(sub);
+        free(sub);
+        rmdir(exdir);
+        free(exdir);
+        free(over);
+    }
+
+    /* ── a directory where a file is: refused ────────────────────── *
+     *
+     * NO_OVERWRITE keeps the file and reports success; the entry after
+     * it is what the earlier case caught.  A package shipping only the
+     * directory has no such entry, so the directory itself has to be
+     * checked once it is "extracted".
+     */
+    {
+        size_t len;
+        void *dirent = make_targz_typed("usr/lib/blocker", AE_IFDIR, NULL, &len);
+        char *exdir, *sub, *blocker;
+        FILE *fp;
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    dirent,  len                },
+        };
+
+        path = fixture_path("dirover.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("dirover.d");
+        mkdir(exdir, 0755);
+        sub = fixture_path("dirover.d/usr");
+        mkdir(sub, 0755);
+        free(sub);
+        sub = fixture_path("dirover.d/usr/lib");
+        mkdir(sub, 0755);
+        blocker = fixture_path("dirover.d/usr/lib/blocker");
+        fp = fopen(blocker, "w");
+        if (fp) {
+            fputs("in the way\n", fp);
+            fclose(fp);
+        }
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), -1,
+                        "a directory over an existing regular file is refused");
+            aept_ar_close(ar);
+        }
+
+        unlink(path);
+        free(path);
+        unlink(blocker);
+        free(blocker);
+        rmdir(sub);
+        free(sub);
+        sub = fixture_path("dirover.d/usr");
+        rmdir(sub);
+        free(sub);
+        rmdir(exdir);
+        free(exdir);
+        free(dirent);
+    }
+
+    /* ── a file whose directory the package does not ship ─────────── *
+     *
+     * A package carries an entry for every directory it writes into;
+     * one that does not is not refused, and the directory is made on
+     * the way, as libarchive made it.  (It is then in nobody's file
+     * list, which is the package's fault and a small one.)
+     */
+    {
+        struct archive *a = archive_write_new();
+        struct archive_entry *e;
+        size_t cap = 64 * 1024, len = 0;
+        void *bare = aept_malloc(cap);
+        char *exdir;
+
+        archive_write_add_filter_gzip(a);
+        archive_write_set_format_ustar(a);
+        archive_write_open_memory(a, bare, cap, &len);
+        e = archive_entry_new();
+        archive_entry_set_pathname(e, "usr/bin/orphan");
+        archive_entry_set_filetype(e, AE_IFREG);
+        archive_entry_set_perm(e, 0644);
+        archive_entry_set_size(e, 3);
+        archive_write_header(a, e);
+        archive_write_data(a, "hi\n", 3);
+        archive_entry_free(e);
+        archive_write_close(a);
+        archive_write_free(a);
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    bare,    len                },
+        };
+
+        path = fixture_path("nodirs.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("nodirs.d");
+        mkdir(exdir, 0755);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), 0,
+                        "a file whose directory the package does not ship still extracts");
+            aept_ar_close(ar);
+        }
+        {
+            char *sub = fixture_path("nodirs.d/usr/bin/orphan");
+            test_int_eq(access(sub, F_OK), 0, "with the directory made on the way");
+            unlink(sub);
+            free(sub);
+            sub = fixture_path("nodirs.d/usr/bin");
+            rmdir(sub);
+            free(sub);
+            sub = fixture_path("nodirs.d/usr");
+            rmdir(sub);
+            free(sub);
+        }
+
+        unlink(path);
+        free(path);
+        rmdir(exdir);
+        free(exdir);
+        free(bare);
+    }
+
+    /* ── a device node: refused at listing and at extraction ──────── *
+     *
+     * Nothing a package ships should be a device, a FIFO or a socket;
+     * udev makes the nodes and the other two are runtime objects.  A
+     * package carrying one is refused up front -- the listing is what
+     * the clash check reads, before any script has run -- and, should
+     * one reach extraction anyway, there too.
+     */
+    {
+        size_t len;
+        void *dev = make_targz_typed("dev/thing", AE_IFCHR, NULL, &len);
+        char *exdir;
+        aept_ar_file_list_t fl;
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    dev,     len                },
+        };
+
+        path = fixture_path("device.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("device.d");
+        mkdir(exdir, 0755);
+
+        aept_ar_file_list_init(&fl);
+        test_int_eq(aept_ar_list_data_paths(path, 1, &fl), -1,
+                    "listing a data.tar with a device node is refused");
+        aept_ar_file_list_free(&fl);
+
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        if (ar) {
+            test_int_eq(aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL), -1,
+                        "and so is extracting it");
+            aept_ar_close(ar);
+        }
+
+        unlink(path);
+        free(path);
+        {
+            char *sub = fixture_path("device.d/dev/thing");
+            unlink(sub);
+            free(sub);
+            sub = fixture_path("device.d/dev");
+            rmdir(sub);
+            free(sub);
+        }
+        rmdir(exdir);
+        free(exdir);
+        free(dev);
     }
 
     free(ctrl);

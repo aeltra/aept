@@ -87,7 +87,9 @@ rc=$?
 $out"
 [ -f "$root/usr/bin/inside-link" ] \
     || fail "contained hardlink was not extracted"
-note "contained hardlink: installs normally"
+[ "$root/usr/bin/inside-link" -ef "$root/usr/bin/inside" ] \
+    || fail "the hardlink is not the same inode as its target -- it was copied, not linked"
+note "contained hardlink: installs normally, as a link"
 
 # ── a hardlink target that leaves the root must abort the install ────
 

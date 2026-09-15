@@ -13,6 +13,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "aept/archive.h"
 #include "aept/msg.h"
@@ -451,10 +453,137 @@ static struct archive *new_disk_writer(int flags)
 }
 
 /*
+ * Write a regular file's data to `path`, which must not exist yet.
+ *
+ * Not archive_read_extract2(): libarchive reports a write() that fails
+ * -- ENOSPC, EIO -- as ARCHIVE_WARN, the same code as "could not
+ * restore the mtime", and then ftruncate()s the file to the entry's
+ * full size, so a package that did not fit came out as a file of the
+ * right length with a hole where the data should be, and no error.
+ * Writing the blocks here makes every failure exact.  Directories,
+ * symlinks and hard links have no data and stay with libarchive.
+ *
+ * The metadata follows the extraction flags as libarchive would apply
+ * them: mode always, owner when ARCHIVE_EXTRACT_OWNER is set (as root;
+ * a failure there is an error, not a warning, since the file would be
+ * left with the wrong owner and possibly setuid), mtime when
+ * ARCHIVE_EXTRACT_TIME is.
+ */
+static int write_regular(struct archive *ar, struct archive_entry *entry, const char *path,
+                         int flags)
+{
+    const void *buff;
+    size_t len;
+    la_int64_t offset;
+    int fd, r;
+
+    /* A package ships an entry for every directory it writes into,
+     * but one that does not is not refused: the directory is made on
+     * the way, as libarchive made it.  It is in nobody's file list
+     * then, so it outlives its package; that is the package's fault
+     * and a small one. */
+    {
+        char *parent = aept_strdup(path);
+        char *slash = strrchr(parent, '/');
+
+        if (slash && slash != parent) {
+            *slash = '\0';
+            aept_file_mkdir_hier(parent, 0755);
+        }
+        free(parent);
+    }
+
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        aept_log_error("cannot create '%s': %s", path, strerror(errno));
+        return -1;
+    }
+
+    for (;;) {
+        const char *p;
+
+        r = archive_read_data_block(ar, &buff, &len, &offset);
+        if (r == ARCHIVE_EOF)
+            break;
+        if (r != ARCHIVE_OK) {
+            aept_log_error("cannot read '%s' from the archive: %s", path, archive_error_string(ar));
+            goto fail;
+        }
+        /* A sparse entry hands back blocks with gaps between them. */
+        if (lseek(fd, (off_t)offset, SEEK_SET) < 0) {
+            aept_log_error("cannot seek in '%s': %s", path, strerror(errno));
+            goto fail;
+        }
+        for (p = buff; len > 0;) {
+            ssize_t n = write(fd, p, len);
+
+            if (n < 0) {
+                if (errno == EINTR)
+                    continue;
+                aept_log_error("cannot write '%s': %s", path, strerror(errno));
+                goto fail;
+            }
+            p += n;
+            len -= (size_t)n;
+        }
+    }
+
+    /* A trailing hole, or a zero-length file, still needs its length. */
+    if (ftruncate(fd, (off_t)archive_entry_size(entry)) < 0) {
+        aept_log_error("cannot set the size of '%s': %s", path, strerror(errno));
+        goto fail;
+    }
+
+    if ((flags & ARCHIVE_EXTRACT_OWNER) &&
+        fchown(fd, (uid_t)archive_entry_uid(entry), (gid_t)archive_entry_gid(entry)) < 0) {
+        aept_log_error("cannot set the owner of '%s': %s", path, strerror(errno));
+        goto fail;
+    }
+    if (fchmod(fd, archive_entry_perm(entry) & 07777) < 0) {
+        aept_log_error("cannot set the mode of '%s': %s", path, strerror(errno));
+        goto fail;
+    }
+    if (flags & ARCHIVE_EXTRACT_TIME) {
+        struct timespec ts[2];
+
+        ts[0].tv_sec = archive_entry_mtime(entry);
+        ts[0].tv_nsec = archive_entry_mtime_nsec(entry);
+        ts[1] = ts[0];
+        if (futimens(fd, ts) < 0)
+            aept_log_debug("cannot set the mtime of '%s': %s", path, strerror(errno));
+    }
+
+    if (close(fd) < 0) {
+        aept_log_error("cannot write '%s': %s", path, strerror(errno));
+        fd = -1;
+        goto fail;
+    }
+    return 0;
+
+fail:
+    if (fd >= 0)
+        close(fd);
+    return -1;
+}
+
+/*
  * Extract every entry from `ar` into `dest`, using the given flags.
- * If `conffiles` is non-empty, matching entries are extracted with
- * `cf_suffix` appended to the destination (e.g. ".aept-new") and
- * without the NO_OVERWRITE flag.
+ *
+ * Every entry that is one inode -- a regular file, a symlink, a hard
+ * link -- is written aside as "<path>.aept-new" and renamed over its
+ * path, so the path holds either the old object or the whole new one
+ * and never a part of either: a write that fails half-way, for want
+ * of space or by a kill, leaves the old file where it was.  The rename
+ * also refuses on its own to put a file where a directory is, which
+ * libarchive would have done by rmdir'ing an empty one.  A directory
+ * is made in place, there being nothing to be atomic about, and then
+ * checked to be one: NO_OVERWRITE would keep a regular file found at
+ * its path without a word.  A device node, FIFO or socket is refused
+ * -- nothing a package ships should be one.
+ *
+ * If `conffiles` is non-empty, matching entries stay at their aside
+ * name (`cf_suffix`, ".aept-new"), for the conffile logic to decide
+ * whether they replace what the admin has.
  */
 static int do_extract_all(struct archive *ar, const char *dest, int flags, unsigned long *size,
                           aept_fileset_t *conffiles, const char *cf_suffix,
@@ -463,20 +592,15 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
     int ret = -1;
     char *keep_path = NULL;
     char *keep_link = NULL;
+    char *final_path = NULL;
+    char *aside_path = NULL;
+    int aside_is_cf = 0;
 
     struct archive *disk = new_disk_writer(flags);
     if (!disk)
         return -1;
 
     int have_cf = conffiles && conffiles->count > 0;
-    struct archive *cf_disk = NULL;
-    if (have_cf) {
-        cf_disk = new_disk_writer(flags & ~ARCHIVE_EXTRACT_NO_OVERWRITE);
-        if (!cf_disk) {
-            archive_write_free(disk);
-            return -1;
-        }
-    }
 
     for (;;) {
         int eof;
@@ -533,36 +657,65 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
             goto cleanup;
         }
 
-        if (is_cf && cf_suffix) {
-            const char *pathname = archive_entry_pathname(entry);
-            char *suffixed;
-            aept_asprintf(&suffixed, "%s%s", pathname, cf_suffix);
-            archive_entry_set_pathname(entry, suffixed);
-            free(suffixed);
+        unsigned int ftype = archive_entry_filetype(entry);
+        int is_dir = ftype == AE_IFDIR;
+        /* A hard link's header carries no type of its own. */
+        int is_hardlink = archive_entry_hardlink(entry) != NULL;
+
+        if (!is_dir && !is_hardlink && ftype != AE_IFREG && ftype != AE_IFLNK) {
+            aept_log_error("refusing '%s': a package may not ship a device, FIFO or socket",
+                           raw_path);
+            goto cleanup;
+        }
+
+        free(final_path);
+        free(aside_path);
+        final_path = aept_strdup(archive_entry_pathname(entry));
+        aside_path = NULL;
+
+        if (!is_dir) {
+            aept_asprintf(&aside_path, "%s%s", final_path, cf_suffix ? cf_suffix : ".aept-new");
+            aside_is_cf = is_cf;
+            /* Left by an earlier run that did not get to rename it. */
+            unlink(aside_path);
+            archive_entry_set_pathname(entry, aside_path);
         }
 
         aept_log_debug("extracting '%s'", archive_entry_pathname(entry));
 
-        int r = archive_read_extract2(ar, entry, is_cf ? cf_disk : disk);
-        if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
-                           archive_error_string(ar));
-            goto cleanup;
-        }
-        if (r == ARCHIVE_WARN) {
+        if (ftype == AE_IFREG && !is_hardlink) {
+            if (write_regular(ar, entry, aside_path, flags) < 0)
+                goto cleanup;
+        } else {
+            int r = archive_read_extract2(ar, entry, disk);
             struct stat st;
+            const char *written = is_dir ? final_path : aside_path;
 
-            /* The same code covers "could not restore the mtime" and
-             * "could not create the file at all" -- an entry below a
-             * path that is a regular file comes back this way.  Only
-             * the first is a warning. */
-            if (lstat(archive_entry_pathname(entry), &st) != 0) {
-                aept_log_error("failed to extract '%s': %s", archive_entry_pathname(entry),
-                               archive_error_string(ar));
+            if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
+                aept_log_error("failed to extract '%s': %s", final_path, archive_error_string(ar));
                 goto cleanup;
             }
-            aept_log_debug("warning extracting '%s': %s", archive_entry_pathname(entry),
-                           archive_error_string(ar));
+            /* ARCHIVE_WARN covers "could not restore the mtime" and
+             * "could not create the object at all" alike, so what is
+             * there is checked rather than the code.  For a directory
+             * that check is also what catches a regular file already
+             * at its path, which NO_OVERWRITE keeps and calls done. */
+            if (lstat(written, &st) != 0 || (is_dir && !S_ISDIR(st.st_mode))) {
+                aept_log_error("failed to extract '%s': %s", final_path,
+                               r == ARCHIVE_WARN ? archive_error_string(ar)
+                                                 : "not a directory after extraction");
+                goto cleanup;
+            }
+            if (r == ARCHIVE_WARN)
+                aept_log_debug("warning extracting '%s': %s", final_path, archive_error_string(ar));
+        }
+
+        /* Into place.  A conffile stays aside for conffile.c. */
+        if (!is_dir && !is_cf && rename(aside_path, final_path) != 0) {
+            aept_log_error("cannot move '%s' into place: %s", final_path,
+                           errno == EISDIR || errno == ENOTEMPTY ? "a directory is in the way"
+                                                                 : strerror(errno));
+            goto cleanup;
         }
 
         if (size)
@@ -585,10 +738,14 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
 
     ret = 0;
 cleanup:
+    /* A failed entry's aside copy, whole or partial, is not left for
+     * the next run to find; a conffile's is what the caller wants. */
+    if (ret != 0 && aside_path && !aside_is_cf)
+        unlink(aside_path);
+    free(final_path);
+    free(aside_path);
     free(keep_path);
     free(keep_link);
-    if (cf_disk)
-        archive_write_free(cf_disk);
     archive_write_free(disk);
     return ret;
 }
@@ -762,6 +919,15 @@ int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid, aept_ar_file_l
 
         if (!aept_archive_path_is_safe(path)) {
             aept_log_error("refusing unsafe archive path '%s'", path);
+            aept_ar_close(ar);
+            return -1;
+        }
+
+        /* Refused here, where the clash check reads the listing before
+         * any maintainer script has run, rather than at extraction.  A
+         * hard link's header carries no type of its own. */
+        if (!S_ISREG(st->st_mode) && !S_ISLNK(st->st_mode) && !archive_entry_hardlink(entry)) {
+            aept_log_error("refusing '%s': a package may not ship a device, FIFO or socket", path);
             aept_ar_close(ar);
             return -1;
         }
