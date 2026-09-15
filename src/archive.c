@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "aept/archive.h"
+#include "aept/listfile.h"
 #include "aept/msg.h"
 #include "aept/util.h"
 
@@ -958,12 +959,9 @@ int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream)
         const aept_ar_file_entry_t *e = &fl->entries[i];
         int r;
 
-        if (e->link_target)
-            r = fprintf(stream, "%s\t%#03o\t%s\n", e->path, e->mode, e->link_target);
-        else
-            r = fprintf(stream, "%s\t%#03o\n", e->path, e->mode);
+        r = aept_list_write_line(stream, e->path, e->mode, -1, -1, -1, NULL, e->link_target);
 
-        if (r <= 0)
+        if (r < 0)
             return -1;
     }
     return 0;

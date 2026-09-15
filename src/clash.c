@@ -15,6 +15,7 @@
 #include <solv/solvable.h>
 
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/archive.h"
 #include "aept/clash.h"
 #include "aept/deb.h"
@@ -280,9 +281,9 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
         const char *owner = taken->entries[i].owner;
         aept_fileset_t drop;
         char *list_path = NULL, *tmp_path = NULL;
-        FILE *in, *out;
-        char line[4096];
-        int failed = 0, kept = 0;
+        aept_list_t in;
+        FILE *out;
+        int have_in, failed = 0, kept = 0;
 
         /* Entries are grouped by owner as they are read, so an owner
          * already handled in an earlier pass is skipped here. */
@@ -301,51 +302,33 @@ void aept_clash_commit_takeovers(struct aept_ctx *ctx, aept_takeover_list_t *tak
         aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, owner);
         aept_asprintf(&tmp_path, "%s/%s.list.tmp", ctx->config.info_dir, owner);
 
-        in = fopen(list_path, "r");
-        out = in ? fopen(tmp_path, "w") : NULL;
-        if (!in || !out) {
+        have_in = aept_list_open(&in, list_path) == 0;
+        out = have_in ? fopen(tmp_path, "w") : NULL;
+        if (!have_in || !out) {
             aept_log_warning("cannot rewrite file list '%s': %s", list_path, strerror(errno));
             failed = 1;
         }
 
-        while (!failed && fgets(line, sizeof(line), in)) {
-            char *tab, keep[sizeof(line)];
-            const char *path;
+        while (!failed && aept_list_next(&in)) {
+            const aept_list_entry_t *e = &in.entry;
 
-            if (aept_fgets_is_truncated(line, sizeof(line))) {
-                aept_fgets_drain_line(in);
-                continue;
-            }
-
-            memcpy(keep, line, sizeof(keep));
-            keep[strcspn(keep, "\n")] = '\0';
-            tab = strchr(keep, '\t');
-            if (tab)
-                *tab = '\0';
-
-            path = keep;
-            while (path[0] == '.' && path[1] == '/')
-                path += 2;
-            while (path[0] == '/')
-                path++;
-
-            if (path[0] != '\0' && aept_fileset_contains(&drop, path))
+            if (e->stripped[0] != '\0' && aept_fileset_contains(&drop, e->stripped))
                 continue;
 
             /* Directories are shared and owned by everyone who ships
              * into them, so a list holding nothing else describes a
              * package that has no files left. */
-            if (tab && !S_ISDIR((mode_t)strtoul(tab + 1, NULL, 8)))
+            if (e->mode && !S_ISDIR((mode_t)e->mode))
                 kept++;
 
-            if (fputs(line, out) == EOF) {
+            if (fputs(e->raw, out) == EOF) {
                 failed = 1;
                 break;
             }
         }
 
-        if (in)
-            fclose(in);
+        if (have_in)
+            aept_list_close(&in);
         if (out && (ferror(out) | (fclose(out) != 0)))
             failed = 1;
 

@@ -711,6 +711,7 @@ weakest part of the CLI, which a single 80.7% figure hid.
   not how it prints, or the harness will certify a parser that is
   quietly wrong.
 
+- **listfile.c** — the per-package file list, `{info_dir}/{name}.list`, and the **only** code that parses or writes one. Seven readers used to split the line by hand (`remove.c`, `install.c`'s old-file read, `clash.c`'s takeover rewrite, `owner_index.c`, `api.c`'s `files` and `owns`, `trigger.c`), each with its own over-long-line handling; they all take `aept_list_next()` now, so a column is added in one place. The line is `path mode uid gid size sha256 [link]`, tab-separated, `-` for a column that does not apply; the two older shapes `path mode` and `path mode link` still read, a missing column reading as unknown (uid/gid/size −1, sha256 NULL) rather than zero. `entry.raw` is the whole line for a rewrite that keeps lines it does not touch. Nothing reads the link column: the clash check compares the *new* package's target against the symlink on disk, not against the list — which is why the column could move from third to seventh. `tests/test_listfile.c` pins every form; breaking the parser was shown to fail both it and the callers' tests.
 - **stanza.c** — reading fields back out of a control stanza. Two
   callers. deb.c parses an index with these, so this is where the format
   is actually read: `aept_stanza_foreach()` splits an index into stanzas

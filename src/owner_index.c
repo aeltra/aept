@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/owner_index.h"
 #include "aept/util.h"
 
@@ -107,31 +108,18 @@ static void array_append(aept_owner_entry_t **arr, int *count, int *alloc, const
 static void read_list_into(const char *list_path, const char *owner, aept_owner_entry_t **arr,
                            int *count, int *alloc)
 {
-    FILE *fp = fopen(list_path, "r");
-    if (!fp)
+    aept_list_t l;
+
+    if (aept_list_open(&l, list_path) < 0)
         return;
 
-    char buf[4096];
-    while (fgets(buf, sizeof(buf), fp)) {
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
+    while (aept_list_next(&l)) {
+        if (l.entry.stripped[0] == '\0')
             continue;
-        }
-
-        buf[strcspn(buf, "\n")] = '\0';
-
-        char *tab = strchr(buf, '\t');
-        if (tab)
-            *tab = '\0';
-
-        const char *p = strip_leading(buf);
-        if (p[0] == '\0')
-            continue;
-
-        array_append(arr, count, alloc, p, owner);
+        array_append(arr, count, alloc, l.entry.stripped, owner);
     }
 
-    fclose(fp);
+    aept_list_close(&l);
 }
 
 int aept_owner_index_build(struct aept_ctx *ctx, aept_owner_index_t *idx)

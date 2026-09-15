@@ -22,6 +22,7 @@
 
 #include "aept/aept.h"
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"
@@ -1158,10 +1159,9 @@ void aept_pkg_info_free(aept_pkg_info_t *info)
 static int api_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *count_out)
 {
     char *list_path = NULL;
-    FILE *fp;
-    char buf[4096];
+    aept_list_t l;
     char **paths = NULL;
-    int count = 0, alloc = 0;
+    int count = 0, alloc = 0, r;
 
     *paths_out = NULL;
     *count_out = 0;
@@ -1171,36 +1171,21 @@ static int api_files(aept_ctx_t *ctx, const char *name, char ***paths_out, int *
 
     aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
-    fp = fopen(list_path, "r");
+    r = aept_list_open(&l, list_path);
     free(list_path);
 
-    if (!fp)
+    if (r < 0)
         return 1;
 
-    while (fgets(buf, sizeof(buf), fp)) {
-        char *tab;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-        buf[strcspn(buf, "\n")] = '\0';
-
-        tab = strchr(buf, '\t');
-        if (tab)
-            *tab = '\0';
-
-        if (*buf == '\0')
-            continue;
-
+    while (aept_list_next(&l)) {
         if (count >= alloc) {
             alloc = alloc ? alloc * 2 : 64;
             paths = aept_realloc(paths, alloc * sizeof(char *));
         }
-        paths[count++] = aept_strdup(buf);
+        paths[count++] = aept_strdup(l.entry.path);
     }
 
-    fclose(fp);
+    aept_list_close(&l);
 
     *paths_out = paths;
     *count_out = count;
@@ -1263,38 +1248,23 @@ static int api_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *
     while ((ent = readdir(dir)) != NULL) {
         const char *dot;
         char *list_path = NULL;
-        FILE *fp;
-        char buf[4096];
+        aept_list_t l;
+        int r;
 
         dot = strrchr(ent->d_name, '.');
         if (!dot || strcmp(dot, ".list") != 0)
             continue;
 
         aept_asprintf(&list_path, "%s/%s", ctx->config.info_dir, ent->d_name);
-        fp = fopen(list_path, "r");
+        r = aept_list_open(&l, list_path);
         free(list_path);
 
-        if (!fp)
+        if (r < 0)
             continue;
 
-        while (fgets(buf, sizeof(buf), fp)) {
-            const char *entry;
-            char *tab;
+        while (aept_list_next(&l)) {
+            const char *entry = l.entry.stripped;
 
-            if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-                aept_fgets_drain_line(fp);
-                continue;
-            }
-            buf[strcspn(buf, "\n")] = '\0';
-
-            tab = strchr(buf, '\t');
-            if (tab)
-                *tab = '\0';
-
-            if (*buf == '\0')
-                continue;
-
-            entry = strip_leading(buf);
             if (*entry == '\0')
                 entry = ".";
 
@@ -1314,7 +1284,7 @@ static int api_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *
             }
         }
 
-        fclose(fp);
+        aept_list_close(&l);
     }
 
     closedir(dir);

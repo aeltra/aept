@@ -51,6 +51,7 @@ file src/verify.c               security
 file src/autoremove.c           transaction
 file src/conffile.c             transaction
 file src/install.c              transaction
+file src/listfile.c             transaction
 file src/owner_index.c          transaction
 file src/pin.c                  transaction
 file src/remove.c               transaction

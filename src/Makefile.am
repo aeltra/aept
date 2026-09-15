@@ -16,6 +16,7 @@ libaept_la_SOURCES = \
     script.c \
     index.c \
     install.c \
+    listfile.c \
     owner_index.c \
     remove.c \
     update.c \

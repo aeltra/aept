@@ -17,6 +17,7 @@
 
 #include "aept/aept.h"
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/conffile.h"
 #include "aept/config.h"
 #include "aept/msg.h"
@@ -45,8 +46,8 @@ static int dir_depth_cmp(const void *a, const void *b)
 int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *protected)
 {
     char *list_path = NULL;
-    FILE *fp;
-    char buf[4096];
+    aept_list_t l;
+    int r;
     aept_conffile_set_t conffiles;
     char **dirs = NULL;
     int n_dirs = 0;
@@ -58,42 +59,17 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *pr
 
     aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
-    fp = fopen(list_path, "r");
+    r = aept_list_open(&l, list_path);
     free(list_path);
 
-    if (!fp) {
+    if (r < 0) {
         aept_conffile_set_free(&conffiles);
         return 0;
     }
 
-    while (fgets(buf, sizeof(buf), fp)) {
-        char *path;
-        char *tab;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-
-        /* Format: path\tmode[\tsymlink_target]\n */
-        buf[strcspn(buf, "\n")] = '\0';
-
-        tab = strchr(buf, '\t');
-        if (tab)
-            *tab = '\0';
-
-        /* Parse mode to detect directories */
-        unsigned int mode = 0;
-        if (tab)
-            mode = (unsigned int)strtoul(tab + 1, NULL, 8);
-
-        path = buf;
-
-        /* Skip leading ./ */
-        while (path[0] == '.' && path[1] == '/')
-            path += 2;
-        while (path[0] == '/')
-            path++;
+    while (aept_list_next(&l)) {
+        const char *path = l.entry.stripped;
+        unsigned int mode = l.entry.mode;
 
         if (path[0] == '\0')
             continue;
@@ -143,7 +119,7 @@ int aept_remove_files(struct aept_ctx *ctx, const char *name, aept_fileset_t *pr
         free(full_path);
     }
 
-    fclose(fp);
+    aept_list_close(&l);
     aept_conffile_set_free(&conffiles);
 
     /* Remove directories deepest-first */

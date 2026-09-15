@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize test_marks test_api \
+    test_no_proxy test_validator test_url_sanitize test_marks test_listfile test_api \
     test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
     test_deb test_iofail \
     test_oom
@@ -74,6 +74,7 @@ threadrace_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 # here; util.c and msg.c supply the allocators and logging it calls into.
 test_archive_path_SOURCES = \
     test_archive_path.c \
+    $(top_srcdir)/src/listfile.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
@@ -101,6 +102,7 @@ test_config_root_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 test_archive_open_SOURCES = \
     test_archive_open.c \
+    $(top_srcdir)/src/listfile.c \
     $(top_srcdir)/src/archive.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
@@ -122,6 +124,7 @@ test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
 # listed here.
 test_trigger_entries_SOURCES = \
     test_trigger_entries.c \
+    $(top_srcdir)/src/listfile.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
@@ -181,6 +184,11 @@ test_api_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Links the library rather than individual modules: status.c's database
 # half pulls in the solver and through it libsolv.
+test_listfile_SOURCES = test_listfile.c
+test_listfile_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_listfile_LDADD = $(top_builddir)/src/libaept.la
+test_listfile_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
 test_marks_SOURCES = test_marks.c
 test_marks_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_marks_LDADD = $(top_builddir)/src/libaept.la

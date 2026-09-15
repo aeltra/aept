@@ -20,6 +20,7 @@ noinst_HEADERS = \
     include/aept/index.h \
     include/aept/install.h \
     include/aept/internal.h \
+    include/aept/listfile.h \
     include/aept/msg.h \
     include/aept/owner_index.h \
     include/aept/pin.h \

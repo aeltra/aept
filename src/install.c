@@ -18,6 +18,7 @@
 
 #include "aept/aept.h"
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/archive.h"
 #include "aept/clash.h"
 #include "aept/conffile.h"
@@ -543,22 +544,12 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
     aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
     {
-        FILE *lfp = fopen(list_path, "r");
-        if (lfp) {
-            char lbuf[4096];
-            while (fgets(lbuf, sizeof(lbuf), lfp)) {
-                char *tab;
-                if (aept_fgets_is_truncated(lbuf, sizeof(lbuf))) {
-                    aept_fgets_drain_line(lfp);
-                    continue;
-                }
-                lbuf[strcspn(lbuf, "\n")] = '\0';
-                tab = strchr(lbuf, '\t');
-                if (tab)
-                    *tab = '\0';
-                aept_fileset_add(&old_files, lbuf);
-            }
-            fclose(lfp);
+        aept_list_t l;
+
+        if (aept_list_open(&l, list_path) == 0) {
+            while (aept_list_next(&l))
+                aept_fileset_add(&old_files, l.entry.path);
+            aept_list_close(&l);
             have_old_files = 1;
         }
     }

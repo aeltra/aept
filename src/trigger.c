@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "aept/internal.h"
+#include "aept/listfile.h"
 #include "aept/msg.h"
 #include "aept/status.h"
 #include "aept/trigger.h"
@@ -87,41 +88,20 @@ static char *parent_dir(const char *path)
 int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx, const char *name)
 {
     char *list_path = NULL;
-    FILE *fp;
-    char buf[4096];
+    aept_list_t l;
+    int r;
 
     aept_asprintf(&list_path, "%s/%s.list", ctx->config.info_dir, name);
 
-    fp = fopen(list_path, "r");
+    r = aept_list_open(&l, list_path);
     free(list_path);
 
-    if (!fp)
+    if (r < 0)
         return 0;
 
-    while (fgets(buf, sizeof(buf), fp)) {
-        char *path, *tab;
-        unsigned int mode = 0;
-
-        if (aept_fgets_is_truncated(buf, sizeof(buf))) {
-            aept_fgets_drain_line(fp);
-            continue;
-        }
-
-        buf[strcspn(buf, "\n")] = '\0';
-
-        tab = strchr(buf, '\t');
-        if (tab) {
-            *tab = '\0';
-            mode = (unsigned int)strtoul(tab + 1, NULL, 8);
-        }
-
-        path = buf;
-
-        /* Strip leading ./ */
-        while (path[0] == '.' && path[1] == '/')
-            path += 2;
-        while (path[0] == '/')
-            path++;
+    while (aept_list_next(&l)) {
+        const char *path = l.entry.stripped;
+        unsigned int mode = l.entry.mode;
 
         if (path[0] == '\0')
             continue;
@@ -139,7 +119,7 @@ int aept_trigger_ctx_collect_dirs(struct aept_ctx *ctx, aept_trigger_ctx_t *tctx
         }
     }
 
-    fclose(fp);
+    aept_list_close(&l);
     return 0;
 }
 
