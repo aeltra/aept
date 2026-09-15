@@ -255,7 +255,7 @@ static int run_script3(struct aept_ctx *ctx, const char *script_dir, const char 
  * The two are separate because of what may have to happen in between
  * -- see remove_superseded().
  */
-static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *pool, Id p,
                               const char *old_version, aept_fileset_t *installed_files,
                               aept_owner_index_t *owners)
 {
@@ -283,9 +283,9 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         return -1;
 
     /* Extract control archive */
-    ctrl_ar = aept_ar_open_pkg_control_archive(ipk_path);
+    ctrl_ar = aept_ar_open_pkg_control_archive(pkg_path);
     if (!ctrl_ar) {
-        aept_log_error("failed to open control archive in '%s'", ipk_path);
+        aept_log_error("failed to open control archive in '%s'", pkg_path);
         goto cleanup;
     }
 
@@ -303,7 +303,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
      * and the owner index, so nothing the preinst does can change its
      * answer -- but the preinst's own effects would be left behind by
      * a refusal that came after it. */
-    r = aept_clash_check(ctx, ipk_path, pool, p, NULL, owners, &taken);
+    r = aept_clash_check(ctx, pkg_path, pool, p, NULL, owners, &taken);
     if (r != 0) {
         r = -1;
         goto cleanup;
@@ -324,9 +324,9 @@ static int do_install_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     aept_ar_file_list_t extracted;
     aept_ar_file_list_init(&extracted);
 
-    data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
+    data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
     if (!data_ar) {
-        aept_log_error("failed to open data archive in '%s'", ipk_path);
+        aept_log_error("failed to open data archive in '%s'", pkg_path);
         aept_ar_file_list_free(&extracted);
         r = -1;
         goto cleanup;
@@ -482,7 +482,7 @@ static void remove_info_files(struct aept_ctx *ctx, const char *name)
     }
 }
 
-static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *pool, Id p,
                               const char *old_version, const char *new_version,
                               aept_fileset_t *installed_files, aept_owner_index_t *owners)
 {
@@ -516,9 +516,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         goto cleanup;
 
     /* 1. Extract new control archive */
-    ctrl_ar = aept_ar_open_pkg_control_archive(ipk_path);
+    ctrl_ar = aept_ar_open_pkg_control_archive(pkg_path);
     if (!ctrl_ar) {
-        aept_log_error("failed to open control archive in '%s'", ipk_path);
+        aept_log_error("failed to open control archive in '%s'", pkg_path);
         goto cleanup;
     }
 
@@ -572,7 +572,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
     if (owners)
         aept_owner_index_drop_owner(owners, name);
 
-    r = aept_clash_check(ctx, ipk_path, pool, p, &old_files, owners, &taken);
+    r = aept_clash_check(ctx, pkg_path, pool, p, &old_files, owners, &taken);
     if (r != 0) {
         r = -1;
         goto cleanup_filesets;
@@ -616,9 +616,9 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *ipk_path, Pool *
         aept_fileset_sort(&cf_paths);
 
         /* 5c. Extract new data archive — conffiles get .aept-new suffix */
-        data_ar = aept_ar_open_pkg_data_archive(ipk_path, ctx->config.ignore_uid);
+        data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
         if (!data_ar) {
-            aept_log_error("failed to open data archive in '%s'", ipk_path);
+            aept_log_error("failed to open data archive in '%s'", pkg_path);
             aept_fileset_free(&cf_paths);
             aept_conffile_set_free(&new_cf);
             r = -1;
@@ -922,13 +922,13 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Tra
             continue;
         }
 
-        char *ipk_path = NULL;
+        char *pkg_path = NULL;
         int is_local = aept_solver_is_commandline(ctx->solver, avail);
 
         if (is_local) {
-            ipk_path = aept_strdup(aept_solver_commandline_path(ctx->solver, avail));
+            pkg_path = aept_strdup(aept_solver_commandline_path(ctx->solver, avail));
         } else {
-            r = aept_download_package(ctx, avail, pool, &ipk_path);
+            r = aept_download_package(ctx, avail, pool, &pkg_path);
             if (r < 0) {
                 had_error = 1;
                 if (ctx->config.keep_going)
@@ -937,12 +937,12 @@ static int do_reinstall(struct aept_ctx *ctx, const char **names, int count, Tra
             }
         }
 
-        r = do_upgrade_package(ctx, ipk_path, pool, avail, old_ver, old_ver, NULL, owners);
+        r = do_upgrade_package(ctx, pkg_path, pool, avail, old_ver, old_ver, NULL, owners);
         if (r == 0)
             r = configure_package(ctx, pkg_name, old_ver, "reinstalled");
         if (ctx->config.no_cache && !is_local)
-            unlink(ipk_path);
-        free(ipk_path);
+            unlink(pkg_path);
+        free(pkg_path);
         if (r < 0) {
             had_error = 1;
             if (!ctx->config.keep_going)
@@ -1088,9 +1088,9 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
     }
 
     /* Download phase */
-    char **ipk_paths = NULL;
-    ipk_paths = aept_malloc(trans->steps.count * sizeof(char *));
-    memset(ipk_paths, 0, trans->steps.count * sizeof(char *));
+    char **pkg_paths = NULL;
+    pkg_paths = aept_malloc(trans->steps.count * sizeof(char *));
+    memset(pkg_paths, 0, trans->steps.count * sizeof(char *));
 
     if (!ctx->config.no_cache) {
         for (i = 0; i < trans->steps.count; i++) {
@@ -1108,11 +1108,11 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 continue;
 
             if (aept_solver_is_commandline(ctx->solver, p)) {
-                ipk_paths[i] = aept_strdup(aept_solver_commandline_path(ctx->solver, p));
+                pkg_paths[i] = aept_strdup(aept_solver_commandline_path(ctx->solver, p));
                 continue;
             }
 
-            r = aept_download_package(ctx, p, pool, &ipk_paths[i]);
+            r = aept_download_package(ctx, p, pool, &pkg_paths[i]);
             if (r < 0)
                 goto download_cleanup;
 
@@ -1189,15 +1189,15 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
         } else if ((type & 0xf0) == SOLVER_TRANSACTION_INSTALL) {
             if (ctx->config.no_cache) {
                 if (aept_solver_is_commandline(ctx->solver, p)) {
-                    ipk_paths[i] = aept_strdup(aept_solver_commandline_path(ctx->solver, p));
+                    pkg_paths[i] = aept_strdup(aept_solver_commandline_path(ctx->solver, p));
                 } else {
-                    r = aept_download_package(ctx, p, pool, &ipk_paths[i]);
+                    r = aept_download_package(ctx, p, pool, &pkg_paths[i]);
                     if (r < 0)
                         goto fileset_cleanup;
                 }
             }
 
-            if (!ipk_paths[i])
+            if (!pkg_paths[i])
                 continue;
 
             const char *old_ver = NULL;
@@ -1219,11 +1219,11 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
                 }
 
                 aept_trigger_ctx_collect_dirs(ctx, &tctx, pkg_name);
-                r = do_upgrade_package(ctx, ipk_paths[i], pool, p, old_ver, new_ver,
+                r = do_upgrade_package(ctx, pkg_paths[i], pool, p, old_ver, new_ver,
                                        &installed_files, &owner_idx);
                 fileset_sorted = 0;
             } else {
-                r = do_install_package(ctx, ipk_paths[i], pool, p, NULL, &installed_files,
+                r = do_install_package(ctx, pkg_paths[i], pool, p, NULL, &installed_files,
                                        &owner_idx);
                 fileset_sorted = 0;
             }
@@ -1280,9 +1280,9 @@ int aept_op_install(struct aept_ctx *ctx, const char **names, int name_count,
 
             if (ctx->config.no_cache) {
                 if (!aept_solver_is_commandline(ctx->solver, p))
-                    unlink(ipk_paths[i]);
-                free(ipk_paths[i]);
-                ipk_paths[i] = NULL;
+                    unlink(pkg_paths[i]);
+                free(pkg_paths[i]);
+                pkg_paths[i] = NULL;
             }
         }
     }
@@ -1319,8 +1319,8 @@ owner_cleanup:
 
 download_cleanup:
     for (i = 0; i < trans->steps.count; i++)
-        free(ipk_paths[i]);
-    free(ipk_paths);
+        free(pkg_paths[i]);
+    free(pkg_paths);
 
 out:
     free(local_ids);

@@ -44,7 +44,7 @@ void aept_takeover_list_free(aept_takeover_list_t *tl);
  * taken: receives the 7.6.1 takeovers; required, since granting one
  *   without recording it is what leaves a stale .list behind.
  * Returns the number of clashes (0 = OK), -1 on error. */
-int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+int aept_clash_check(struct aept_ctx *ctx, const char *pkg_path, Pool *pool, Id p,
                      aept_fileset_t *old_files, aept_owner_index_t *owners,
                      aept_takeover_list_t *taken);
 

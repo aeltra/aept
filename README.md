@@ -109,7 +109,7 @@ example including log, display and confirm callbacks.
 
 A `.aeltra` package is an `ar` archive containing `debian-binary`,
 `control.tar.gz` and `data.tar.gz` — the same container layout as
-`.deb` and `.ipk`, so the familiar tools work on it.
+`.deb`, so the familiar tools work on it.
 
 ## Documentation
 

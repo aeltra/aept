@@ -1,4 +1,4 @@
-/* archive.h - IPK archive extraction via libarchive
+/* archive.h - .aeltra package extraction via libarchive
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -17,10 +17,10 @@ struct aept_ar {
     int extract_flags;
 };
 
-/* Open the control tarball from an IPK file. */
+/* Open the control tarball from a package file. */
 struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename);
 
-/* Open the data tarball from an IPK file.
+/* Open the data tarball from a package file.
  * If ignore_uid is non-zero, extracted files will not preserve ownership. */
 struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid);
 
@@ -35,7 +35,7 @@ int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes)
  * control archive.  For the solver, which must describe a package
  * named on the command line before any temporary directory exists.
  * The caller frees the result. */
-int aept_ar_read_control(const char *ipk_path, char **out);
+int aept_ar_read_control(const char *pkg_path, char **out);
 
 typedef struct {
     char *path;        /* archive path, e.g. "./usr/bin/foo" */
@@ -67,10 +67,10 @@ int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *s
                         aept_fileset_t *conffiles, const char *cf_suffix,
                         aept_ar_file_list_t *recorded);
 
-/* List non-directory file paths from an IPK's data archive.
+/* List non-directory file paths from a package's data archive.
  * Fills out with archive paths (e.g. "./usr/bin/foo") and symlink
  * targets where applicable.  Returns 0 on success, -1 on error. */
-int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid, aept_ar_file_list_t *out);
+int aept_ar_list_data_paths(const char *pkg_path, int ignore_uid, aept_ar_file_list_t *out);
 
 /* Close and free archive handle. */
 void aept_ar_close(struct aept_ar *ar);

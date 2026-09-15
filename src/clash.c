@@ -119,7 +119,7 @@ static int same_dir_symlink(const char *disk_path, const char *archive_target)
     return is_dir;
 }
 
-int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id p,
+int aept_clash_check(struct aept_ctx *ctx, const char *pkg_path, Pool *pool, Id p,
                      aept_fileset_t *old_files, aept_owner_index_t *owners,
                      aept_takeover_list_t *taken)
 {
@@ -131,7 +131,7 @@ int aept_clash_check(struct aept_ctx *ctx, const char *ipk_path, Pool *pool, Id 
 
     aept_ar_file_list_init(&new_files);
 
-    if (aept_ar_list_data_paths(ipk_path, ctx->config.ignore_uid, &new_files) < 0) {
+    if (aept_ar_list_data_paths(pkg_path, ctx->config.ignore_uid, &new_files) < 0) {
         aept_ar_file_list_free(&new_files);
         return -1;
     }

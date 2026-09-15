@@ -1,4 +1,4 @@
-/* archive.c - IPK archive extraction via libarchive
+/* archive.c - .aeltra package extraction via libarchive
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -412,12 +412,12 @@ static struct archive *open_inner(struct archive *outer)
 }
 
 /*
- * Open an inner tar from an IPK, seeking to the AR member whose name
+ * Open an inner tar from a package, seeking to the AR member whose name
  * starts with `prefix` (e.g. "control.tar" or "data.tar").
  */
-static struct archive *open_ipk_tar(const char *ipk_path, const char *prefix)
+static struct archive *open_pkg_tar(const char *pkg_path, const char *prefix)
 {
-    struct archive *outer = open_outer(ipk_path);
+    struct archive *outer = open_outer(pkg_path);
     if (!outer)
         return NULL;
 
@@ -756,7 +756,7 @@ cleanup:
 
 struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
 {
-    struct archive *inner = open_ipk_tar(filename, "control.tar");
+    struct archive *inner = open_pkg_tar(filename, "control.tar");
     if (!inner)
         return NULL;
 
@@ -769,7 +769,7 @@ struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
 
 struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid)
 {
-    struct archive *inner = open_ipk_tar(filename, "data.tar");
+    struct archive *inner = open_pkg_tar(filename, "data.tar");
     if (!inner)
         return NULL;
 
@@ -826,7 +826,7 @@ int aept_ar_copy_to_stream(struct aept_ar *ar, FILE *stream, uint64_t max_bytes)
  * that a hostile archive cannot spend memory here. */
 #define MAX_CONTROL_SIZE (1024 * 1024)
 
-int aept_ar_read_control(const char *ipk_path, char **out)
+int aept_ar_read_control(const char *pkg_path, char **out)
 {
     struct aept_ar *ar;
     struct archive_entry *entry;
@@ -836,9 +836,9 @@ int aept_ar_read_control(const char *ipk_path, char **out)
 
     *out = NULL;
 
-    ar = aept_ar_open_pkg_control_archive(ipk_path);
+    ar = aept_ar_open_pkg_control_archive(pkg_path);
     if (!ar) {
-        aept_log_error("failed to open control archive in '%s'", ipk_path);
+        aept_log_error("failed to open control archive in '%s'", pkg_path);
         return -1;
     }
 
@@ -868,7 +868,7 @@ int aept_ar_read_control(const char *ipk_path, char **out)
     aept_ar_close(ar);
 
     if (!found)
-        aept_log_error("no control file in '%s'", ipk_path);
+        aept_log_error("no control file in '%s'", pkg_path);
     if (r < 0) {
         free(buf);
         return -1;
@@ -895,9 +895,9 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl)
     aept_ar_file_list_init(fl);
 }
 
-int aept_ar_list_data_paths(const char *ipk_path, int ignore_uid, aept_ar_file_list_t *out)
+int aept_ar_list_data_paths(const char *pkg_path, int ignore_uid, aept_ar_file_list_t *out)
 {
-    struct aept_ar *ar = aept_ar_open_pkg_data_archive(ipk_path, ignore_uid);
+    struct aept_ar *ar = aept_ar_open_pkg_data_archive(pkg_path, ignore_uid);
     if (!ar)
         return -1;
 

@@ -268,7 +268,7 @@ int main(void)
         free(path);
     }
 
-    /* ── absent member: the other early-return in open_ipk_tar ───── */
+    /* ── absent member: the other early-return in open_pkg_tar ───── */
     {
         struct ar_member m[] = {
             {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
