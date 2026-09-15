@@ -8,14 +8,18 @@
 
 #include <archive.h>
 #include <archive_entry.h>
+#include <solv/chksum.h>
+#include <solv/repo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "aept/internal.h"
 #include "aept/archive.h"
 #include "aept/msg.h"
+#include "aept/sums.h"
 #include "aept/util.h"
 
 #include "test.h"
@@ -754,6 +758,312 @@ int main(void)
         rmdir(exdir);
         free(exdir);
         free(dev);
+    }
+
+    /* ── what an extraction records about each file ──────────────── *
+     *
+     * Size and digest of a regular file as written, owner and group as
+     * they are on disk afterwards (the extracting user, with ownership
+     * not restored), nothing of either for a directory or a symlink,
+     * and a hard link's second name with the first name's digest.
+     */
+    {
+        struct archive *a = archive_write_new();
+        struct archive_entry *e;
+        size_t cap = 64 * 1024, len = 0;
+        void *tar = aept_malloc(cap);
+        aept_ar_file_list_t rec;
+        char *exdir;
+        int i, ifile = -1, ilink = -1, isym = -1, idir = -1;
+
+        archive_write_add_filter_gzip(a);
+        archive_write_set_format_ustar(a);
+        archive_write_open_memory(a, tar, cap, &len);
+        write_parent_dirs(a, "usr/bin/x");
+        e = archive_entry_new();
+        archive_entry_set_pathname(e, "usr/bin/a");
+        archive_entry_set_filetype(e, AE_IFREG);
+        archive_entry_set_perm(e, 0755);
+        archive_entry_set_size(e, 6);
+        archive_write_header(a, e);
+        archive_write_data(a, "hello\n", 6);
+        archive_entry_free(e);
+        e = archive_entry_new();
+        archive_entry_set_pathname(e, "usr/bin/b");
+        archive_entry_set_filetype(e, AE_IFREG);
+        archive_entry_set_hardlink(e, "usr/bin/a");
+        archive_entry_set_size(e, 0);
+        archive_write_header(a, e);
+        archive_entry_free(e);
+        e = archive_entry_new();
+        archive_entry_set_pathname(e, "usr/bin/l");
+        archive_entry_set_filetype(e, AE_IFLNK);
+        archive_entry_set_symlink(e, "a");
+        archive_entry_set_perm(e, 0777);
+        archive_write_header(a, e);
+        archive_entry_free(e);
+        archive_write_close(a);
+        archive_write_free(a);
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    tar,     len                },
+        };
+
+        path = fixture_path("record.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("record.d");
+        mkdir(exdir, 0755);
+
+        aept_ar_file_list_init(&rec);
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        test_int_eq(ar ? aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, &rec) : -1, 0,
+                    "a file, a hard link, a symlink and directories extract");
+        if (ar)
+            aept_ar_close(ar);
+
+        for (i = 0; i < rec.count; i++) {
+            if (strcmp(rec.entries[i].path, "usr/bin/a") == 0)
+                ifile = i;
+            if (strcmp(rec.entries[i].path, "usr/bin/b") == 0)
+                ilink = i;
+            if (strcmp(rec.entries[i].path, "usr/bin/l") == 0)
+                isym = i;
+            if (strcmp(rec.entries[i].path, "usr/bin/") == 0)
+                idir = i;
+        }
+        test_ok(ifile >= 0 && ilink >= 0 && isym >= 0 && idir >= 0, "all four are recorded");
+        if (ifile >= 0) {
+            test_int_eq((int)rec.entries[ifile].size, 6, "the file's size is recorded");
+            test_str_eq(rec.entries[ifile].sha256,
+                        "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+                        "and its digest, as written");
+            test_int_eq((int)rec.entries[ifile].uid, (int)getuid(),
+                        "its owner is what is on disk: the extracting user");
+            test_int_eq((int)rec.entries[ifile].gid, (int)getgid(), "and so is its group");
+        }
+        if (ilink >= 0) {
+            test_str_eq(rec.entries[ilink].sha256,
+                        "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+                        "the hard link carries the first name's digest");
+            test_int_eq((int)rec.entries[ilink].size, 6, "and its size");
+        }
+        if (isym >= 0) {
+            test_ok(rec.entries[isym].sha256 == NULL, "a symlink has no digest");
+            test_int_eq((int)rec.entries[isym].size, -1, "and no size");
+            test_str_eq(rec.entries[isym].link_target, "a", "but its target");
+        }
+        if (idir >= 0) {
+            test_ok(rec.entries[idir].sha256 == NULL, "a directory has no digest");
+            test_int_eq((int)rec.entries[idir].size, -1, "and no size");
+            test_int_eq((int)rec.entries[idir].uid, (int)getuid(), "but an owner");
+        }
+        aept_ar_file_list_free(&rec);
+
+        /* ── against a shipped sha256sums ─────────────────────────── *
+         *
+         * With the packager's digests in hand, a file that matches
+         * goes into place, a file that does not never does, and a
+         * list that disagrees with the archive in either direction
+         * refuses the whole package.
+         */
+        {
+            aept_sums_t sums;
+            char *sums_path = fixture_path("sha256sums");
+            char *fa = fixture_path("record.d/usr/bin/a");
+            char *fb = fixture_path("record.d/usr/bin/b");
+            char *fl = fixture_path("record.d/usr/bin/l");
+            char *aside = fixture_path("record.d/usr/bin/a.aept-new");
+            FILE *fp;
+            const char *good = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";
+            const char *bad = "0000000000000000000000000000000000000000000000000000000000000000";
+            struct {
+                const char *text;
+                int want;
+                const char *label;
+            } cases[] = {
+                {"GOOD  usr/bin/a\nGOOD  usr/bin/b\n",                      0,  "matching digests: extracts"                       },
+                {"BAD  usr/bin/a\nGOOD  usr/bin/b\n",                       -1, "a wrong digest: refused"                          },
+                {"GOOD  usr/bin/b\n",                                       -1, "a file missing from the list: refused"            },
+                {"GOOD  usr/bin/a\nGOOD  usr/bin/b\nGOOD  usr/bin/extra\n", -1,
+                 "a listed file the archive lacks: refused"                                                                        },
+                {"GOOD  usr/bin/a\n",                                       -1, "a hard link's name missing from the list: refused"},
+                /* Counts balance here -- one unlisted, one phantom -- so
+                 * only the per-file check can refuse it. */
+                {"GOOD  usr/bin/b\nGOOD  usr/bin/phantom\n",                -1,
+                 "an unlisted file is refused even when the counts balance"                                                        },
+            };
+
+            for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+                char text[512], *o = text;
+                const char *t = cases[i].text;
+                int r;
+
+                while (*t) {
+                    if (strncmp(t, "GOOD", 4) == 0) {
+                        o += sprintf(o, "%s", good);
+                        t += 4;
+                    } else if (strncmp(t, "BAD", 3) == 0) {
+                        o += sprintf(o, "%s", bad);
+                        t += 3;
+                    } else {
+                        *o++ = *t++;
+                    }
+                }
+                *o = '\0';
+                fp = fopen(sums_path, "w");
+                fputs(text, fp);
+                fclose(fp);
+
+                unlink(fa);
+                unlink(fb);
+                unlink(fl);
+                test_int_eq(aept_sums_load(sums_path, &sums), 0, "the case's list loads");
+                ar = aept_ar_open_pkg_data_archive(path, 1);
+                if (ar) {
+                    aept_ar_set_sums(ar, &sums);
+                    r = aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, NULL);
+                    aept_ar_close(ar);
+                } else {
+                    r = -2;
+                }
+                test_int_eq(r, cases[i].want, cases[i].label);
+                if (i == 1) {
+                    test_int_eq(access(fa, F_OK), -1, "the mismatching file never went into place");
+                    test_int_eq(access(aside, F_OK), -1, "and no .aept-new is left of it");
+                }
+                aept_sums_free(&sums);
+            }
+
+            unlink(sums_path);
+            free(sums_path);
+            unlink(fa);
+            unlink(fb);
+            unlink(fl);
+            free(fa);
+            free(fb);
+            free(fl);
+            free(aside);
+        }
+
+        unlink(path);
+        free(path);
+        {
+            char *sub = fixture_path("record.d/usr/bin");
+            rmdir(sub);
+            free(sub);
+            sub = fixture_path("record.d/usr");
+            rmdir(sub);
+            free(sub);
+        }
+        rmdir(exdir);
+        free(exdir);
+        free(tar);
+    }
+
+    /* ── a sparse entry's holes are part of its digest ────────────── *
+     *
+     * libarchive hands a sparse file back as data blocks with gaps
+     * between them; the file on disk has zeros there, and so must the
+     * digest, or a file with a hole would never verify.  The recorded
+     * digest is compared with one taken over the bytes on disk.
+     */
+    {
+        struct archive *a = archive_write_new();
+        struct archive_entry *e;
+        size_t cap = 64 * 1024, len = 0;
+        void *tar = aept_malloc(cap);
+        aept_ar_file_list_t rec;
+        char *exdir, *fpath;
+        int i, isparse = -1;
+
+        archive_write_set_format_pax(a);
+        archive_write_add_filter_gzip(a);
+        archive_write_open_memory(a, tar, cap, &len);
+        write_parent_dirs(a, "usr/lib/x");
+        e = archive_entry_new();
+        archive_entry_set_pathname(e, "usr/lib/sparse");
+        archive_entry_set_filetype(e, AE_IFREG);
+        archive_entry_set_perm(e, 0644);
+        archive_entry_set_size(e, 8192);
+        archive_entry_sparse_add_entry(e, 4096, 5);
+        archive_write_header(a, e);
+        archive_write_data(a, "hello", 5);
+        archive_entry_free(e);
+        archive_write_close(a);
+        archive_write_free(a);
+
+        struct ar_member m[] = {
+            {"debian-binary",  deb_bin, sizeof(deb_bin) - 1},
+            {"control.tar.gz", ctrl,    ctrl_len           },
+            {"data.tar.gz",    tar,     len                },
+        };
+
+        path = fixture_path("sparse.aeltra");
+        write_ar(path, m, 3);
+        exdir = fixture_path("sparse.d");
+        mkdir(exdir, 0755);
+
+        aept_ar_file_list_init(&rec);
+        ar = aept_ar_open_pkg_data_archive(path, 1);
+        test_int_eq(ar ? aept_ar_extract_all(ar, exdir, NULL, NULL, NULL, &rec) : -1, 0,
+                    "a sparse entry extracts");
+        if (ar)
+            aept_ar_close(ar);
+        for (i = 0; i < rec.count; i++)
+            if (strcmp(rec.entries[i].path, "usr/lib/sparse") == 0)
+                isparse = i;
+
+        fpath = fixture_path("sparse.d/usr/lib/sparse");
+        {
+            /* The digest of the bytes on disk, the way a verifier
+             * would take it. */
+            FILE *fp = fopen(fpath, "rb");
+            Chksum *chk = solv_chksum_create(REPOKEY_TYPE_SHA256);
+            char buf[4096], hex[65];
+            const unsigned char *d;
+            int dlen = 0, n;
+            long total = 0;
+
+            if (fp) {
+                while ((n = (int)fread(buf, 1, sizeof(buf), fp)) > 0) {
+                    solv_chksum_add(chk, buf, n);
+                    total += n;
+                }
+                fclose(fp);
+            }
+            d = solv_chksum_get(chk, &dlen);
+            for (i = 0; i < dlen; i++)
+                sprintf(hex + 2 * i, "%02x", d[i]);
+            hex[64] = '\0';
+            solv_chksum_free(chk, NULL);
+
+            test_int_eq((int)total, 8192, "the file on disk has its full length");
+            test_ok(isparse >= 0, "and is recorded");
+            if (isparse >= 0) {
+                test_int_eq((int)rec.entries[isparse].size, 8192, "with that size");
+                test_str_eq(rec.entries[isparse].sha256, hex,
+                            "and the digest of the bytes on disk, holes included");
+            }
+        }
+        aept_ar_file_list_free(&rec);
+
+        unlink(fpath);
+        free(fpath);
+        unlink(path);
+        free(path);
+        {
+            char *sub = fixture_path("sparse.d/usr/lib");
+            rmdir(sub);
+            free(sub);
+            sub = fixture_path("sparse.d/usr");
+            rmdir(sub);
+            free(sub);
+        }
+        rmdir(exdir);
+        free(exdir);
+        free(tar);
     }
 
     free(ctrl);

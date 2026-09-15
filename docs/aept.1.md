@@ -596,7 +596,12 @@ inspect packages:
 >
 > - *pkg.control* — control metadata
 >
-> - *pkg.list* — list of installed files
+> - *pkg.list* — the files the package installed, one per line: path,
+>   mode, uid, gid, size, sha256 and, for a symlink, its target, tab
+>   separated; size and sha256 are recorded for regular files and are
+>   "-" otherwise. The digest is the one the package shipped in its
+>   *sha256sums*, or the digest of what was written when it shipped
+>   none.
 >
 > - *pkg.conffiles* — conffile paths and MD5 checksums
 >

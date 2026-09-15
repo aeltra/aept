@@ -16,6 +16,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <solv/chksum.h>
+#include <solv/repo.h>
+
 #include "aept/archive.h"
 #include "aept/listfile.h"
 #include "aept/msg.h"
@@ -470,12 +473,21 @@ static struct archive *new_disk_writer(int flags)
  * left with the wrong owner and possibly setuid), mtime when
  * ARCHIVE_EXTRACT_TIME is.
  */
+/* What write_regular() records about the file it wrote. */
+struct written {
+    long uid, gid;
+    long long size;
+    char sha256[65];
+};
+
 static int write_regular(struct archive *ar, struct archive_entry *entry, const char *path,
-                         int flags)
+                         int flags, struct written *w)
 {
     const void *buff;
     size_t len;
     la_int64_t offset;
+    Chksum *chk = NULL;
+    struct stat st;
     int fd, r;
 
     /* A package ships an entry for every directory it writes into,
@@ -500,6 +512,13 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
         return -1;
     }
 
+    /* Hashed as it goes by: the bytes are in hand, so the digest costs
+     * no second read.  A sparse entry's holes are zeros to the digest
+     * as they are to a reader, so they are fed to it as such. */
+    chk = solv_chksum_create(REPOKEY_TYPE_SHA256);
+    la_int64_t hashed = 0;
+    static const char zeros[4096];
+
     for (;;) {
         const char *p;
 
@@ -515,6 +534,14 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
             aept_log_error("cannot seek in '%s': %s", path, strerror(errno));
             goto fail;
         }
+        while (hashed < offset) {
+            int n = offset - hashed > (la_int64_t)sizeof(zeros) ? (int)sizeof(zeros)
+                                                                : (int)(offset - hashed);
+            solv_chksum_add(chk, zeros, n);
+            hashed += n;
+        }
+        solv_chksum_add(chk, buff, (int)len);
+        hashed += (la_int64_t)len;
         for (p = buff; len > 0;) {
             ssize_t n = write(fd, p, len);
 
@@ -533,6 +560,13 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
     if (ftruncate(fd, (off_t)archive_entry_size(entry)) < 0) {
         aept_log_error("cannot set the size of '%s': %s", path, strerror(errno));
         goto fail;
+    }
+    while (hashed < archive_entry_size(entry)) {
+        la_int64_t left = archive_entry_size(entry) - hashed;
+        int n = left > (la_int64_t)sizeof(zeros) ? (int)sizeof(zeros) : (int)left;
+
+        solv_chksum_add(chk, zeros, n);
+        hashed += n;
     }
 
     if ((flags & ARCHIVE_EXTRACT_OWNER) &&
@@ -554,6 +588,28 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
             aept_log_debug("cannot set the mtime of '%s': %s", path, strerror(errno));
     }
 
+    /* What is recorded is what is on disk, owner included: with the
+     * owner not restored, the file is the extracting user's, and a
+     * record saying otherwise would make every file verify wrong. */
+    if (fstat(fd, &st) < 0) {
+        aept_log_error("cannot stat '%s': %s", path, strerror(errno));
+        goto fail;
+    }
+    w->uid = (long)st.st_uid;
+    w->gid = (long)st.st_gid;
+    w->size = (long long)st.st_size;
+    {
+        int dlen = 0;
+        const unsigned char *d = solv_chksum_get(chk, &dlen);
+        int i;
+
+        for (i = 0; i < dlen && i < 32; i++)
+            sprintf(w->sha256 + 2 * i, "%02x", d[i]);
+        w->sha256[64] = '\0';
+    }
+    solv_chksum_free(chk, NULL);
+    chk = NULL;
+
     if (close(fd) < 0) {
         aept_log_error("cannot write '%s': %s", path, strerror(errno));
         fd = -1;
@@ -562,6 +618,8 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
     return 0;
 
 fail:
+    if (chk)
+        solv_chksum_free(chk, NULL);
     if (fd >= 0)
         close(fd);
     return -1;
@@ -588,14 +646,17 @@ fail:
  */
 static int do_extract_all(struct archive *ar, const char *dest, int flags, unsigned long *size,
                           aept_fileset_t *conffiles, const char *cf_suffix,
-                          aept_ar_file_list_t *recorded)
+                          aept_ar_file_list_t *recorded, const aept_sums_t *sums)
 {
     int ret = -1;
     char *keep_path = NULL;
     char *keep_link = NULL;
+    char *keep_hardlink = NULL;
+    char *entry_name = NULL;
     char *final_path = NULL;
     char *aside_path = NULL;
     int aside_is_cf = 0;
+    int sums_matched = 0;
 
     struct archive *disk = new_disk_writer(flags);
     if (!disk)
@@ -620,7 +681,12 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
          * that `aept remove` could not clean up.  Real packages never
          * have consecutive dots in entry pathnames.
          */
-        const char *raw_path = archive_entry_pathname(entry);
+        /* The entry's own name.  Copied, because rewrite_all_paths()
+         * and the aside rename below replace the entry's pathname,
+         * and a pointer into it would name garbage from then on. */
+        free(entry_name);
+        entry_name = aept_strdup(archive_entry_pathname(entry));
+        const char *raw_path = entry_name;
         if (!aept_archive_path_is_safe(raw_path)) {
             aept_log_error("refusing unsafe archive path '%s'", raw_path);
             goto cleanup;
@@ -632,10 +698,14 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
          * .list file without re-opening the archive.
          */
         unsigned int keep_mode = 0;
+        free(keep_hardlink);
+        keep_hardlink = NULL;
         if (recorded) {
             const struct stat *st = archive_entry_stat(entry);
             keep_mode = (unsigned int)st->st_mode;
             keep_path = aept_strdup(raw_path);
+            if (archive_entry_hardlink(entry))
+                keep_hardlink = aept_strdup(archive_entry_hardlink(entry));
             if (S_ISLNK(st->st_mode)) {
                 const char *tgt = archive_entry_symlink(entry);
                 if (!tgt || !aept_symlink_target_is_recordable(tgt))
@@ -684,9 +754,26 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
 
         aept_log_debug("extracting '%s'", archive_entry_pathname(entry));
 
+        struct written w = {-1, -1, -1, ""};
+        const char *shipped = sums ? aept_sums_lookup(sums, raw_path) : NULL;
+
         if (ftype == AE_IFREG && !is_hardlink) {
-            if (write_regular(ar, entry, aside_path, flags) < 0)
+            if (write_regular(ar, entry, aside_path, flags, &w) < 0)
                 goto cleanup;
+            /* The packager's digest is the one that matters: a file
+             * that does not match it is not what was built, whatever
+             * went wrong on the way, and does not go into place. */
+            if (sums) {
+                if (!shipped) {
+                    aept_log_error("'%s' is not in the package's sha256sums", raw_path);
+                    goto cleanup;
+                }
+                if (strcmp(shipped, w.sha256) != 0) {
+                    aept_log_error("'%s' does not match the package's sha256sums", raw_path);
+                    goto cleanup;
+                }
+                sums_matched++;
+            }
         } else {
             int r = archive_read_extract2(ar, entry, disk);
             struct stat st;
@@ -709,6 +796,35 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
             }
             if (r == ARCHIVE_WARN)
                 aept_log_debug("warning extracting '%s': %s", final_path, archive_error_string(ar));
+
+            w.uid = (long)st.st_uid;
+            w.gid = (long)st.st_gid;
+            if (is_hardlink) {
+                /* Its header carries no mode either; the file it
+                 * names does. */
+                keep_mode = (unsigned int)st.st_mode;
+                /* Another name for a file already written: the same
+                 * content, so the same digest, from the shipped list
+                 * or from the first name's record. */
+                const char *d = shipped;
+                int i;
+
+                if (!d && recorded && keep_hardlink)
+                    for (i = 0; i < recorded->count && !d; i++)
+                        if (strcmp(recorded->entries[i].path, keep_hardlink) == 0)
+                            d = recorded->entries[i].sha256;
+                if (sums && !shipped) {
+                    aept_log_error("'%s' is not in the package's sha256sums", raw_path);
+                    goto cleanup;
+                }
+                if (d) {
+                    strncpy(w.sha256, d, 64);
+                    w.sha256[64] = '\0';
+                }
+                w.size = (long long)st.st_size;
+                if (sums)
+                    sums_matched++;
+            }
         }
 
         /* Into place.  A conffile stays aside for conffile.c. */
@@ -731,10 +847,23 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
             recorded->entries[recorded->count].path = keep_path;
             recorded->entries[recorded->count].link_target = keep_link;
             recorded->entries[recorded->count].mode = keep_mode;
+            recorded->entries[recorded->count].uid = w.uid;
+            recorded->entries[recorded->count].gid = w.gid;
+            recorded->entries[recorded->count].size = w.size;
+            recorded->entries[recorded->count].sha256 = w.sha256[0] ? aept_strdup(w.sha256) : NULL;
             recorded->count++;
             keep_path = NULL;
             keep_link = NULL;
         }
+    }
+
+    /* Every listed file was seen, or the list and the archive disagree
+     * -- a package that asserts a digest for a file it does not ship
+     * is as broken as one whose file does not match. */
+    if (sums && sums_matched != sums->count) {
+        aept_log_error("the package's sha256sums lists %d file(s) the data archive does not have",
+                       sums->count - sums_matched);
+        goto cleanup;
     }
 
     ret = 0;
@@ -747,6 +876,8 @@ cleanup:
     free(aside_path);
     free(keep_path);
     free(keep_link);
+    free(keep_hardlink);
+    free(entry_name);
     archive_write_free(disk);
     return ret;
 }
@@ -764,8 +895,14 @@ struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = inner;
     ar->extract_flags = ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+    ar->sums = NULL;
 
     return ar;
+}
+
+void aept_ar_set_sums(struct aept_ar *ar, const aept_sums_t *sums)
+{
+    ar->sums = sums;
 }
 
 struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid)
@@ -776,6 +913,7 @@ struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_u
 
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = inner;
+    ar->sums = NULL;
     ar->extract_flags = ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_TIME |
                         ARCHIVE_EXTRACT_UNLINK | ARCHIVE_EXTRACT_NO_OVERWRITE |
                         ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
@@ -815,6 +953,7 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename)
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = reader;
     ar->extract_flags = 0;
+    ar->sums = NULL;
     return ar;
 }
 
@@ -891,6 +1030,7 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl)
     for (int i = 0; i < fl->count; i++) {
         free(fl->entries[i].path);
         free(fl->entries[i].link_target);
+        free(fl->entries[i].sha256);
     }
     free(fl->entries);
     aept_ar_file_list_init(fl);
@@ -946,6 +1086,10 @@ int aept_ar_list_data_paths(const char *pkg_path, int ignore_uid, aept_ar_file_l
         out->entries[out->count].path = aept_strdup(path);
         out->entries[out->count].link_target = target ? aept_strdup(target) : NULL;
         out->entries[out->count].mode = (unsigned int)st->st_mode;
+        out->entries[out->count].uid = -1;
+        out->entries[out->count].gid = -1;
+        out->entries[out->count].size = -1;
+        out->entries[out->count].sha256 = NULL;
         out->count++;
     }
 
@@ -959,7 +1103,8 @@ int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream)
         const aept_ar_file_entry_t *e = &fl->entries[i];
         int r;
 
-        r = aept_list_write_line(stream, e->path, e->mode, -1, -1, -1, NULL, e->link_target);
+        r = aept_list_write_line(stream, e->path, e->mode, e->uid, e->gid, e->size, e->sha256,
+                                 e->link_target);
 
         if (r < 0)
             return -1;
@@ -971,7 +1116,8 @@ int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *s
                         aept_fileset_t *conffiles, const char *cf_suffix,
                         aept_ar_file_list_t *recorded)
 {
-    return do_extract_all(ar->ar, prefix, ar->extract_flags, size, conffiles, cf_suffix, recorded);
+    return do_extract_all(ar->ar, prefix, ar->extract_flags, size, conffiles, cf_suffix, recorded,
+                          ar->sums);
 }
 
 void aept_ar_close(struct aept_ar *ar)

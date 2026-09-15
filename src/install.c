@@ -33,6 +33,7 @@
 #include "aept/script.h"
 #include "aept/solver.h"
 #include "aept/status.h"
+#include "aept/sums.h"
 #include "aept/trigger.h"
 #include "aept/install.h"
 #include "aept/util.h"
@@ -251,6 +252,30 @@ static int run_script3(struct aept_ctx *ctx, const char *script_dir, const char 
 }
 
 /*
+ * The package's shipped digests, if it has any.  -1 when it has a
+ * sha256sums that cannot be read: a digest list that is there and
+ * wrong is not one to trust half of, so the package is refused.
+ */
+static int load_sums(const char *tmpdir, const char *name, aept_sums_t *sums, int *have)
+{
+    char *path = NULL;
+    int r;
+
+    aept_asprintf(&path, "%s/sha256sums", tmpdir);
+    r = aept_sums_load(path, sums);
+    free(path);
+
+    if (r < 0) {
+        aept_log_error("refusing '%s': its sha256sums cannot be read", name);
+        return -1;
+    }
+    *have = r == 0;
+    if (r == 1)
+        aept_log_debug("%s ships no sha256sums; recording what was written", name);
+    return 0;
+}
+
+/*
  * Unpack a package: everything up to, and not including, its postinst.
  * Leaves it recorded as "unpacked"; configure_package() does the rest.
  * The two are separate because of what may have to happen in between
@@ -265,9 +290,12 @@ static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
     struct aept_ar *ctrl_ar = NULL;
     struct aept_ar *data_ar = NULL;
     aept_takeover_list_t taken;
+    aept_sums_t sums;
+    int have_sums = 0;
     char *tmpdir = NULL;
 
     aept_takeover_list_init(&taken);
+    aept_sums_init(&sums);
 
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_error("refusing to install package with unsafe name '%s'", name);
@@ -325,6 +353,13 @@ static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
     aept_ar_file_list_t extracted;
     aept_ar_file_list_init(&extracted);
 
+    if (load_sums(tmpdir, name, &sums, &have_sums) < 0) {
+        aept_ar_file_list_free(&extracted);
+        aept_run_script(ctx, tmpdir, NULL, "postrm", "abort-install", NULL);
+        r = -1;
+        goto cleanup;
+    }
+
     data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
     if (!data_ar) {
         aept_log_error("failed to open data archive in '%s'", pkg_path);
@@ -332,6 +367,8 @@ static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
         r = -1;
         goto cleanup;
     }
+    if (have_sums)
+        aept_ar_set_sums(data_ar, &sums);
 
     char *extract_root = aept_config_root_path(&ctx->config, "/");
     r = aept_ar_extract_all(data_ar, extract_root, NULL, NULL, NULL, &extracted);
@@ -446,6 +483,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
 
 cleanup:
     aept_takeover_list_free(&taken);
+    aept_sums_free(&sums);
     free(list_path);
 
     /* Clean up tmpdir */
@@ -496,11 +534,14 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
     char *list_path = NULL;
     aept_conffile_set_t old_cf;
     aept_takeover_list_t taken;
+    aept_sums_t sums;
+    int have_sums = 0;
     int have_old_cf = 0;
     int is_reinstall = old_version && new_version && strcmp(old_version, new_version) == 0;
     int r = -1;
 
     aept_takeover_list_init(&taken);
+    aept_sums_init(&sums);
 
     if (!aept_pkg_name_is_safe(name)) {
         aept_log_error("refusing to upgrade package with unsafe name '%s'", name);
@@ -607,6 +648,12 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
         aept_fileset_sort(&cf_paths);
 
         /* 5c. Extract new data archive — conffiles get .aept-new suffix */
+        if (load_sums(tmpdir, name, &sums, &have_sums) < 0) {
+            aept_fileset_free(&cf_paths);
+            aept_conffile_set_free(&new_cf);
+            goto abort_upgrade;
+        }
+
         data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
         if (!data_ar) {
             aept_log_error("failed to open data archive in '%s'", pkg_path);
@@ -615,6 +662,8 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
             r = -1;
             goto cleanup_filesets;
         }
+        if (have_sums)
+            aept_ar_set_sums(data_ar, &sums);
 
         char *extract_root = aept_config_root_path(&ctx->config, "/");
         r = aept_ar_extract_all(data_ar, extract_root, NULL, cf_paths.count > 0 ? &cf_paths : NULL,
@@ -800,6 +849,7 @@ cleanup_filesets:
 
 cleanup:
     aept_takeover_list_free(&taken);
+    aept_sums_free(&sums);
     aept_ar_file_list_free(&extracted);
     if (have_old_cf)
         aept_conffile_set_free(&old_cf);

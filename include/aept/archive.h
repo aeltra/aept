@@ -10,12 +10,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "aept/sums.h"
 #include "aept/util.h"
 
 struct aept_ar {
     struct archive *ar;
     int extract_flags;
+    const aept_sums_t *sums; /* the package's shipped digests, or NULL */
 };
+
+/* Give a data archive the package's shipped sha256sums: every regular
+ * file is then checked against them before it goes into place, and a
+ * file missing from either side is an error. */
+void aept_ar_set_sums(struct aept_ar *ar, const aept_sums_t *sums);
 
 /* Open the control tarball from a package file. */
 struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename);
@@ -41,6 +48,9 @@ typedef struct {
     char *path;        /* archive path, e.g. "./usr/bin/foo" */
     char *link_target; /* NULL if not a symlink */
     unsigned int mode; /* st_mode from the archive header */
+    long uid, gid;     /* as on disk after extraction; -1 when not extracted */
+    long long size;    /* regular files, as on disk; -1 otherwise */
+    char *sha256;      /* regular files and hard links; NULL otherwise */
 } aept_ar_file_entry_t;
 
 typedef struct {
@@ -52,8 +62,8 @@ typedef struct {
 void aept_ar_file_list_init(aept_ar_file_list_t *fl);
 void aept_ar_file_list_free(aept_ar_file_list_t *fl);
 
-/* Write a collected file list to stream in .list format, i.e.
- * "<path>\t<mode>[\t<symlink_target>]\n".  Returns 0 on success. */
+/* Write a collected file list to stream in .list format (see
+ * listfile.h).  Returns 0 on success. */
 int aept_ar_file_list_write(const aept_ar_file_list_t *fl, FILE *stream);
 
 /* Extract all files to a directory.

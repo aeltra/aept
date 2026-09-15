@@ -206,6 +206,49 @@ make_pkg_scripts() {
     rm -rf "$_d"
 }
 
+# make_pkg_sums <out.aeltra> <name> <version> <extra-control> <payload-dir> [sums-file]
+#
+# make_pkg_tree with a sha256sums member in the control archive, as the
+# Aeltra build tool ships it: one "<sha256>  <path>" line per regular
+# file, computed over <payload-dir>.  A sums file given as the sixth
+# argument is shipped instead, verbatim -- for a package whose list
+# lies about its contents.
+make_pkg_sums() {
+    _out=$1 _name=$2 _ver=$3 _extra=$4 _tree=$5 _sums=${6:-}
+
+    case $_out in
+        /*) ;;
+         *) _out=$PWD/$_out ;;
+    esac
+    rm -f "$_out"
+
+    _d=$(mktemp -d) || fail "mktemp failed"
+    mkdir -p "$_d/c"
+
+    {
+        printf 'Package: %s\nVersion: %s\nArchitecture: all\nMaintainer: t <t@example.invalid>\n' \
+            "$_name" "$_ver"
+        [ -n "$_extra" ] && printf '%s\n' "$_extra"
+        printf 'Description: aept test fixture\n'
+    } > "$_d/c/control"
+
+    if [ -n "$_sums" ]; then
+        cp "$_sums" "$_d/c/sha256sums"
+    else
+        ( cd "$_tree" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | xargs -r sha256sum ) \
+            > "$_d/c/sha256sums" || fail "sha256sum failed"
+    fi
+
+    tar czf "$_d/control.tar.gz" -C "$_d/c" control sha256sums || fail "tar control"
+    tar czf "$_d/data.tar.gz"    -C "$_tree" .                 || fail "tar data"
+    printf '2.0\n' > "$_d/debian-binary"
+
+    ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
+        || fail "ar failed for $_out"
+
+    rm -rf "$_d"
+}
+
 # packages_stanza <name> <version> <aeltra-file> [extra] — emit one
 # Packages entry.  The solver resolves from this stanza, not from the
 # control inside the package, so dependency fields ("Depends: lib")

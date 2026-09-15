@@ -30,6 +30,7 @@ noinst_HEADERS = \
     include/aept/deb.h \
     include/aept/stanza.h \
     include/aept/status.h \
+    include/aept/sums.h \
     include/aept/trigger.h \
     include/aept/update.h \
     include/aept/util.h \

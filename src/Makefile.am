@@ -22,6 +22,7 @@ libaept_la_SOURCES = \
     update.c \
     deb.c \
     stanza.c \
+    sums.c \
     status.c \
     trigger.c \
     util.c \

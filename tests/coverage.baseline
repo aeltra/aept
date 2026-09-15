@@ -32,32 +32,33 @@
 #
 # tier <name>       lines <hit>/<total> branches <hit>/<total>
 # file <path>       lines <hit>/<total> branches <hit>/<total>
-tier security               lines 1338/1476 branches   786/973
-tier transaction            lines 2209/2503 branches 1231/1624
-tier plumbing               lines 2366/2737 branches 1491/1947
+tier security               lines 1497/1638 branches  876/1073
+tier transaction            lines 2239/2534 branches 1240/1636
+tier plumbing               lines 2365/2737 branches 1489/1947
 tier cli                    lines   657/792 branches   281/378
 
-file src/archive.c          lines   420/489 branches   228/301
-file src/clash.c            lines   153/174 branches   102/150
+file src/archive.c          lines   506/577 branches   275/355
+file src/clash.c            lines   154/174 branches   104/150
 file src/clearsign.c        lines     52/55 branches     26/28
 file src/deb.c              lines   286/295 branches   178/202
 file src/download.c         lines   128/144 branches     62/72
 file src/index.c            lines     39/44 branches     28/38
+file src/sums.c             lines     72/74 branches     41/46
 file src/update.c           lines   167/180 branches    93/106
 file src/validator.c        lines     76/78 branches     57/62
 file src/verify.c           lines     17/17 branches     12/14
 file src/autoremove.c       lines    95/109 branches     49/72
 file src/conffile.c         lines   167/191 branches    81/116
-file src/install.c          lines   603/691 branches   352/468
-file src/listfile.c         lines     71/71 branches     54/64
-file src/owner_index.c      lines   104/111 branches     50/66
+file src/install.c          lines   632/722 branches   363/480
+file src/listfile.c         lines     71/71 branches     50/64
+file src/owner_index.c      lines   105/111 branches     51/66
 file src/pin.c              lines     74/85 branches     39/48
-file src/remove.c           lines   166/187 branches    88/116
+file src/remove.c           lines   166/187 branches    89/116
 file src/script.c           lines     32/34 branches     24/30
 file src/solver.c           lines   311/358 branches   180/226
 file src/status.c           lines   263/312 branches   146/192
 file src/trigger.c          lines   323/354 branches   168/226
-file src/api.c              lines   638/676 branches   349/460
+file src/api.c              lines   638/676 branches   348/460
 file src/clean.c            lines     26/28 branches     16/18
 file src/config.c           lines   204/237 branches    93/130
 file src/libfetch/common.c  lines   402/487 branches   236/305
@@ -66,7 +67,7 @@ file src/libfetch/fetch.c   lines   111/134 branches    90/118
 file src/libfetch/http.c    lines   449/549 branches   348/445
 file src/libfetch/pctdecode.c lines     21/22 branches     27/30
 file src/msg.c              lines   100/105 branches     58/78
-file src/stanza.c           lines   205/211 branches   148/174
+file src/stanza.c           lines   204/211 branches   147/174
 file src/util.c             lines   204/282 branches   126/189
 file src/cmd_maint.c        lines     54/57 branches     15/18
 file src/cmd_query.c        lines   189/222 branches    93/119

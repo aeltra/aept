@@ -9,7 +9,7 @@ AM_CPPFLAGS = \
 # their own.
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
-    test_no_proxy test_validator test_url_sanitize test_marks test_listfile test_api \
+    test_no_proxy test_validator test_url_sanitize test_marks test_listfile test_sums test_api \
     test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
     test_deb test_iofail \
     test_oom
@@ -75,12 +75,13 @@ threadrace_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 test_archive_path_SOURCES = \
     test_archive_path.c \
     $(top_srcdir)/src/listfile.c \
+    $(top_srcdir)/src/sums.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_path_LDFLAGS = $(COVERAGE_LDFLAGS)
-test_archive_path_LDADD = $(ARCHIVE_LIBS)
+test_archive_path_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS)
 
 test_script_SOURCES = \
     test_script.c \
@@ -103,13 +104,14 @@ test_config_root_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_archive_open_SOURCES = \
     test_archive_open.c \
     $(top_srcdir)/src/listfile.c \
+    $(top_srcdir)/src/sums.c \
     $(top_srcdir)/src/archive.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_open_LDFLAGS = $(COVERAGE_LDFLAGS)
-test_archive_open_LDADD = $(ARCHIVE_LIBS)
+test_archive_open_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS)
 
 test_clearsign_SOURCES = \
     test_clearsign.c \
@@ -125,11 +127,13 @@ test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
 test_trigger_entries_SOURCES = \
     test_trigger_entries.c \
     $(top_srcdir)/src/listfile.c \
+    $(top_srcdir)/src/sums.c \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_trigger_entries_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_trigger_entries_LDFLAGS = $(COVERAGE_LDFLAGS)
+test_trigger_entries_LDADD = $(SOLV_LIBS)
 
 # validator.c reads and writes the record beside an index; nothing in it
 # reaches the network, so only the allocators and logging come with it.
@@ -184,6 +188,11 @@ test_api_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Links the library rather than individual modules: status.c's database
 # half pulls in the solver and through it libsolv.
+test_sums_SOURCES = test_sums.c
+test_sums_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_sums_LDADD = $(top_builddir)/src/libaept.la
+test_sums_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
 test_listfile_SOURCES = test_listfile.c
 test_listfile_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_listfile_LDADD = $(top_builddir)/src/libaept.la
@@ -236,6 +245,7 @@ dist_check_SCRIPTS = \
     test_replaces_overwrite.sh \
     test_script_order.sh \
     test_atomic_unpack.sh \
+    test_sha256sums.sh \
     test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_version_order.sh \
     test_pin.sh \

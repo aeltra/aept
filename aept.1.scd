@@ -595,7 +595,12 @@ _/var/lib/aept/info/_
 	following files may exist:
 
 	- _pkg.control_ — control metadata
-	- _pkg.list_ — list of installed files
+	- _pkg.list_ — the files the package installed, one per line: path,
+	  mode, uid, gid, size, sha256 and, for a symlink, its target, tab
+	  separated; size and sha256 are recorded for regular files and are
+	  "-" otherwise. The digest is the one the package shipped in its
+	  _sha256sums_, or the digest of what was written when it shipped
+	  none.
 	- _pkg.conffiles_ — conffile paths and MD5 checksums
 	- _pkg.preinst_, _pkg.postinst_, _pkg.prerm_, _pkg.postrm_ — maintainer scripts
 	- _pkg.triggers_ — trigger interest declarations (directory patterns)

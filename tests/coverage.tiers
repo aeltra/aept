@@ -41,6 +41,7 @@ tier cli          target=60 cap label=CLI
 file src/archive.c              security
 file src/clash.c                security
 file src/deb.c                  security
+file src/sums.c                 security
 file src/clearsign.c            security
 file src/download.c             security
 file src/index.c                security

@@ -411,6 +411,20 @@ Seven things about the measurement, each of which has cost a wrong number:
   source directory must *not* itself be configured, or configure refuses the
   VPATH build ("source directory already configured"); `make distclean` first,
   or do the ordinary build out of tree as well.
+- **A VPATH build finds what the source tree has and it does not.** Anything
+  an in-tree build leaves under `tests/` or `src/` that the coverage tree has
+  not built yet is resolved through VPATH *as if it were the coverage tree's
+  own*. Three forms of it so far, each after a new file was added: `.log`/`.trs`
+  results (the harness then "fails to create" them), a `.o` for a new module
+  (`libtool: 'libaept_la-foo.lo' is not a valid libtool object`, or an
+  undefined reference at link), and — the silent one — a new **test binary**:
+  `make` says `'/…/aept/tests/test_foo' is up to date`, runs the uninstrumented
+  in-tree binary, and the file it tests reports lines unreached that its test
+  plainly covers. Before `make coverage-check`, remove from the source tree the
+  logs, objects and binaries of anything added since the coverage tree last
+  built, or run the coverage build *before* the first in-tree `make check` of
+  a new file. Read `cov.out` for `is up to date` naming a path under the source
+  tree; that is this.
 - **`-O0` has to be forced, not merely requested.** Automake emits
   `$(target_CFLAGS) $(CFLAGS)`, so `CFLAGS` lands last and gcc takes the last
   `-O` it is given — and `AC_PROG_CC` defaults `CFLAGS` to `-g -O2`, while
@@ -711,7 +725,8 @@ weakest part of the CLI, which a single 80.7% figure hid.
   not how it prints, or the harness will certify a parser that is
   quietly wrong.
 
-- **listfile.c** — the per-package file list, `{info_dir}/{name}.list`, and the **only** code that parses or writes one. Seven readers used to split the line by hand (`remove.c`, `install.c`'s old-file read, `clash.c`'s takeover rewrite, `owner_index.c`, `api.c`'s `files` and `owns`, `trigger.c`), each with its own over-long-line handling; they all take `aept_list_next()` now, so a column is added in one place. The line is `path mode uid gid size sha256 [link]`, tab-separated, `-` for a column that does not apply; the two older shapes `path mode` and `path mode link` still read, a missing column reading as unknown (uid/gid/size −1, sha256 NULL) rather than zero. `entry.raw` is the whole line for a rewrite that keeps lines it does not touch. Nothing reads the link column: the clash check compares the *new* package's target against the symlink on disk, not against the list — which is why the column could move from third to seventh. `tests/test_listfile.c` pins every form; breaking the parser was shown to fail both it and the callers' tests.
+- **sums.c** — a package's shipped `sha256sums` (the control-archive member the Aeltra build tool writes: `<hex>  <path>`, `sha256sum(1)`'s format, regular files only, a hard link's second name with its own line). Read whole and refused whole: a list that is there and wrong — a bad line, a duplicate, an empty file — refuses the *package*, since a digest list that cannot be read is not one to trust half of. Sorted for `bsearch`; leading `./` and `/` ignored on both sides. **What it buys is a check at the only point in the chain that reaches the file itself**: signed index → package sha256 → gzip CRC → nothing, until now. `write_regular()` hashes every regular file as the bytes go by (libsolv's `solv_chksum`, the tree's checksum vocabulary; the holes of a sparse entry fed to it as zeros, since they are zeros to a reader), and with a shipped list the digest is compared **before the rename** — a file that does not match never goes into place, an archive file the list lacks and a listed file the archive lacks both refuse the package, and the counts are checked at the end so the two sides must agree exactly. A package without the member (every one in the current archive) records aept's own digest. Both are `tests/test_sha256sums.sh`; the unit cases are in `test_archive_open.c`, including the one where the counts balance so only the per-file check can catch an unlisted file, and the sparse one. What is recorded beside the digest is **what is on disk after extraction** — owner and group from `fstat()` after the `fchown()`, so an `ignore_uid` root does not verify every file as wrong-owner; a hard link's mode from `lstat()`, its header carrying none. One thing to keep: the entry's name is copied once (`entry_name`) because `rewrite_all_paths()` and the aside rename replace libarchive's pathname, and a pointer into it named garbage in every message after that point — it did, in the device refusal, until the sums lookup made it visible.
+- **listfile.c** — the per-package file list, `{info_dir}/{name}.list`, and the **only** code that parses or writes one. Seven readers used to split the line by hand (`remove.c`, `install.c`'s old-file read, `clash.c`'s takeover rewrite, `owner_index.c`, `api.c`'s `files` and `owns`, `trigger.c`), each with its own over-long-line handling; they all take `aept_list_next()` now, so a column is added in one place. The line is `path mode uid gid size sha256 [link]`, tab-separated, `-` for a column that does not apply; the two older shapes `path mode` and `path mode link` still read, a missing column reading as unknown (uid/gid/size −1, sha256 NULL) rather than zero. `entry.raw` is the whole line for a rewrite that keeps lines it does not touch. Nothing reads the link column: the clash check compares the *new* package's target against the symlink on disk, not against the list — which is why the column could move from third to seventh. `tests/test_listfile.c` pins every form; breaking the parser was shown to fail both it and the callers' tests. The uid, gid, size and sha256 columns are filled by archive.c since the digests landed (see sums.c); a list written before that has `-` there and reads as unknown.
 - **stanza.c** — reading fields back out of a control stanza. Two
   callers. deb.c parses an index with these, so this is where the format
   is actually read: `aept_stanza_foreach()` splits an index into stanzas
