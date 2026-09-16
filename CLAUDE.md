@@ -187,6 +187,15 @@ lines at 80 columns, 19 at 100) and `ReflowComments: false`. Comment prose is
 wrapped by hand. `BreakStringLiterals: false` keeps a log or usage message on
 one line so it can still be grepped for.
 
+**No C++ keyword as an identifier.** clang-format reads C as C++, so a
+variable called `new` is a keyword to it, and the `&&` after an
+expression involving one gets annotated as GCC's label-address operator:
+19 wrote `&&new != url`, and 20 through 22 break the line around it
+differently again, so a tree formatted by one fails `format-check` under
+the other. `http_request()`'s `new` became `next` for this; keep
+`class`, `delete`, `template`, `this` and friends out of identifiers as
+well.
+
 The tree-wide reformat is listed in `.git-blame-ignore-revs`; enable it with
 `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 

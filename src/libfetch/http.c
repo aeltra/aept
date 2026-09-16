@@ -946,7 +946,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
                                    struct libfetch_validators *got)
 {
     libfetch_conn_t *conn;
-    struct libfetch_url *url, *new;
+    struct libfetch_url *url, *next;
     int chunked, direct, need_auth, noredirect, nocache;
     int keep_alive, verbose, cached;
     int e, i, n;
@@ -981,7 +981,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
     e = HTTP_PROTOCOL_ERROR;
     need_auth = 0;
     do {
-        new = NULL;
+        next = NULL;
         chunked = 0;
         clength = -1;
         /* Cleared per attempt, so a redirect's headers cannot be
@@ -1109,7 +1109,7 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
         case HTTP_TEMP_REDIRECT:
             /*
              * Not so fine, but we still have to read the
-             * headers to get the new location.
+             * headers to get the next location.
              */
             break;
         case HTTP_NEED_AUTH:
@@ -1198,27 +1198,27 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             case hdr_location:
                 if (!HTTP_REDIRECT(conn->err))
                     break;
-                if (new)
-                    libfetch_free_url(new);
+                if (next)
+                    libfetch_free_url(next);
                 if (verbose)
                     libfetch_info("%d redirect to %s", conn->err, p);
                 if (*p == '/')
                     /* absolute path */
-                    new = libfetch_make_url(url->scheme, url->host, url->port, p, url->user,
-                                            url->pwd);
+                    next = libfetch_make_url(url->scheme, url->host, url->port, p, url->user,
+                                             url->pwd);
                 else
-                    new = libfetch_parse_url(p);
-                if (new == NULL) {
+                    next = libfetch_parse_url(p);
+                if (next == NULL) {
                     /* XXX should set an error code */
                     goto ouch;
                 }
-                if (!new->port)
-                    new->port = libfetch_default_port(new->scheme);
-                if (!new->user[0] && !new->pwd[0] && new->port == url->port &&
-                    strcmp(new->scheme, url->scheme) == 0 && strcmp(new->host, url->host) == 0) {
+                if (!next->port)
+                    next->port = libfetch_default_port(next->scheme);
+                if (!next->user[0] && !next->pwd[0] && next->port == url->port &&
+                    strcmp(next->scheme, url->scheme) == 0 && strcmp(next->host, url->host) == 0) {
                     /* keep auth if staying on same host */
-                    strcpy(new->user, url->user);
-                    strcpy(new->pwd, url->pwd);
+                    strcpy(next->user, url->user);
+                    strcpy(next->pwd, url->pwd);
                 }
                 break;
             case hdr_transfer_encoding:
@@ -1256,11 +1256,11 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
         need_auth = 0;
         libfetch_close(conn);
         conn = NULL;
-        if (!new)
+        if (!next)
             break;
         if (url != URL)
             libfetch_free_url(url);
-        url = new;
+        url = next;
     } while (++i < n);
 
     /* we failed, or ran out of retries */
@@ -1322,9 +1322,9 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
 protocol_error:
     http_seterr(HTTP_PROTOCOL_ERROR);
 ouch:
-    /* new aliases url once the retry loop has consumed a redirect */
-    if (new != NULL &&new != url)
-        libfetch_free_url(new);
+    /* next aliases url once the retry loop has consumed a redirect */
+    if (next != NULL && next != url)
+        libfetch_free_url(next);
     if (url != URL)
         libfetch_free_url(url);
     if (purl)
