@@ -307,6 +307,8 @@ run by Automake's harness.
   can come out green on a fix that is no longer there. This has now happened
   twice. Build the harness first: `make -C tests stallclient`, or `make check`.
 
+**Do not force a failure with a resource limit.** `test_verify.c` once made `fork()` fail by setting `RLIMIT_NPROC` to 1; root is exempt from that limit, so under the package build — which runs the suite as root — the fork succeeded, the test still passed (usign failed for its own reasons), and the fork-failure branch went unreached on that machine alone, which is how the coverage ratchet failed in CI against a baseline blessed as a user. `-Wl,--wrap=fork` fails it the same way for every uid. The same applies to anything a capability waives: file permissions (`chmod 000` does not stop root either — `test_mark.sh` notes its cases as skipped when the write goes through), `RLIMIT_*`, ownership. Use the linker, or skip and say so.
+
 **I/O failures.** `tests/test_iofail.c` is `test_oom.c` one layer down:
 the I/O calls aept makes are wrapped (`-Wl,--wrap` on `fopen`, `fgets`,
 `fwrite`, `fputs`, `fprintf`, `fclose`, `rename`, `mkdir`, `opendir`,

@@ -2,9 +2,12 @@
  *
  * The yes/no of verification is held down by the shell tests; what was
  * dark is verify.c failing *itself* -- fork and waitpid.  Both are
- * forced deterministically: fork by exhausting RLIMIT_NPROC, waitpid
- * by letting SIGCHLD auto-reap the child first.  (The child's own two
- * lines are invisible to gcov by construction and stay dark.)
+ * forced deterministically: fork through the linker (--wrap=fork, the
+ * way test_iofail fails syscalls), waitpid by letting SIGCHLD auto-reap
+ * the child first.  Not RLIMIT_NPROC, which the first version used:
+ * root is exempt from it, so a suite run as root -- the package build
+ * is one -- forked anyway, took the other path, and the two lines of
+ * the fork-failure branch went unreached on that machine alone.
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -16,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/resource.h>
+#include <errno.h>
 #include <unistd.h>
 
 #include "aept/internal.h"
@@ -28,6 +31,18 @@
 
 static struct aept_ctx ctx;
 
+/* --wrap=fork: the next fork() fails when armed. */
+static int fork_fails;
+pid_t __real_fork(void);
+pid_t __wrap_fork(void)
+{
+    if (fork_fails) {
+        errno = EAGAIN;
+        return -1;
+    }
+    return __real_fork();
+}
+
 static void silence_logging(void)
 {
     ctx.config.verbosity = AEPT_LOG_ERROR - 1;
@@ -36,31 +51,15 @@ static void silence_logging(void)
 
 int main(void)
 {
-    struct rlimit old, zero;
-
     silence_logging();
     ctx.config.usign_keydir = (char *)"/nonexistent";
 
     /* ── fork failing is an error, not a hang or a crash ──────────── */
 
-    if (getrlimit(RLIMIT_NPROC, &old) != 0) {
-        perror("getrlimit");
-        return 2;
-    }
-    zero = old;
-    zero.rlim_cur = 1; /* this process already exceeds it */
-    if (setrlimit(RLIMIT_NPROC, &zero) != 0) {
-        perror("setrlimit");
-        return 2;
-    }
-
+    fork_fails = 1;
     test_int_eq(aept_verify_signature(&ctx, "/no/file", "/no/sig"), -1,
                 "an unforkable verify reports -1");
-
-    if (setrlimit(RLIMIT_NPROC, &old) != 0) {
-        perror("setrlimit restore");
-        return 2;
-    }
+    fork_fails = 0;
 
     /* ── waitpid failing is an error too ──────────────────────────── *
      *

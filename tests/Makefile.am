@@ -177,7 +177,7 @@ test_verify_SOURCES = \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
 test_verify_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
-test_verify_LDFLAGS = $(COVERAGE_LDFLAGS)
+test_verify_LDFLAGS = -Wl,--wrap=fork $(COVERAGE_LDFLAGS)
 
 # The public API against a hand-written root; links the library the way
 # a consumer does.
