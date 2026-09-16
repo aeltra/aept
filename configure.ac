@@ -1,4 +1,4 @@
-AC_INIT([aept], [0.6.0])
+AC_INIT([aept], [0.7.0])
 AC_CONFIG_SRCDIR([src/main.c])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_HEADERS([config.h])

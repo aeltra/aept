@@ -1,3 +1,73 @@
+aept (0.7.0-1) unstable; urgency=medium
+
+  * Change: every file is written aside and renamed into place. A regular
+    file, symlink or hard link is extracted as "<path>.aept-new" and
+    renamed over its path once it is whole, so the path holds the old
+    object or the complete new one and never part of either: a write
+    that fails half-way, for want of space or by a kill, leaves the old
+    file where it was and the partial copy is removed. Directories are
+    still made in place. This is dpkg's per-file atomicity, not its
+    per-package unwind -- a package whose tenth file fails leaves its
+    first nine installed.
+  * Fix: a package that did not fit on the filesystem installed without
+    error. libarchive reports a failed write with the same warning code
+    it uses for a timestamp it could not restore, and then extends the
+    file to the size the entry declared, so a package written to a full
+    disk came out as files of the right length with holes where the data
+    should be. aept now writes regular-file data itself and fails on the
+    first short write. libarchive's own aside-and-rename mode was
+    measured and does the same: the temporary is renamed over the
+    original regardless of the failed write.
+  * Fix: two things libarchive did on its own are refused: removing an
+    empty directory to put a file in its place, and reporting success
+    when a regular file stood where a directory entry lands. Device
+    nodes, FIFOs and sockets in a package are refused, at the clash check
+    before any script runs and again at extraction.
+  * New: a package's shipped sha256sums -- the control member the Aeltra
+    build tool writes -- is checked at extraction, file by file and before
+    the rename, so a file whose digest does not match never goes into
+    place. A file in the archive the list lacks, a file in the list the
+    archive lacks, and a list that is there but cannot be read all refuse
+    the package. This is the first check in the chain -- signed index,
+    package digest, gzip CRC -- that reaches the file itself. A package
+    that ships no list, which is every package in the current archive,
+    installs as before and aept's own digest is recorded.
+  * Change: the file list, /var/lib/aept/info/<pkg>.list, records the
+    mode, owner, group, size and sha256 of every file beside its path,
+    tab separated, with a symlink's target last and "-" for a column
+    that does not apply. Lists written by earlier versions still read;
+    what they do not record reads as unknown. The digest is the shipped
+    one, or that of what was written when the package shipped none.
+    Files are hashed with OpenSSL, which is twice as fast as libsolv's
+    portable sha256 on a machine without SHA instructions and several
+    times faster on one with them; it is the install's dominant cost.
+  * Change: "option ignore_uid" is now "option ignore_ownership", and
+    means something different. ignore_uid skipped restoring ownership
+    altogether and left every file owned by whoever ran aept.
+    ignore_ownership says that a failure to restore it is expected: aept
+    always tries, so inside a user namespace the owners that are mapped
+    are set, and a file that cannot be given to the owner the package
+    names is kept as it is, minus its setuid and setgid bits, which would
+    otherwise grant an identity the package did not mean. Without the
+    option such a failure is now an error whose message names the
+    option; before, a failed chown was accepted with a debug message.
+    Two environments need it: a root assembled by an unprivileged user,
+    and root inside a user namespace that does not map every owner a
+    package names, where chown fails with EINVAL however root the caller
+    looks. The recorded owner is always the one on disk.
+  * ABI: AEPT_FLAG_IGNORE_UID is renamed AEPT_FLAG_IGNORE_OWNERSHIP in
+    place; its value and the enum's size are unchanged, so a compiled
+    caller is unaffected and a source using the old name has one rename
+    to make. The Python bindings expose Flag.IGNORE_OWNERSHIP in place of
+    Flag.IGNORE_UID. libaept's interface version is 1:1:1.
+  * Tests: test_atomic_unpack.sh fills a tmpfs mid-extraction;
+    test_sha256sums.sh and test_sums.c cover the shipped digests and
+    every refusal; test_unprivileged_owner.sh covers both environments
+    with and without the option; test_listfile.c pins every shape of
+    list line.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Wed, 16 Sep 2026 09:54:48 +0300
+
 aept (0.6.0-1) unstable; urgency=medium
 
   * Change: maintainer scripts run in the order dpkg runs them, and a
