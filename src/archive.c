@@ -16,8 +16,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <solv/chksum.h>
-#include <solv/repo.h>
+#include <openssl/evp.h>
 
 #include "aept/archive.h"
 #include "aept/listfile.h"
@@ -486,7 +485,7 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
     const void *buff;
     size_t len;
     la_int64_t offset;
-    Chksum *chk = NULL;
+    EVP_MD_CTX *chk = NULL;
     struct stat st;
     int fd, r;
 
@@ -514,8 +513,14 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
 
     /* Hashed as it goes by: the bytes are in hand, so the digest costs
      * no second read.  A sparse entry's holes are zeros to the digest
-     * as they are to a reader, so they are fed to it as such. */
-    chk = solv_chksum_create(REPOKEY_TYPE_SHA256);
+     * as they are to a reader, so they are fed to it as such.  OpenSSL
+     * rather than libsolv's portable C: twice as fast without hardware
+     * SHA, several times with it, and the tree links it already. */
+    chk = EVP_MD_CTX_new();
+    if (!chk || EVP_DigestInit_ex(chk, EVP_sha256(), NULL) != 1) {
+        aept_log_error("cannot start a SHA-256 digest for '%s'", path);
+        goto fail;
+    }
     la_int64_t hashed = 0;
     static const char zeros[4096];
 
@@ -537,10 +542,10 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
         while (hashed < offset) {
             int n = offset - hashed > (la_int64_t)sizeof(zeros) ? (int)sizeof(zeros)
                                                                 : (int)(offset - hashed);
-            solv_chksum_add(chk, zeros, n);
+            EVP_DigestUpdate(chk, zeros, (size_t)n);
             hashed += n;
         }
-        solv_chksum_add(chk, buff, (int)len);
+        EVP_DigestUpdate(chk, buff, len);
         hashed += (la_int64_t)len;
         for (p = buff; len > 0;) {
             ssize_t n = write(fd, p, len);
@@ -565,7 +570,7 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
         la_int64_t left = archive_entry_size(entry) - hashed;
         int n = left > (la_int64_t)sizeof(zeros) ? (int)sizeof(zeros) : (int)left;
 
-        solv_chksum_add(chk, zeros, n);
+        EVP_DigestUpdate(chk, zeros, (size_t)n);
         hashed += n;
     }
 
@@ -618,15 +623,15 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
     w->gid = (long)st.st_gid;
     w->size = (long long)st.st_size;
     {
-        int dlen = 0;
-        const unsigned char *d = solv_chksum_get(chk, &dlen);
-        int i;
+        unsigned char d[EVP_MAX_MD_SIZE];
+        unsigned int dlen = 0, i;
 
+        EVP_DigestFinal_ex(chk, d, &dlen);
         for (i = 0; i < dlen && i < 32; i++)
             sprintf(w->sha256 + 2 * i, "%02x", d[i]);
         w->sha256[64] = '\0';
     }
-    solv_chksum_free(chk, NULL);
+    EVP_MD_CTX_free(chk);
     chk = NULL;
 
     if (close(fd) < 0) {
@@ -638,7 +643,7 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
 
 fail:
     if (chk)
-        solv_chksum_free(chk, NULL);
+        EVP_MD_CTX_free(chk);
     if (fd >= 0)
         close(fd);
     return -1;

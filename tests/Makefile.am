@@ -79,9 +79,9 @@ test_archive_path_SOURCES = \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
-test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
+test_archive_path_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_path_LDFLAGS = $(COVERAGE_LDFLAGS)
-test_archive_path_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS)
+test_archive_path_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS) $(OPENSSL_LIBS)
 
 test_script_SOURCES = \
     test_script.c \
@@ -109,9 +109,9 @@ test_archive_open_SOURCES = \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
-test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(COVERAGE_CFLAGS)
+test_archive_open_CFLAGS = -D_GNU_SOURCE $(LIBARCHIVE_CFLAGS) $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 test_archive_open_LDFLAGS = $(COVERAGE_LDFLAGS)
-test_archive_open_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS)
+test_archive_open_LDADD = $(ARCHIVE_LIBS) $(SOLV_LIBS) $(OPENSSL_LIBS)
 
 test_clearsign_SOURCES = \
     test_clearsign.c \
@@ -131,9 +131,9 @@ test_trigger_entries_SOURCES = \
     $(top_srcdir)/src/util.c \
     $(top_srcdir)/src/libfetch/pctdecode.c \
     $(top_srcdir)/src/msg.c
-test_trigger_entries_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_trigger_entries_CFLAGS = -D_GNU_SOURCE $(OPENSSL_CFLAGS) $(COVERAGE_CFLAGS)
 test_trigger_entries_LDFLAGS = $(COVERAGE_LDFLAGS)
-test_trigger_entries_LDADD = $(SOLV_LIBS)
+test_trigger_entries_LDADD = $(SOLV_LIBS) $(OPENSSL_LIBS)
 
 # validator.c reads and writes the record beside an index; nothing in it
 # reaches the network, so only the allocators and logging come with it.
