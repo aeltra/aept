@@ -150,8 +150,7 @@ enum {
      * error: for a root assembled by an unprivileged user, or by root
      * inside a user namespace that does not map every owner a package
      * names.  A file that could not be given to its owner loses its
-     * setuid and setgid bits.  The recorded owner is the one on disk.
-     * (In the slot AEPT_FLAG_IGNORE_UID had, so nothing renumbers.) */
+     * setuid and setgid bits.  The recorded owner is the one on disk. */
     AEPT_FLAG_IGNORE_OWNERSHIP,
     AEPT_FLAG_KEEP_GOING,
 };

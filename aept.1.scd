@@ -391,8 +391,7 @@ The following keys are recognized:
 :  0
 :  Set to 1 when the root is not installed as root: a file that cannot
    be given to the owner the package names is kept as it is, minus its
-   setuid and setgid bits, instead of failing the install. The old name
-   _ignore_uid_ is still accepted with a warning.
+   setuid and setgid bits, instead of failing the install.
 |  ssl_client_cert
 :  (none)
 :  Path to a PEM client certificate for HTTPS
