@@ -1,3 +1,40 @@
+aept (0.8.1-1) unstable; urgency=medium
+
+  * Fix: an allocation failure while sending an HTTP request freed an
+    uninitialised pointer. http_cmd() in the libfetch fork tested the
+    pointer after vasprintf() rather than its return value, which is
+    what carries the failure; the pointer is undefined on one.
+  * Fix: a request line that failed to send was skipped and the request
+    sent on without it. If that was the closing blank line the client
+    then waited for a reply that could not come, until the idle timeout
+    gave up for it and reported a timeout. Every line now ends the
+    request on failure, in the GET and CONNECT paths both.
+  * test_oom's sources pointed at a name that does not resolve, so
+    without a proxy in the environment no request was ever sent and
+    the stretch between connect and reply went unswept; a builder with
+    a proxy was the first to reach it. The fixture now points at a
+    loopback responder inside the test, which answers only complete
+    requests and counts a client that stalled on one it never finished,
+    and the proxy variables are cleared so it is always reached.
+  * test_oom under LTO: with the call under test inlined into the
+    caller that armed the injection, gcc knew malloc() and calloc() as
+    builtins that read no global memory, deleted the store arming it,
+    and aept_init() returned a context with nothing ever injected. The
+    injector's state is volatile behind a compiler barrier now. The
+    fortified vasprintf() and asprintf() variants are wrapped as well,
+    so a packaged build sweeps what the development build does.
+  * Build-Depends accepts clang-format-19 as an alternative to
+    clang-format (>= 19), which Ubuntu noble does not have, and
+    configure picks the formatter by version rather than by name.
+    python3-cffi is a build dependency, so test_python runs on the
+    builder instead of skipping.
+  * The variable "new" in http_request() is renamed: clang-format reads
+    C as C++, and each version broke the lines around it differently,
+    so a tree formatted by one failed format-check under the other.
+  * No ABI change; libaept's interface version stays 1:2:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Wed, 16 Sep 2026 23:18:33 +0300
+
 aept (0.8.0-1) unstable; urgency=medium
 
   * New: "aept verify" checks the files of the named packages -- of every
