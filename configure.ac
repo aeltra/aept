@@ -35,20 +35,40 @@ AC_CHECK_LIB([solv], [pool_create], [:],
 # The major is recorded so the format targets can refuse one that is too
 # old.  19 is a floor, not a pin: a newer one that formatted this tree
 # differently fails format-check with a concrete diff rather than drifting
-# quietly.  The unversioned binary is preferred because that is what the
-# build dependency names; the versioned one is a fallback.
-AC_CHECK_PROGS([CLANG_FORMAT], [clang-format clang-format-19], [no])
-AC_SUBST([CLANG_FORMAT])
-
+# quietly.
+#
+# The candidates are tried in order and the first of major 19 or newer is
+# taken, which is not what AC_CHECK_PROGS does -- that takes the first one
+# found.  Ubuntu noble ships the unversioned clang-format at 18 with
+# clang-format-19 beside it, and Build-Depends accepts either
+# "clang-format (>= 1:19~)" or "clang-format-19", so the unversioned
+# binary being present says nothing about whether it is usable.  When
+# none qualifies the first one found is kept, so that the format targets
+# can say what is wrong with it rather than that there is none.
+CLANG_FORMAT=no
 CLANG_FORMAT_MAJOR=unknown
-if test "$CLANG_FORMAT" != no; then
-    AC_MSG_CHECKING([clang-format major version])
-    CLANG_FORMAT_MAJOR=`$CLANG_FORMAT --version 2>/dev/null | sed -e 's/.*version //' -e 's/\..*//'`
-    if test -z "$CLANG_FORMAT_MAJOR"; then
-        CLANG_FORMAT_MAJOR=unknown
+for aept_cf in clang-format clang-format-19 clang-format-20 clang-format-21 clang-format-22; do
+    AC_MSG_CHECKING([for $aept_cf])
+    aept_cf_major=`$aept_cf --version 2>/dev/null | sed -e 's/.*version //' -e 's/\..*//'`
+    if test -z "$aept_cf_major"; then
+        AC_MSG_RESULT([no])
+        continue
     fi
-    AC_MSG_RESULT([$CLANG_FORMAT_MAJOR])
-fi
+    AC_MSG_RESULT([major $aept_cf_major])
+    if test "$CLANG_FORMAT" = no; then
+        CLANG_FORMAT=$aept_cf
+        CLANG_FORMAT_MAJOR=$aept_cf_major
+    fi
+    case "$aept_cf_major" in
+        *[[!0-9]]*) continue ;;
+    esac
+    if test "$aept_cf_major" -ge 19; then
+        CLANG_FORMAT=$aept_cf
+        CLANG_FORMAT_MAJOR=$aept_cf_major
+        break
+    fi
+done
+AC_SUBST([CLANG_FORMAT])
 AC_SUBST([CLANG_FORMAT_MAJOR])
 
 # python3 runs the test servers (condserver.py and friends) and the

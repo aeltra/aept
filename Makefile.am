@@ -97,9 +97,11 @@ FORMAT_ALL = find $(FORMAT_DIRS) \( -name '*.c' -o -name '*.h' \) -print | sort
 # quiet fall back to a default.  Older ones predate settings the file uses.
 #
 # Too old is an error rather than a skip: Build-Depends names
-# "clang-format (>= 1:19~) <!nocheck>", so when the checks run at all a
-# usable formatter is there by construction, and skipping quietly would
-# turn a satisfied build dependency into a check that stopped happening.
+# "clang-format (>= 1:19~) | clang-format-19 <!nocheck>", so when the
+# checks run at all a usable formatter is there by construction, and
+# skipping quietly would turn a satisfied build dependency into a check
+# that stopped happening.  configure picks the candidate by version, so
+# this only fires on a tree configured before the good one was installed.
 CLANG_FORMAT_MIN_MAJOR = 19
 
 # Fail loudly rather than silently doing nothing.
