@@ -10,6 +10,8 @@ from .aept import (
     PkgEntry,
     PkgInfo,
     Transaction,
+    VerifyEntry,
+    VerifyKind,
 )
 
 __all__ = [
@@ -20,6 +22,8 @@ __all__ = [
     "Flag",
     "LogLevel",
     "PkgEntry",
+    "VerifyEntry",
+    "VerifyKind",
     "PkgInfo",
     "Transaction",
 ]

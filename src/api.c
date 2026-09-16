@@ -22,6 +22,7 @@
 
 #include "aept/aept.h"
 #include "aept/internal.h"
+#include "aept/integrity.h"
 #include "aept/listfile.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
@@ -1302,6 +1303,32 @@ int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, int *count_
     r = api_owns(ctx, path, owners_out, count_out);
     AEPT_OOM_LEAVE(ctx);
     return r;
+}
+
+/* ── Query: verify ───────────────────────────────────────────────── */
+
+int aept_verify(aept_ctx_t *ctx, const char **names, int count, aept_verify_list_t *out)
+{
+    int r;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    r = aept_op_verify(ctx, names, count, out);
+    AEPT_OOM_LEAVE(ctx);
+    return r;
+}
+
+void aept_verify_list_free(aept_verify_list_t *list)
+{
+    int i;
+
+    for (i = 0; i < list->count; i++) {
+        free(list->entries[i].package);
+        free(list->entries[i].path);
+        free(list->entries[i].expected);
+        free(list->entries[i].found);
+    }
+    free(list->entries);
+    memset(list, 0, sizeof(*list));
 }
 
 /* ── Query: architectures ────────────────────────────────────────── */

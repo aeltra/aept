@@ -29,6 +29,7 @@ Makefile
 *.la
 /src/aept
 .dirstamp
+/cov.out
 
 # Test suite
 #

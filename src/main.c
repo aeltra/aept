@@ -179,6 +179,7 @@ static void usage_main(FILE *out)
             "  triggers            Retry trigger scripts that failed earlier\n"
             "  files <pkg>         List files of an installed package\n"
             "  owns <path>         Find which package owns a file\n"
+            "  verify [pkgs...]    Check installed files against their records\n"
             "  print-architecture  Show configured architectures\n"
             "\n"
             "Run 'aept <command> --help' for command-specific options.\n",
@@ -281,6 +282,8 @@ int main(int argc, char *argv[])
         rc = cmd_show(sub_argc, sub_argv);
     else if (strcmp(command, "files") == 0)
         rc = cmd_files(sub_argc, sub_argv);
+    else if (strcmp(command, "verify") == 0)
+        rc = cmd_verify(sub_argc, sub_argv);
     else if (strcmp(command, "owns") == 0)
         rc = cmd_owns(sub_argc, sub_argv);
     else if (strcmp(command, "mark") == 0)

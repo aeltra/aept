@@ -164,6 +164,38 @@ int aept_owns(aept_ctx_t *ctx, const char *path,
               char ***owners_out, int *count_out);
 
 int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
+
+/* --- Query: verify ------------------------------------------------------- */
+
+enum {
+    AEPT_VERIFY_MISSING,
+    AEPT_VERIFY_TYPE,
+    AEPT_VERIFY_MODE,
+    AEPT_VERIFY_OWNER,
+    AEPT_VERIFY_LINK,
+    AEPT_VERIFY_SIZE,
+    AEPT_VERIFY_DIGEST,
+    AEPT_VERIFY_CONFFILE,
+    AEPT_VERIFY_UNVERIFIABLE,
+};
+
+typedef struct {
+    char *package;
+    char *path;
+    int   kind;
+    char *expected;
+    char *found;
+} aept_verify_entry_t;
+
+typedef struct {
+    aept_verify_entry_t *entries;
+    int count;
+    int alloc;
+} aept_verify_list_t;
+
+int  aept_verify(aept_ctx_t *ctx, const char **names, int count,
+                 aept_verify_list_t *out);
+void aept_verify_list_free(aept_verify_list_t *list);
 """
 
 LIBC_CDEF = """\

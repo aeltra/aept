@@ -19,6 +19,7 @@ noinst_HEADERS = \
     include/aept/download.h \
     include/aept/index.h \
     include/aept/install.h \
+    include/aept/integrity.h \
     include/aept/internal.h \
     include/aept/listfile.h \
     include/aept/msg.h \

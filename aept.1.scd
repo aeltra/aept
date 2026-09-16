@@ -314,6 +314,31 @@ the file.
 List files belonging to an installed package. Prints file paths to stdout.
 Returns exit code 1 if the package is not installed.
 
+## verify [options] [packages...]
+
+Check the files of the named packages -- of every installed package when none
+is named -- against what was recorded when they were installed: presence,
+type, permission bits, owner and group, a symlink's target, and a regular
+file's size and SHA-256. One line per difference, naming the kind, the path,
+the package and, where it applies, what was recorded and what was found:
+
+```
+digest       /usr/bin/foo  (foo)  5891b5…  -> c9c354…
+missing      /usr/lib/libbar.so.1  (libbar)  was regular file
+```
+
+Two kinds are reported without being counted as damage: _conffile_, a
+configuration file the administrator has changed, compared against the hash
+the conffile record keeps; and _unverifiable_, a regular file whose record
+carries no digest because it was installed before digests were recorded.
+Owner and group are not checked when *ignore_ownership* is set.
+
+Exit status is 0 when nothing is damaged, 1 when something is, and 2 on an
+error, including a named package that is not installed.
+
+*--ignore-ownership*
+	Do not check owner and group for this run.
+
 ## print-architecture
 
 Print the configured architectures, one per line. The first architecture is

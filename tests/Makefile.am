@@ -247,6 +247,7 @@ dist_check_SCRIPTS = \
     test_atomic_unpack.sh \
     test_sha256sums.sh \
     test_unprivileged_owner.sh \
+    test_integrity.sh \
     test_supersede.sh test_supersede_partial.sh test_takeover_order.sh \
     test_version_order.sh \
     test_pin.sh \

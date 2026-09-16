@@ -294,4 +294,44 @@ AEPT_API int aept_owns(aept_ctx_t *ctx, const char *path, char ***owners_out, in
 
 AEPT_API int aept_architectures(aept_ctx_t *ctx, char ***archs_out, int *count_out);
 
+/* --- Query: verify ------------------------------------------------------- */
+
+/* How a file on disk differs from what its package recorded.  The
+ * first seven are damage; the last two are not: a conffile is the
+ * admin's to change, and a file with no digest recorded (a list
+ * written before digests were) cannot be checked, only listed. */
+enum {
+    AEPT_VERIFY_MISSING,      /* nothing at the path */
+    AEPT_VERIFY_TYPE,         /* a directory where a file was, or the like */
+    AEPT_VERIFY_MODE,         /* permission bits differ */
+    AEPT_VERIFY_OWNER,        /* uid or gid differ (not with ignore_ownership) */
+    AEPT_VERIFY_LINK,         /* a symlink points elsewhere */
+    AEPT_VERIFY_SIZE,         /* a regular file's size differs */
+    AEPT_VERIFY_DIGEST,       /* same size, different content */
+    AEPT_VERIFY_CONFFILE,     /* a conffile the admin has changed */
+    AEPT_VERIFY_UNVERIFIABLE, /* no digest recorded for the file */
+};
+
+typedef struct {
+    char *package;
+    char *path;     /* absolute within the root, "/usr/bin/foo" */
+    int kind;       /* AEPT_VERIFY_* */
+    char *expected; /* what was recorded, or NULL */
+    char *found;    /* what is there, or NULL */
+} aept_verify_entry_t;
+
+typedef struct {
+    aept_verify_entry_t *entries;
+    int count;
+    int alloc;
+} aept_verify_list_t;
+
+/* Check the named packages -- every installed package when count is
+ * 0 -- and fill `out` with one entry per discrepancy.  Returns 0 when
+ * every package was checked, whatever was found; 1 when a named
+ * package is not installed; -1 on error.  The caller frees `out` with
+ * aept_verify_list_free() in every case. */
+AEPT_API int aept_verify(aept_ctx_t *ctx, const char **names, int count, aept_verify_list_t *out);
+AEPT_API void aept_verify_list_free(aept_verify_list_t *list);
+
 #endif

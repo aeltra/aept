@@ -56,6 +56,22 @@ class Flag(IntEnum):
     IGNORE_OWNERSHIP = lib.AEPT_FLAG_IGNORE_OWNERSHIP
 
 
+class VerifyKind(IntEnum):
+    MISSING      = lib.AEPT_VERIFY_MISSING
+    TYPE         = lib.AEPT_VERIFY_TYPE
+    MODE         = lib.AEPT_VERIFY_MODE
+    OWNER        = lib.AEPT_VERIFY_OWNER
+    LINK         = lib.AEPT_VERIFY_LINK
+    SIZE         = lib.AEPT_VERIFY_SIZE
+    DIGEST       = lib.AEPT_VERIFY_DIGEST
+    CONFFILE     = lib.AEPT_VERIFY_CONFFILE
+    UNVERIFIABLE = lib.AEPT_VERIFY_UNVERIFIABLE
+
+    @property
+    def is_damage(self) -> bool:
+        return self not in (VerifyKind.CONFFILE, VerifyKind.UNVERIFIABLE)
+
+
 class LogLevel(IntEnum):
     ERROR   = lib.AEPT_LOG_ERROR
     WARNING = lib.AEPT_LOG_WARNING
@@ -64,6 +80,15 @@ class LogLevel(IntEnum):
 
 
 # --- Dataclasses ----------------------------------------------------------
+
+@dataclass
+class VerifyEntry:
+    package: str
+    path: str
+    kind: "VerifyKind"
+    expected: Optional[str]
+    found: Optional[str]
+
 
 @dataclass
 class PkgEntry:
@@ -459,6 +484,29 @@ class Aept:
             lib.aept_pkg_info_list_free(out)
 
     # --- Query: files / owns / architectures ------------------------------
+
+    def verify(self, names: Optional[List[str]] = None) -> List[VerifyEntry]:
+        """One entry per discrepancy; every installed package when no
+        names are given.  Raises AeptError for a package that is not
+        installed."""
+        c_names, ka, count = str_list_to_c(names or [])
+        out = ffi.new("aept_verify_list_t *")
+        try:
+            self._call(lib.aept_verify(self._ctx, c_names, count, out),
+                       "aept_verify() failed")
+            result = []
+            for i in range(out.count):
+                e = out.entries[i]
+                result.append(VerifyEntry(
+                    package=c_to_str(e.package),
+                    path=c_to_str(e.path),
+                    kind=VerifyKind(e.kind),
+                    expected=c_to_str(e.expected) if e.expected != ffi.NULL else None,
+                    found=c_to_str(e.found) if e.found != ffi.NULL else None,
+                ))
+            return result
+        finally:
+            lib.aept_verify_list_free(out)
 
     def files(self, name: str) -> Optional[List[str]]:
         paths_out = ffi.new("char ***")

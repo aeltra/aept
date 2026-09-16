@@ -45,6 +45,7 @@ file src/sums.c                 security
 file src/clearsign.c            security
 file src/download.c             security
 file src/index.c                security
+file src/integrity.c            security
 file src/update.c               security
 file src/validator.c            security
 file src/verify.c               security

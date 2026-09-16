@@ -69,6 +69,7 @@ int cmd_list(int argc, char *argv[]);
 int cmd_show(int argc, char *argv[]);
 int cmd_files(int argc, char *argv[]);
 int cmd_owns(int argc, char *argv[]);
+int cmd_verify(int argc, char *argv[]);
 int cmd_mark(int argc, char *argv[]);
 int cmd_pin(int argc, char *argv[]);
 int cmd_unpin(int argc, char *argv[]);

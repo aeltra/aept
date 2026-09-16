@@ -92,6 +92,56 @@ static struct option files_options[] = {
     {NULL,   0,           NULL, 0  }
 };
 
+static void usage_verify(FILE *out)
+{
+    fprintf(out, "Usage: aept verify [options] [packages...]\n"
+                 "\n"
+                 "Check installed files against what their packages recorded:\n"
+                 "presence, type, mode, owner, symlink target, size and content.\n"
+                 "Every installed package when none is named.  One line per\n"
+                 "difference; a changed conffile and a file with no recorded\n"
+                 "digest are reported but are not failures.\n"
+                 "\n"
+                 "Exit status: 0 nothing damaged, 1 something is, 2 error.\n"
+                 "\n"
+                 "Options:\n"
+                 "  -h, --help          Show this help\n"
+                 "\n"
+                 "  --ignore-ownership  Do not check owner and group (implied by\n"
+                 "                      option ignore_ownership in the config)\n");
+}
+
+static struct option verify_options[] = {
+    {"help",             no_argument, NULL, 'h'  },
+    {"ignore-ownership", no_argument, NULL, 0x100},
+    {NULL,               0,           NULL, 0    }
+};
+
+static const char *verify_word(int kind)
+{
+    switch (kind) {
+    case AEPT_VERIFY_MISSING:
+        return "missing";
+    case AEPT_VERIFY_TYPE:
+        return "type";
+    case AEPT_VERIFY_MODE:
+        return "mode";
+    case AEPT_VERIFY_OWNER:
+        return "owner";
+    case AEPT_VERIFY_LINK:
+        return "link";
+    case AEPT_VERIFY_SIZE:
+        return "size";
+    case AEPT_VERIFY_DIGEST:
+        return "digest";
+    case AEPT_VERIFY_CONFFILE:
+        return "conffile";
+    case AEPT_VERIFY_UNVERIFIABLE:
+        return "unverifiable";
+    }
+    return "?";
+}
+
 static struct option owns_options[] = {
     {"help", no_argument, NULL, 'h'},
     {NULL,   0,           NULL, 0  }
@@ -344,6 +394,59 @@ int cmd_files(int argc, char *argv[])
 
     cli_cleanup(ctx);
     return 0;
+}
+
+int cmd_verify(int argc, char *argv[])
+{
+    aept_verify_list_t list;
+    int ignore_ownership = 0;
+    int opt, r, i, damaged = 0;
+
+    optind = 0;
+    while ((opt = getopt_long(argc, argv, OPTS_LEAF("h"), verify_options, NULL)) != -1) {
+        switch (opt) {
+        case 'h':
+            usage_verify(stdout);
+            return 0;
+        case 0x100:
+            ignore_ownership = 1;
+            break;
+        default:
+            usage_verify(stderr);
+            return 2;
+        }
+    }
+
+    aept_ctx_t *ctx = init_aept();
+    if (!ctx)
+        return 2;
+
+    if (ignore_ownership)
+        aept_set_flag(ctx, AEPT_FLAG_IGNORE_OWNERSHIP, 1);
+
+    r = aept_verify(ctx, (const char **)&argv[optind], argc - optind, &list);
+    if (r != 0) {
+        aept_verify_list_free(&list);
+        cli_cleanup(ctx);
+        return 2;
+    }
+
+    for (i = 0; i < list.count; i++) {
+        const aept_verify_entry_t *e = &list.entries[i];
+
+        printf("%-12s %s  (%s)", verify_word(e->kind), e->path, e->package);
+        if (e->expected && e->found)
+            printf("  %s -> %s", e->expected, e->found);
+        else if (e->expected)
+            printf("  was %s", e->expected);
+        printf("\n");
+        if (e->kind != AEPT_VERIFY_CONFFILE && e->kind != AEPT_VERIFY_UNVERIFIABLE)
+            damaged = 1;
+    }
+
+    aept_verify_list_free(&list);
+    cli_cleanup(ctx);
+    return damaged ? 1 : 0;
 }
 
 int cmd_owns(int argc, char *argv[])
