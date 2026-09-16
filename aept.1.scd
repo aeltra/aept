@@ -387,11 +387,12 @@ The following keys are recognized:
 |  check_signature
 :  1
 :  Set to 0 to disable signature verification
-|  ignore_uid
+|  ignore_ownership
 :  0
-:  Set to 1 to not preserve file ownership during extraction.
-   Files will be owned by the calling user instead of the
-   uid/gid recorded in the package.
+:  Set to 1 when the root is not installed as root: a file that cannot
+   be given to the owner the package names is kept as it is, minus its
+   setuid and setgid bits, instead of failing the install. The old name
+   _ignore_uid_ is still accepted with a warning.
 |  ssl_client_cert
 :  (none)
 :  Path to a PEM client certificate for HTTPS
@@ -444,6 +445,13 @@ option), the configuration file is read from _<dir>/etc/aept/aept.conf_
 (unless *--conf* is given explicitly) and all state directories (lists, cache,
 info, status, tmp, lock, marks, pinned-packages) are automatically
 prefixed with the offline root path.
+
+File ownership is restored as the package records it, and a failure to do so
+is an error unless *ignore_ownership* is set: a root assembled by an
+unprivileged user, or by root inside a user namespace that does not map the
+owner a package names, sets that option and keeps such files as they are,
+minus their setuid and setgid bits. The recorded owner is always the one on
+disk.
 
 The exception is *--cache-dir* on the command line (or *AEPT_CACHE_DIR* in
 the environment): an override given there is used verbatim, as a host path,

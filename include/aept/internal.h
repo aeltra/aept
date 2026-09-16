@@ -53,8 +53,8 @@ typedef struct aept_config {
      * every archive that stops receiving uploads expires and every client
      * stops working.  A deployment that runs such a job turns this on. */
     int check_index_expiry;
-    int ignore_uid; /* default 0 */
     int allow_downgrade;
+    int ignore_ownership; /* default 0 */
     int install_recommends;
     /* Let "clean" empty cache_dir.  Default 1.  Turned off where the cache is
      * shared with something outside this root -- build-box points every target

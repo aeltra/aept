@@ -481,7 +481,7 @@ struct written {
 };
 
 static int write_regular(struct archive *ar, struct archive_entry *entry, const char *path,
-                         int flags, struct written *w)
+                         int flags, int ignore_ownership, struct written *w)
 {
     const void *buff;
     size_t len;
@@ -569,12 +569,31 @@ static int write_regular(struct archive *ar, struct archive_entry *entry, const 
         hashed += n;
     }
 
-    if ((flags & ARCHIVE_EXTRACT_OWNER) &&
-        fchown(fd, (uid_t)archive_entry_uid(entry), (gid_t)archive_entry_gid(entry)) < 0) {
-        aept_log_error("cannot set the owner of '%s': %s", path, strerror(errno));
-        goto fail;
+    mode_t perm = archive_entry_perm(entry) & 07777;
+
+    int owned = 0;
+
+    if (flags & ARCHIVE_EXTRACT_OWNER) {
+        if (fchown(fd, (uid_t)archive_entry_uid(entry), (gid_t)archive_entry_gid(entry)) == 0) {
+            owned = 1;
+        } else if (!ignore_ownership) {
+            aept_log_error("cannot set the owner of '%s': %s (set 'option ignore_ownership 1' "
+                           "if this root is not installed as root)",
+                           path, strerror(errno));
+            goto fail;
+        } else {
+            /* Said to be expected: an unprivileged install, or root in
+             * a user namespace that does not map this owner.  The
+             * file stays whoever's it is. */
+            aept_log_debug("cannot set the owner of '%s': %s; keeping the current owner", path,
+                           strerror(errno));
+        }
     }
-    if (fchmod(fd, archive_entry_perm(entry) & 07777) < 0) {
+    /* A file that is not the owner the package meant must not run as
+     * that owner: the setuid and setgid bits go with the ownership. */
+    if (!owned)
+        perm &= ~(mode_t)(S_ISUID | S_ISGID);
+    if (fchmod(fd, perm) < 0) {
         aept_log_error("cannot set the mode of '%s': %s", path, strerror(errno));
         goto fail;
     }
@@ -644,8 +663,8 @@ fail:
  * name (`cf_suffix`, ".aept-new"), for the conffile logic to decide
  * whether they replace what the admin has.
  */
-static int do_extract_all(struct archive *ar, const char *dest, int flags, unsigned long *size,
-                          aept_fileset_t *conffiles, const char *cf_suffix,
+static int do_extract_all(struct archive *ar, const char *dest, int flags, int ignore_ownership,
+                          unsigned long *size, aept_fileset_t *conffiles, const char *cf_suffix,
                           aept_ar_file_list_t *recorded, const aept_sums_t *sums)
 {
     int ret = -1;
@@ -758,7 +777,7 @@ static int do_extract_all(struct archive *ar, const char *dest, int flags, unsig
         const char *shipped = sums ? aept_sums_lookup(sums, raw_path) : NULL;
 
         if (ftype == AE_IFREG && !is_hardlink) {
-            if (write_regular(ar, entry, aside_path, flags, &w) < 0)
+            if (write_regular(ar, entry, aside_path, flags, ignore_ownership, &w) < 0)
                 goto cleanup;
             /* The packager's digest is the one that matters: a file
              * that does not match it is not what was built, whatever
@@ -896,6 +915,7 @@ struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename)
     ar->ar = inner;
     ar->extract_flags = ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
     ar->sums = NULL;
+    ar->ignore_ownership = 0;
 
     return ar;
 }
@@ -905,7 +925,7 @@ void aept_ar_set_sums(struct aept_ar *ar, const aept_sums_t *sums)
     ar->sums = sums;
 }
 
-struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid)
+struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_ownership)
 {
     struct archive *inner = open_pkg_tar(filename, "data.tar");
     if (!inner)
@@ -914,12 +934,12 @@ struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_u
     struct aept_ar *ar = aept_malloc(sizeof(*ar));
     ar->ar = inner;
     ar->sums = NULL;
+    ar->ignore_ownership = 0;
     ar->extract_flags = ARCHIVE_EXTRACT_OWNER | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_TIME |
                         ARCHIVE_EXTRACT_UNLINK | ARCHIVE_EXTRACT_NO_OVERWRITE |
                         ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
-    if (ignore_uid)
-        ar->extract_flags &= ~ARCHIVE_EXTRACT_OWNER;
+    ar->ignore_ownership = ignore_ownership;
 
     return ar;
 }
@@ -954,6 +974,7 @@ struct aept_ar *aept_ar_open_compressed_file(const char *filename)
     ar->ar = reader;
     ar->extract_flags = 0;
     ar->sums = NULL;
+    ar->ignore_ownership = 0;
     return ar;
 }
 
@@ -1036,9 +1057,9 @@ void aept_ar_file_list_free(aept_ar_file_list_t *fl)
     aept_ar_file_list_init(fl);
 }
 
-int aept_ar_list_data_paths(const char *pkg_path, int ignore_uid, aept_ar_file_list_t *out)
+int aept_ar_list_data_paths(const char *pkg_path, aept_ar_file_list_t *out)
 {
-    struct aept_ar *ar = aept_ar_open_pkg_data_archive(pkg_path, ignore_uid);
+    struct aept_ar *ar = aept_ar_open_pkg_data_archive(pkg_path, 1);
     if (!ar)
         return -1;
 
@@ -1116,8 +1137,8 @@ int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *s
                         aept_fileset_t *conffiles, const char *cf_suffix,
                         aept_ar_file_list_t *recorded)
 {
-    return do_extract_all(ar->ar, prefix, ar->extract_flags, size, conffiles, cf_suffix, recorded,
-                          ar->sums);
+    return do_extract_all(ar->ar, prefix, ar->extract_flags, ar->ignore_ownership, size, conffiles,
+                          cf_suffix, recorded, ar->sums);
 }
 
 void aept_ar_close(struct aept_ar *ar)

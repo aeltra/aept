@@ -360,7 +360,7 @@ static int do_install_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
         goto cleanup;
     }
 
-    data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
+    data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_ownership);
     if (!data_ar) {
         aept_log_error("failed to open data archive in '%s'", pkg_path);
         aept_ar_file_list_free(&extracted);
@@ -654,7 +654,7 @@ static int do_upgrade_package(struct aept_ctx *ctx, const char *pkg_path, Pool *
             goto abort_upgrade;
         }
 
-        data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_uid);
+        data_ar = aept_ar_open_pkg_data_archive(pkg_path, ctx->config.ignore_ownership);
         if (!data_ar) {
             aept_log_error("failed to open data archive in '%s'", pkg_path);
             aept_fileset_free(&cf_paths);

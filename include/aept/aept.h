@@ -146,7 +146,13 @@ enum {
     AEPT_FLAG_PURGE,
     AEPT_FLAG_NON_INTERACTIVE,
     AEPT_FLAG_CHECK_SIGNATURE,
-    AEPT_FLAG_IGNORE_UID,
+    /* Ownership is restored where it can be and its failure is not an
+     * error: for a root assembled by an unprivileged user, or by root
+     * inside a user namespace that does not map every owner a package
+     * names.  A file that could not be given to its owner loses its
+     * setuid and setgid bits.  The recorded owner is the one on disk.
+     * (In the slot AEPT_FLAG_IGNORE_UID had, so nothing renumbers.) */
+    AEPT_FLAG_IGNORE_OWNERSHIP,
     AEPT_FLAG_KEEP_GOING,
 };
 

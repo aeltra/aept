@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="aept-demo-") as tmpdir:
 
     with Aept() as a:
         a.set_offline_root(tmpdir)
-        a.set_flag(Flag.IGNORE_UID, True)
+        a.set_flag(Flag.IGNORE_OWNERSHIP, True)
         a.load_config(conf_path)
         a.set_log_callback(log_cb)
         a.set_display_callback(display_cb)

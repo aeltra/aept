@@ -17,6 +17,7 @@ struct aept_ar {
     struct archive *ar;
     int extract_flags;
     const aept_sums_t *sums; /* the package's shipped digests, or NULL */
+    int ignore_ownership;    /* a failed chown is not an error */
 };
 
 /* Give a data archive the package's shipped sha256sums: every regular
@@ -27,9 +28,12 @@ void aept_ar_set_sums(struct aept_ar *ar, const aept_sums_t *sums);
 /* Open the control tarball from a package file. */
 struct aept_ar *aept_ar_open_pkg_control_archive(const char *filename);
 
-/* Open the data tarball from a package file.
- * If ignore_uid is non-zero, extracted files will not preserve ownership. */
-struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_uid);
+/* Open the data tarball from a package file.  With ignore_ownership,
+ * a file that cannot be given to the owner the package names -- an
+ * unprivileged install, or root in a user namespace that does not map
+ * that owner -- stays whoever's it is, minus its setuid and setgid
+ * bits, rather than failing the install. */
+struct aept_ar *aept_ar_open_pkg_data_archive(const char *filename, int ignore_ownership);
 
 /* Open a gzip-compressed file for streaming decompression. */
 struct aept_ar *aept_ar_open_compressed_file(const char *filename);
@@ -80,7 +84,7 @@ int aept_ar_extract_all(struct aept_ar *ar, const char *prefix, unsigned long *s
 /* List non-directory file paths from a package's data archive.
  * Fills out with archive paths (e.g. "./usr/bin/foo") and symlink
  * targets where applicable.  Returns 0 on success, -1 on error. */
-int aept_ar_list_data_paths(const char *pkg_path, int ignore_uid, aept_ar_file_list_t *out);
+int aept_ar_list_data_paths(const char *pkg_path, aept_ar_file_list_t *out);
 
 /* Close and free archive handle. */
 void aept_ar_close(struct aept_ar *ar);

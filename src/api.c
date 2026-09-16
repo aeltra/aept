@@ -209,8 +209,8 @@ static int *flag_ptr(aept_config_t *cfg, int flag)
         return &cfg->non_interactive;
     case AEPT_FLAG_CHECK_SIGNATURE:
         return &cfg->check_signature;
-    case AEPT_FLAG_IGNORE_UID:
-        return &cfg->ignore_uid;
+    case AEPT_FLAG_IGNORE_OWNERSHIP:
+        return &cfg->ignore_ownership;
     case AEPT_FLAG_KEEP_GOING:
         return &cfg->keep_going;
     default:

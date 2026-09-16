@@ -50,8 +50,8 @@ make_pkg() {
         _members="$_members $_script"
     fi
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" $_members || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_d/d" usr        || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" $_members || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_d/d" usr        || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -85,8 +85,8 @@ make_pkg_conffile() {
     mkdir -p "$_d/d/$(dirname "$_cf")"
     printf '%s\n' "$_content" > "$_d/d/$_cf"
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" control conffiles || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_d/d" .                 || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" control conffiles || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_d/d" .                 || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -118,8 +118,8 @@ make_pkg_script() {
     printf '#!/bin/sh\n%s\n' "$_body" > "$_d/c/$_script"
     chmod 755 "$_d/c/$_script"
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" control "$_script" || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_d/d" usr                || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" control "$_script" || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_d/d" usr                || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -154,8 +154,8 @@ make_pkg_tree() {
         printf 'Description: aept test fixture\n'
     } > "$_d/c/control"
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" control || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_tree" .      || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" control || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_tree" .      || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -196,8 +196,8 @@ make_pkg_scripts() {
         chmod 755 "$_d/c/$(basename "$_f")"
     done
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" .    || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_tree" .   || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" .    || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_tree" .   || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -239,8 +239,8 @@ make_pkg_sums() {
             > "$_d/c/sha256sums" || fail "sha256sum failed"
     fi
 
-    tar czf "$_d/control.tar.gz" -C "$_d/c" control sha256sums || fail "tar control"
-    tar czf "$_d/data.tar.gz"    -C "$_tree" .                 || fail "tar data"
+    tar czf "$_d/control.tar.gz" --owner=0 --group=0 -C "$_d/c" control sha256sums || fail "tar control"
+    tar czf "$_d/data.tar.gz" --owner=0 --group=0    -C "$_tree" .                 || fail "tar data"
     printf '2.0\n' > "$_d/debian-binary"
 
     ( cd "$_d" && ar rc "$_out" debian-binary control.tar.gz data.tar.gz ) \
@@ -272,7 +272,7 @@ add_repo() {
 # new_root <dir> — create an offline root with a usable aept.conf.
 new_root() {
     mkdir -p "$1/etc/aept"
-    printf 'arch all\noption check_signature 0\noption ignore_uid 1\n' \
+    printf 'arch all\noption check_signature 0\noption ignore_ownership 1\n' \
         > "$1/etc/aept/aept.conf"
 }
 

@@ -263,7 +263,7 @@ int main(void)
         {
             aept_ar_file_list_t fl;
             aept_ar_file_list_init(&fl);
-            test_int_eq(aept_ar_list_data_paths(path, 1, &fl), -1,
+            test_int_eq(aept_ar_list_data_paths(path, &fl), -1,
                         "listing an unrecognisable data.tar fails");
             aept_ar_file_list_free(&fl);
         }
@@ -734,7 +734,7 @@ int main(void)
         mkdir(exdir, 0755);
 
         aept_ar_file_list_init(&fl);
-        test_int_eq(aept_ar_list_data_paths(path, 1, &fl), -1,
+        test_int_eq(aept_ar_list_data_paths(path, &fl), -1,
                     "listing a data.tar with a device node is refused");
         aept_ar_file_list_free(&fl);
 

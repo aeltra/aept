@@ -132,7 +132,7 @@ int aept_clash_check(struct aept_ctx *ctx, const char *pkg_path, Pool *pool, Id 
 
     aept_ar_file_list_init(&new_files);
 
-    if (aept_ar_list_data_paths(pkg_path, ctx->config.ignore_uid, &new_files) < 0) {
+    if (aept_ar_list_data_paths(pkg_path, &new_files) < 0) {
         aept_ar_file_list_free(&new_files);
         return -1;
     }

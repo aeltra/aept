@@ -167,8 +167,14 @@ static void set_option(struct aept_config *cfg, const char *key, const char *val
     } else if (strcmp(key, "install_recommends") == 0) {
         cfg->install_recommends = parse_bool(key, value, 0);
         return;
+    } else if (strcmp(key, "ignore_ownership") == 0) {
+        cfg->ignore_ownership = parse_bool(key, value, 0);
+        return;
     } else if (strcmp(key, "ignore_uid") == 0) {
-        cfg->ignore_uid = parse_bool(key, value, 0);
+        /* The old name.  It meant "do not try"; the new one tries and
+         * tolerates, which is what every user of the old one wanted. */
+        aept_log_warning("option ignore_uid is obsolete; use ignore_ownership");
+        cfg->ignore_ownership = parse_bool(key, value, 0);
         return;
     } else if (strcmp(key, "allow_downgrade") == 0) {
         cfg->allow_downgrade = parse_bool(key, value, 0);
