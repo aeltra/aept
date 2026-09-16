@@ -325,7 +325,7 @@ binary.
 
 Its fixture carries an installed package, a status database and an index
 offering a newer version, because `test_oom.c`'s package-less one stopped
-a handful of calls in. It sweeps 368 I/O calls against 105 allocations.
+a handful of calls in. It sweeps 368 I/O calls against 132 allocations.
 **Set every path option** — `marks_file` and `pin_file` default to
 `/var/lib/aept/...`, and a fixture that forgets them tests only the
 already-failing path.
@@ -567,7 +567,17 @@ beside it putting a NULL into the array it handed back — a failure in
 the caller, which is worse than one in the callee. The one plain
 `malloc()` left is `aept_init()`'s own context, whose NULL return is the
 documented API. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)`
-into `calloc()` at `-O2`, and `aept_init()` is that shape.
+into `calloc()` at `-O2`, and `aept_init()` is that shape. And the injector's state is `volatile`
+behind a compiler barrier in `arm()`/`disarm()`: under LTO, which
+Ubuntu's build flags turn on, a call under test is inlined into the
+caller that armed it, and gcc knows `malloc()` and `calloc()` as
+builtins that read no global memory, so the store arming the injection
+was dead code and `aept_init()` returned a context with nothing ever
+injected. Only the direct calls were exposed; the sweeps call through
+a pointer. `_FORTIFY_SOURCE` is the other flag that changes the count:
+it routes `vasprintf()` and `asprintf()` to their `_chk` variants,
+which are wrapped as well, so a packaged build sweeps what the
+development build does.
 
 The sweeps are shallow for the transaction calls — that fixture has no
 packages, so install and remove bail out after a handful of allocations.

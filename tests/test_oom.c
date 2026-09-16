@@ -64,9 +64,20 @@ void *__real_realloc(void *ptr, size_t size);
 char *__real_strdup(const char *s);
 int __real_vasprintf(char **strp, const char *fmt, va_list ap);
 
-static long alloc_seen; /* allocations since arming */
-static long fail_on;    /* which one to fail; 0 = fail none */
-static int injected;    /* whether the injected failure actually happened */
+/*
+ * volatile, and a barrier in arm() and disarm(): under LTO the call
+ * under test can be inlined into the caller that armed it, and gcc
+ * knows malloc() and calloc() as builtins that read no global memory,
+ * so a store to fail_on followed by disarm()'s store of 0 with only an
+ * allocation between them was dead and went.  aept_init() reported a
+ * context with the injection never having happened.  The sweeps were
+ * safe only because they call through a pointer.
+ */
+static volatile long alloc_seen; /* allocations since arming */
+static volatile long fail_on;    /* which one to fail; 0 = fail none */
+static volatile int injected;    /* whether the injected failure actually happened */
+
+#define barrier() __asm__ __volatile__("" ::: "memory")
 
 static int trip(void)
 {
@@ -83,10 +94,12 @@ static void arm(long n)
     alloc_seen = 0;
     fail_on = n;
     injected = 0;
+    barrier();
 }
 
 static void disarm(void)
 {
+    barrier();
     fail_on = 0;
 }
 
@@ -116,6 +129,29 @@ int __wrap_vasprintf(char **strp, const char *fmt, va_list ap)
 {
     return trip() ? -1 : __real_vasprintf(strp, fmt, ap);
 }
+
+#ifdef __GLIBC__
+/* _FORTIFY_SOURCE routes vasprintf() and asprintf() to these instead,
+ * so a packaged build -- Debian's at level 2, Ubuntu's at 3 -- swept
+ * none of the aept_asprintf() sites until these were wrapped as well. */
+int __real___vasprintf_chk(char **strp, int flag, const char *fmt, va_list ap);
+
+int __wrap___vasprintf_chk(char **strp, int flag, const char *fmt, va_list ap)
+{
+    return trip() ? -1 : __real___vasprintf_chk(strp, flag, fmt, ap);
+}
+
+int __wrap___asprintf_chk(char **strp, int flag, const char *fmt, ...)
+{
+    va_list ap;
+    int r;
+
+    va_start(ap, fmt);
+    r = trip() ? -1 : __real___vasprintf_chk(strp, flag, fmt, ap);
+    va_end(ap);
+    return r;
+}
+#endif
 
 /* ── a server that answers ───────────────────────────────────────────── */
 
@@ -689,12 +725,13 @@ int main(void)
      *
      * It asks about aept_load_config() and not the total, because the
      * total is not a property of the code.  How many allocations a call
-     * makes depends on the build: -O2 with _FORTIFY_SOURCE inlines or
-     * redirects enough of the libc calls that the wrapper never sees
-     * them, and the same tree swept 105 allocations here against 76
-     * under dpkg-buildpackage.  aept_load_config() goes entirely
-     * through aept's own allocators, which are real calls into libaept
-     * whatever the flags, and it came to 26 in both.
+     * makes depends on the build: -O2 with _FORTIFY_SOURCE redirects
+     * the libc calls to their _chk variants (wrapped now, but that is
+     * glibc's spelling) and LTO folds and inlines more of them, and the
+     * same tree has swept 132, 105 and 90 here under different flags.
+     * aept_load_config() goes entirely through aept's own allocators,
+     * which are real calls into libaept whatever the flags, and it
+     * comes to 26 under all of them.
      */
     printf("# %ld allocations swept across %zu entry points\n", depth,
            sizeof(CALLS) / sizeof(CALLS[0]));

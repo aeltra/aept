@@ -331,7 +331,8 @@ test_oom_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_oom_LDADD = $(top_builddir)/src/libaept.la $(PTHREAD_LIBS)
 test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
-    -Wl,--wrap=strdup -Wl,--wrap=vasprintf
+    -Wl,--wrap=strdup -Wl,--wrap=vasprintf \
+    -Wl,--wrap=__vasprintf_chk -Wl,--wrap=__asprintf_chk
 
 test_iofail_SOURCES = test_iofail.c
 test_iofail_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
