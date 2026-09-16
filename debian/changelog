@@ -1,3 +1,44 @@
+aept (0.8.0-1) unstable; urgency=medium
+
+  * New: "aept verify" checks the files of the named packages -- of every
+    installed package when none is named -- against what was recorded
+    when they were installed: presence, type, permission bits, owner and
+    group, a symlink's target, and a regular file's size and SHA-256.
+    One line per difference, naming the kind, the path, the package and,
+    where it applies, what was recorded and what was found. What is
+    recorded decides what is checked: a column an older list lacks is
+    not held against anything, and a regular file with no digest at all
+    is reported as "unverifiable" rather than passed, so a root from
+    before digests were recorded is not silently clean. A conffile is
+    compared against the hash its conffile record keeps and reported as
+    "conffile", which is not damage. Neither of those two counts as a
+    failure: the command exits 0 when nothing is damaged, 1 when
+    something is, and 2 on an error, including a named package that is
+    not installed, so it can gate a health check. Owner and group are
+    not checked under "option ignore_ownership"; "--ignore-ownership"
+    does the same for one run. Repair is "aept install --reinstall",
+    which restores every kind but the conffile.
+  * A directory with a filesystem mounted on it is skipped whole: on a
+    live root /proc and /sys are kernel-owned 0555 whatever base-files
+    shipped, and the first run against a real target reported exactly
+    those two.
+  * ABI: aept_verify(), aept_verify_list_free(), the AEPT_VERIFY_*
+    kinds and the aept_verify_entry_t and aept_verify_list_t types are
+    added; nothing is removed or changed. libaept's interface version
+    is 1:2:0. The Python bindings gain Context.verify(), VerifyEntry and
+    VerifyKind, whose is_damage property tells the two reported-only
+    kinds from the rest.
+  * Tests: test_integrity.sh produces each kind of damage one at a time
+    and compares the whole reported line and the exit status, then
+    proves the reinstall repairs all of them but the conffile.
+    test_verify.c now fails fork() through the linker rather than
+    RLIMIT_NPROC, which root is exempt from: under the package build,
+    which runs the suite as root, the fork went ahead and the failure
+    branch stayed unreached, tripping the coverage ratchet in CI against
+    a baseline blessed as a user.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Wed, 16 Sep 2026 13:17:30 +0300
+
 aept (0.7.0-1) unstable; urgency=medium
 
   * Change: every file is written aside and renamed into place. A regular
