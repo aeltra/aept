@@ -43,7 +43,7 @@ $_out"
     fi
 }
 
-mkdir -p "$work/t/usr/bin" "$work/t/etc/t"
+mkdir -p "$work/t/usr/bin" "$work/t/etc/t" "$work/t/usr/share/mnt"
 printf 'hello\n' > "$work/t/usr/bin/tool"
 printf 'other\n' > "$work/t/usr/bin/other"
 ln -s tool "$work/t/usr/bin/tool-link"
@@ -136,6 +136,29 @@ sed -i 's|^\(\./usr/bin/tool\t[0-9]*\)\t.*|\1|' "$info/t.list"
 verify 0 '^unverifiable +/usr/bin/tool +\(t\)$'
 note "a file with no recorded digest is unverifiable, not damaged"
 restore
+
+# ── a mount point is not the package's directory ─────────────────────
+#
+# On a live root, /proc and /sys carry whatever the kernel gives their
+# root directory (0555), not what base-files shipped.  A directory with
+# a filesystem mounted on it is skipped whole.  A tmpfs mounted on the
+# package's empty directory has mode 1777, which would be reported.
+
+if unshare -Urm true 2>/dev/null; then
+    cat > "$work/inner.sh" <<INNER
+mount -t tmpfs tmpfs "$root/usr/share/mnt" || exit 3
+"$AEPT_BIN" -o "$root" -c "$root/etc/aept/aept.conf" verify > "$work/mnt.out" 2>&1
+echo "rc=\$?" > "$work/mnt.result"
+INNER
+    unshare -Urm sh "$work/inner.sh" || fail "the namespaced run failed"
+    grep -q '^rc=0$' "$work/mnt.result" || fail "a mounted directory was reported:
+$(cat "$work/mnt.out")"
+    [ -s "$work/mnt.out" ] && fail "a mounted directory produced output:
+$(cat "$work/mnt.out")"
+    note "a directory with a filesystem mounted on it is skipped"
+else
+    note "SKIP: no user namespaces for the mount-point case"
+fi
 
 # ── errors ───────────────────────────────────────────────────────────
 

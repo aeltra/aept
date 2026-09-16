@@ -139,6 +139,30 @@ static int verify_package(struct aept_ctx *ctx, const char *name, aept_verify_li
             goto next;
         }
 
+        /* A directory with something mounted on it is another
+         * filesystem's root, not the package's directory: on a live
+         * root /proc and /sys are kernel-owned 0555 whatever base-files
+         * shipped.  Nothing of it is the package's to check. */
+        if (S_ISDIR(st.st_mode)) {
+            char *parent = aept_strdup(disk_path);
+            size_t plen = strlen(parent);
+            char *slash;
+            struct stat pst;
+            int mounted = 0;
+
+            /* Directory entries are recorded with a trailing slash. */
+            while (plen > 1 && parent[plen - 1] == '/')
+                parent[--plen] = '\0';
+            slash = strrchr(parent, '/');
+            if (slash && slash != parent) {
+                *slash = '\0';
+                mounted = lstat(parent, &pst) == 0 && pst.st_dev != st.st_dev;
+            }
+            free(parent);
+            if (mounted)
+                goto next;
+        }
+
         if (e->mode && !S_ISLNK(st.st_mode) && (st.st_mode & 07777) != (e->mode & 07777)) {
             snprintf(expected, sizeof(expected), "%04o", e->mode & 07777);
             snprintf(found, sizeof(found), "%04o", st.st_mode & 07777);
