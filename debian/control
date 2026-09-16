@@ -16,6 +16,7 @@ Build-Depends: debhelper-compat (= 13),
                python3-build,
                python3-installer,
                python3-setuptools,
+               python3-cffi <!nocheck>,
                usign <!nocheck>,
                clang-format (>= 1:19~) <!nocheck>
 Standards-Version: 4.7.0

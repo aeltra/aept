@@ -546,7 +546,7 @@ partial state `exit()` left, only the process survives to run recovery).
 This is why **nothing in `msg.c` may allocate** — it is the path the failure
 is reported along. `tests/test_oom.c` holds the contract down by wrapping the
 allocators (`-Wl,--wrap`) and failing the *n*-th allocation for every *n*
-across **all 22 public entry points that arm the escape** — driving only
+across **all 23 public entry points that arm the escape** — driving only
 one of them left the other twenty with their `AEPT_OOM_ENTER`/`LEAVE`
 pair half-covered, the arming side exercised and the returning side never
 reached.
@@ -570,8 +570,14 @@ documented API. Wrap `calloc` too: gcc rewrites `malloc()`+`memset(0)`
 into `calloc()` at `-O2`, and `aept_init()` is that shape.
 
 The sweeps are shallow for the transaction calls — that fixture has no
-packages and no network, so install and remove bail out after a handful
-of allocations. What they still prove is the contract at the entry point.
+packages, so install and remove bail out after a handful of allocations.
+What they still prove is the contract at the entry point. The sources do
+answer, though: they point at a loopback responder inside the test that
+says 404 to everything, so the stretch between connect and reply — the
+request line, each header, the status line — is swept on every machine.
+A name that does not resolve ended the download before it, and a builder
+with a proxy configured was the first to reach `http_cmd()` under
+injection and find it freeing an uninitialised pointer.
 
 **Logging** uses a thread-local pointer (`_Thread_local` in msg.c) set by `aept_init()`. Log macros (`aept_log_error`, etc.) take no context parameter — they read from the thread-local pointer. Display/confirm callbacks and `aept_cancelled()` also read from it.
 

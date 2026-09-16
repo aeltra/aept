@@ -16,10 +16,21 @@
  * the returning side -- the side that matters -- never reached.
  *
  * The sweeps are shallow for the transaction calls, because this fixture
- * has no packages and no network: install and remove bail out after a
- * handful of allocations.  What that still proves is the contract at the
- * entry point.  Driving them deeper needs the shell fixtures, and is a
+ * has no packages: install and remove bail out after a handful of
+ * allocations.  What that still proves is the contract at the entry
+ * point.  Driving them deeper needs the shell fixtures, and is a
  * different exercise.
+ *
+ * The sources do answer, though.  They point at a loopback responder
+ * (below) that takes any request and says 404, because a name that does
+ * not resolve ends a download before a byte is sent, and everything
+ * between connect and reply -- the request line, each header, the
+ * status line coming back -- went unswept for as long as the fixture
+ * used one.  A builder with a proxy configured reached that stretch
+ * first and found http_cmd() freeing an uninitialised pointer -- and
+ * behind that, a request whose failed line was sent regardless, so the
+ * client sat waiting for a reply to a request it had never finished.
+ * The responder counts those.
  *
  * Copyright (C) 2026 Tobias Koch
  * SPDX-License-Identifier: MIT
@@ -27,11 +38,18 @@
 
 #include <config.h>
 
+#include <errno.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <pthread.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "aept/aept.h"
@@ -99,6 +117,150 @@ int __wrap_vasprintf(char **strp, const char *fmt, va_list ap)
     return trip() ? -1 : __real_vasprintf(strp, fmt, ap);
 }
 
+/* ── a server that answers ───────────────────────────────────────────── */
+
+static int listen_fd = -1;
+static int listen_port;
+
+/* Requests a client left half-sent and then waited on.  Read by the
+ * main thread once the sweeps are done. */
+static _Atomic int stalled;
+
+/*
+ * The fixture's network_timeout is one second, so a client waiting for a
+ * reply to a request it never finished gives up after that long, while
+ * one that noticed its own failure hangs up at once.  Half the timeout
+ * tells the two apart.
+ */
+#define STALL_MS 500
+
+/* Abandoned calls leak their connections open, one per injected failure
+ * past connect, so the table has to hold every one of a sweep's. */
+#define MAX_CLIENTS 512
+
+struct client {
+    int fd;
+    size_t len;
+    char buf[512];
+    struct timespec last; /* when the last byte arrived */
+};
+
+static long ms_since(const struct timespec *then)
+{
+    struct timespec now;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec - then->tv_sec) * 1000 + (now.tv_nsec - then->tv_nsec) / 1000000;
+}
+
+/*
+ * Take any request, answer 404, hang up.  What is answered does not
+ * matter -- that a request is written and a reply read does, since
+ * those are the allocations under test.
+ *
+ * A request is answered when it is complete and not before, and a
+ * connection whose request never completes is kept rather than served
+ * in turn: a call abandoned by longjmp() leaks its connection open, and
+ * one of those at the head of a queue would hold up every connection
+ * behind it.  So all of them are polled together.  A peer that hangs
+ * up on an unfinished request either noticed its own failure, at once,
+ * or waited for a reply that was never coming; the second is counted.
+ *
+ * Nothing here allocates.  The responder runs while the sweep is armed,
+ * and an allocation of its own would be counted against the call under
+ * test.
+ */
+static void *responder(void *arg)
+{
+    static const char reply[] =
+        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    static struct client clients[MAX_CLIENTS];
+    static struct pollfd pfd[MAX_CLIENTS + 1];
+    int n = 0;
+
+    (void)arg;
+    for (;;) {
+        int i;
+
+        pfd[0].fd = listen_fd;
+        pfd[0].events = POLLIN;
+        for (i = 0; i < n; i++) {
+            pfd[i + 1].fd = clients[i].fd;
+            pfd[i + 1].events = POLLIN;
+        }
+        if (poll(pfd, (nfds_t)n + 1, -1) < 0)
+            continue;
+
+        if (pfd[0].revents) {
+            int fd = accept(listen_fd, NULL, NULL);
+
+            if (fd >= 0 && n == MAX_CLIENTS) {
+                /* Refusing quietly would fail every download the same
+                 * way an answer does, and the sweep would not notice. */
+                fprintf(stderr, "responder: more than %d connections\n", MAX_CLIENTS);
+                _exit(2);
+            }
+            if (fd >= 0) {
+                clients[n].fd = fd;
+                clients[n].len = 0;
+                clock_gettime(CLOCK_MONOTONIC, &clients[n].last);
+                n++;
+            }
+        }
+
+        for (i = n - 1; i >= 0; i--) {
+            struct client *c = &clients[i];
+            ssize_t got;
+
+            if (!pfd[i + 1].revents)
+                continue;
+            got = read(c->fd, c->buf + c->len, sizeof(c->buf) - c->len);
+            if (got < 0 && errno == EINTR)
+                continue;
+            if (got > 0) {
+                c->len += (size_t)got;
+                clock_gettime(CLOCK_MONOTONIC, &c->last);
+                if (!memmem(c->buf, c->len, "\r\n\r\n", 4) && c->len < sizeof(c->buf))
+                    continue;
+                /* MSG_NOSIGNAL: the peer may be gone, and SIGPIPE would
+                 * take the test with it. */
+                (void)send(c->fd, reply, sizeof(reply) - 1, MSG_NOSIGNAL);
+            } else if (ms_since(&c->last) >= STALL_MS) {
+                stalled++;
+            }
+            close(c->fd);
+            clients[i] = clients[n - 1];
+            n--;
+        }
+    }
+}
+
+static void start_responder(void)
+{
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(sin);
+    pthread_t tid;
+
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sin.sin_port = 0;
+
+    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_fd < 0 || bind(listen_fd, (struct sockaddr *)&sin, sizeof(sin)) < 0 ||
+        listen(listen_fd, 16) < 0 || getsockname(listen_fd, (struct sockaddr *)&sin, &len) < 0) {
+        perror("responder");
+        exit(2);
+    }
+    listen_port = ntohs(sin.sin_port);
+
+    if (pthread_create(&tid, NULL, responder, NULL) != 0) {
+        perror("pthread_create");
+        exit(2);
+    }
+    pthread_detach(tid);
+}
+
 /* ── fixture ─────────────────────────────────────────────────────────── */
 
 static char dir_template[] = "/tmp/aept-oom-XXXXXX";
@@ -136,11 +298,14 @@ static void write_conf(void)
     fprintf(fp, "option tmp_dir %s/tmp\n", dir);
     fprintf(fp, "option lock_file %s/lock\n", dir);
     fprintf(fp, "option check_signature 0\n");
+    /* Short, so that a client left waiting is a second lost and a
+     * counted stall rather than a hang; see the responder. */
+    fprintf(fp, "option network_timeout 1\n");
     fprintf(fp, "arch all 1\n");
     fprintf(fp, "arch x86_64 10\n");
-    fprintf(fp, "src/gz alpha http://example.invalid/alpha\n");
-    fprintf(fp, "src/gz beta http://example.invalid/beta\n");
-    fprintf(fp, "src/gz gamma http://example.invalid/gamma\n");
+    fprintf(fp, "src/gz alpha http://127.0.0.1:%d/alpha\n", listen_port);
+    fprintf(fp, "src/gz beta http://127.0.0.1:%d/beta\n", listen_port);
+    fprintf(fp, "src/gz gamma http://127.0.0.1:%d/gamma\n", listen_port);
     fclose(fp);
 }
 
@@ -165,7 +330,8 @@ typedef int (*oom_call_fn)(aept_ctx_t *ctx);
  *
  * expect is what the call returns with nothing injected.  Not every
  * entry point succeeds against this fixture -- there are no packages and
- * no network, so several fail on their own merits -- and that is fine:
+ * the sources answer 404, so several fail on their own merits -- and
+ * that is fine:
  * what is under test is that an allocation failure returns and reports
  * AEPT_ERR_NOMEM, not that the operation would have worked.
  */
@@ -467,6 +633,14 @@ int main(void)
         perror("mkdtemp");
         return 2;
     }
+    /* The sources are on loopback and must be fetched from there: with
+     * a proxy in the environment libfetch would send every request to
+     * it instead, and the responder would see nothing.  That is how the
+     * builder found this path in the first place, but it is not how the
+     * test may depend on reaching it. */
+    unsetenv("HTTP_PROXY");
+    unsetenv("http_proxy");
+    start_responder();
     write_conf();
 
     /* Positive control: with nothing injected the fixture loads. */
@@ -562,6 +736,10 @@ int main(void)
     test_int_eq(aept_last_error(ctx), AEPT_ERR_NONE,
                 "and does not carry the earlier call's classification");
     aept_cleanup(ctx);
+
+    /* A request that could not be sent whole must end there, not in a
+     * wait for its reply.  The responder saw every request. */
+    test_int_eq(stalled, 0, "no failed request was left waiting for a reply");
 
     /* Still here. */
     test_ok(1, "the process survived every injected failure");

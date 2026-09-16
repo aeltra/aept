@@ -567,21 +567,22 @@ LIBFETCH_PRINTFLIKE(2, 3)
 static int http_cmd(libfetch_conn_t *conn, const char *fmt, ...)
 {
     va_list ap;
-    size_t len;
     char *msg;
-    int r;
+    int len, r;
 
     va_start(ap, fmt);
     len = vasprintf(&msg, fmt, ap);
     va_end(ap);
 
-    if (msg == NULL) {
+    /* The return value is the failure report; msg is undefined on a
+     * failure, not NULL, and testing it freed a stack pointer. */
+    if (len < 0) {
         errno = ENOMEM;
         libfetch_syserr();
         return -1;
     }
 
-    r = libfetch_write(conn, msg, len);
+    r = libfetch_write(conn, msg, (size_t)len);
     free(msg);
 
     if (r == -1) {
@@ -769,12 +770,18 @@ static int http_basic_auth(libfetch_conn_t *conn, const char *hdr, const char *u
     char *upw, *auth;
     int r;
 
-    if (asprintf(&upw, "%s:%s", usr, pwd) == -1)
+    if (asprintf(&upw, "%s:%s", usr, pwd) == -1) {
+        errno = ENOMEM;
+        libfetch_syserr();
         return -1;
+    }
     auth = http_base64(upw);
     free(upw);
-    if (auth == NULL)
+    if (auth == NULL) {
+        errno = ENOMEM;
+        libfetch_syserr();
         return -1;
+    }
     r = http_cmd(conn, "%s: Basic %s\r\n", hdr, auth);
     free(auth);
     return r;
@@ -789,12 +796,13 @@ static int http_basic_auth(libfetch_conn_t *conn, const char *hdr, const char *u
  * caller of.  $HTTP_PROXY carries a URL, and a URL already has a place
  * to put a user and a password.
  */
-static void http_proxy_authorize(libfetch_conn_t *conn, struct libfetch_url *purl)
+static int http_proxy_authorize(libfetch_conn_t *conn, struct libfetch_url *purl)
 {
     if (!purl)
-        return;
+        return 0;
     if (*purl->user || *purl->pwd)
-        http_basic_auth(conn, "Proxy-Authorization", purl->user, purl->pwd);
+        return http_basic_auth(conn, "Proxy-Authorization", purl->user, purl->pwd);
+    return 0;
 }
 
 /*****************************************************************************
@@ -851,10 +859,10 @@ static libfetch_conn_t *http_connect(struct libfetch_ctx *fctx, struct libfetch_
 
     if (is_https && purl) {
         http_cork(conn, 1);
-        http_cmd(conn, "CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n", URL->host, URL->port, URL->host,
-                 URL->port);
-        http_proxy_authorize(conn, purl);
-        http_cmd(conn, "\r\n");
+        if (http_cmd(conn, "CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n", URL->host, URL->port,
+                     URL->host, URL->port) == -1 ||
+            http_proxy_authorize(conn, purl) == -1 || http_cmd(conn, "\r\n") == -1)
+            goto ouch;
         http_cork(conn, 0);
         if (http_get_reply(conn) != HTTP_OK) {
             http_seterr(conn->err);
@@ -1001,30 +1009,40 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
             snprintf(hbuf + strlen(hbuf), sizeof(hbuf) - strlen(hbuf), ":%d", url->port);
         }
 
-        /* send request */
+        /*
+         * Send the request.  Every line is checked: upstream sent them
+         * all regardless, and a line that failed to go out -- for want
+         * of memory to format it, say -- left the request incomplete
+         * with the client below waiting for a reply the server was
+         * never going to send, until the idle timeout gave up for it.
+         */
         if (verbose)
             libfetch_info("requesting %s://%s%s", url->scheme, host, url->doc);
 
         http_cork(conn, 1);
         if (purl && strcasecmp(URL->scheme, LIBFETCH_SCHEME_HTTPS) != 0) {
-            http_cmd(conn, "%s %s://%s%s HTTP/1.1\r\n", op, url->scheme, host, url->doc);
-        } else {
-            http_cmd(conn, "%s %s HTTP/1.1\r\n", op, url->doc);
+            if (http_cmd(conn, "%s %s://%s%s HTTP/1.1\r\n", op, url->scheme, host, url->doc) == -1)
+                goto ouch;
+        } else if (http_cmd(conn, "%s %s HTTP/1.1\r\n", op, url->doc) == -1) {
+            goto ouch;
         }
 
-        if (nocache)
-            http_cmd(conn, "Cache-Control: no-cache\r\n");
+        if (nocache && http_cmd(conn, "Cache-Control: no-cache\r\n") == -1)
+            goto ouch;
 
         /* virtual host */
-        http_cmd(conn, "Host: %s\r\n", host);
+        if (http_cmd(conn, "Host: %s\r\n", host) == -1)
+            goto ouch;
 
         /* proxy authorization */
-        http_proxy_authorize(conn, purl);
+        if (http_proxy_authorize(conn, purl) == -1)
+            goto ouch;
 
         /* server authorization */
         if (need_auth || *url->user || *url->pwd) {
             if (*url->user || *url->pwd) {
-                http_basic_auth(conn, "Authorization", url->user, url->pwd);
+                if (http_basic_auth(conn, "Authorization", url->user, url->pwd) == -1)
+                    goto ouch;
             } else {
                 http_seterr(HTTP_NEED_AUTH);
                 goto ouch;
@@ -1038,13 +1056,15 @@ static libfetch_io_t *http_request(struct libfetch_ctx *fctx, struct libfetch_ur
          * If-None-Match and ignores the date, so this degrades in the
          * right direction if a fronting proxy ever weakens the ETag.
          */
-        if (have && have->etag[0])
-            http_cmd(conn, "If-None-Match: %s\r\n", have->etag);
-        if (have && have->last_modified[0])
-            http_cmd(conn, "If-Modified-Since: %s\r\n", have->last_modified);
+        if (have && have->etag[0] && http_cmd(conn, "If-None-Match: %s\r\n", have->etag) == -1)
+            goto ouch;
+        if (have && have->last_modified[0] &&
+            http_cmd(conn, "If-Modified-Since: %s\r\n", have->last_modified) == -1)
+            goto ouch;
 
-        http_cmd(conn, "User-Agent: %s\r\n", AEPT_USER_AGENT);
-        http_cmd(conn, "\r\n");
+        if (http_cmd(conn, "User-Agent: %s\r\n", AEPT_USER_AGENT) == -1 ||
+            http_cmd(conn, "\r\n") == -1)
+            goto ouch;
 
         /*
          * Force the queued request to be dispatched.  Normally, one

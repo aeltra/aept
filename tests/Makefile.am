@@ -328,7 +328,7 @@ TESTS = $(unit_tests) $(dist_check_SCRIPTS)
 # -static as elsewhere: --wrap acts at link time.
 test_oom_SOURCES = test_oom.c
 test_oom_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
-test_oom_LDADD = $(top_builddir)/src/libaept.la
+test_oom_LDADD = $(top_builddir)/src/libaept.la $(PTHREAD_LIBS)
 test_oom_LDFLAGS = -static $(COVERAGE_LDFLAGS) \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc \
     -Wl,--wrap=strdup -Wl,--wrap=vasprintf
