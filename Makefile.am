@@ -9,6 +9,7 @@ aeptinclude_HEADERS = include/aept/aept.h
 # tarball or a release cannot be built from it.
 noinst_HEADERS = \
     include/aept/archive.h \
+    include/aept/authfile.h \
     include/aept/autoremove.h \
     include/aept/clash.h \
     include/aept/cli.h \

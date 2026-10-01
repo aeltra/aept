@@ -259,6 +259,16 @@ class Aept:
         self._call(lib.aept_set_cache_dir(self._ctx, str_to_c(path)),
                    "aept_set_cache_dir() failed")
 
+    def set_auth_file(self, path: Optional[str]):
+        """Read source credentials from this auth.conf.
+
+        A host path, not prefixed with the offline root.  Without one, the
+        file is looked up: the RealHome file inside a build-box target,
+        then /etc/aept/auth.conf.  Pass ``None`` to return to the lookup.
+        """
+        self._call(lib.aept_set_auth_file(self._ctx, str_to_c(path)),
+                   "aept_set_auth_file() failed")
+
     def set_verbosity(self, level: int):
         lib.aept_set_verbosity(self._ctx, int(level))
 

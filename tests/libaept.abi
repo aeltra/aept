@@ -68,6 +68,7 @@ func:aept_pkg_info_free: AEPT_EXPORT void aept_pkg_info_free(aept_pkg_info_t *in
 func:aept_pkg_info_list_free: AEPT_EXPORT void aept_pkg_info_list_free(aept_pkg_info_list_t *list);
 func:aept_pkg_list_free: AEPT_EXPORT void aept_pkg_list_free(aept_pkg_list_t *list);
 func:aept_remove: AEPT_EXPORT int aept_remove(aept_ctx_t *ctx, const char **names, int count);
+func:aept_set_auth_file: AEPT_EXPORT int aept_set_auth_file(aept_ctx_t *ctx, const char *path);
 func:aept_set_cache_dir: AEPT_EXPORT int aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
 func:aept_set_confirm_fn: AEPT_EXPORT void aept_set_confirm_fn(aept_ctx_t *ctx, aept_confirm_fn fn, void *userdata);
 func:aept_set_display_fn: AEPT_EXPORT void aept_set_display_fn(aept_ctx_t *ctx, aept_display_fn fn, void *userdata);

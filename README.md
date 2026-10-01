@@ -29,9 +29,10 @@ aept autoremove
 - Conffile handling, version pinning, directory-watch triggers and
   maintainer scripts (preinst/postinst/prerm/postrm).
 - Strict transport security: for HTTPS sources, TLS peer and hostname
-  verification are always on and cannot be disabled. Credentials are
-  taken from URLs only, and are stripped from everything aept prints
-  or stores — they reach the wire and nothing else.
+  verification are always on and cannot be disabled. Credentials come
+  from a source URL or an apt-style `auth.conf`, which is only ever
+  used for HTTPS, and are stripped from everything aept prints or
+  stores — they reach the wire and nothing else.
 - Interruptible, bounded downloads: an idle network timeout applies to
   every wait, and Ctrl-C works even mid-handshake.
 - Small footprint: about 9,000 lines of C, HTTP via a pruned vendored

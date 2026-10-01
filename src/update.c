@@ -363,6 +363,9 @@ int aept_op_update(struct aept_ctx *ctx)
     for (i = 0; i < ctx->config.nsources; i++) {
         if (strncmp(ctx->config.sources[i].url, "https://", 8) != 0)
             aept_log_warning("source '%s' uses insecure transport", ctx->config.sources[i].name);
+        if (ctx->config.sources[i].file_credentials)
+            aept_log_debug("source '%s' uses credentials from '%s'", ctx->config.sources[i].name,
+                           ctx->config.auth_file_used);
     }
 
     for (i = 0; i < ctx->config.nsources; i++) {

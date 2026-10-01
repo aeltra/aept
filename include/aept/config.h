@@ -21,6 +21,10 @@ void aept_config_apply_offline_root(struct aept_config *cfg);
 /* Return path prefixed with offline_root if set. Caller must free. */
 char *aept_config_root_path(const struct aept_config *cfg, const char *path);
 
+/* Whether the root is a build-box target.  /etc/target is the file
+ * build-box writes into every one of them. */
+int aept_config_is_build_box_target(const struct aept_config *cfg);
+
 /* Validate config values (paths exist and have expected types). */
 int aept_config_validate(const struct aept_config *cfg);
 

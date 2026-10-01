@@ -66,6 +66,22 @@ AEPT_API void aept_set_verbosity(aept_ctx_t *ctx, int level);
 AEPT_API int aept_set_cache_dir(aept_ctx_t *ctx, const char *path);
 
 /*
+ * Read source credentials from this auth.conf instead of looking one up.
+ * Like aept_set_cache_dir(), the path is a host path and is not
+ * prefixed with the offline root.  Without one, the first that exists
+ * of <home>/RealHome/.aeltra/auth.conf (inside a build-box target, when
+ * not running as root) and /etc/aept/auth.conf is read, both under the
+ * offline root.  Only https sources whose url carries no credentials
+ * take any from the file.  Pass NULL to return to the lookup.
+ *
+ * Takes effect when the config is loaded, or at once if it already is.
+ * Returns 0, or -1 when the file was applied at once and cannot be
+ * read, or the copy could not be allocated; a file that cannot be read
+ * makes the next aept_load_config() fail in the same way.
+ */
+AEPT_API int aept_set_auth_file(aept_ctx_t *ctx, const char *path);
+
+/*
  * Seconds a single network wait may take before the transfer is
  * abandoned; 0 waits indefinitely.  Defaults to 120, and to whatever
  * `option network_timeout` says once a config file is loaded.

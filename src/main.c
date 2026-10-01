@@ -23,6 +23,7 @@
 static const char *conf_file = DEFAULT_CONF;
 static const char *offline_root;
 static const char *cache_dir_override;
+static const char *auth_file;
 static int conf_explicit;
 static int verbose_count;
 
@@ -105,6 +106,13 @@ aept_ctx_t *init_aept(void)
         return NULL;
     }
 
+    /* Before the config: it is read as part of loading it, so a file
+     * that cannot be read fails the load and says why. */
+    if (auth_file && aept_set_auth_file(ctx, auth_file) < 0) {
+        cli_cleanup(ctx);
+        return NULL;
+    }
+
     cf = resolve_conf();
 
     if (conf_explicit && access(cf, R_OK) < 0) {
@@ -153,7 +161,8 @@ aept_ctx_t *init_aept(void)
 static void usage_main(FILE *out)
 {
     fprintf(out,
-            "Usage: aept [-c <file>] [-o <dir>] [-C <dir>] [-v] <command> [options] [args...]\n"
+            "Usage: aept [-c <file>] [-o <dir>] [-C <dir>] [--auth-file <file>] [-v] <command>\n"
+            "            [options] [args...]\n"
             "\n"
             "Global options:\n"
             "  -c, --conf <file>         Configuration file (default: %s)\n"
@@ -161,6 +170,8 @@ static void usage_main(FILE *out)
             "  -C, --cache-dir <dir>     Override the cache directory (host path,\n"
             "                            not prefixed with the offline root).\n"
             "                            Also read from AEPT_CACHE_DIR if unset.\n"
+            "      --auth-file <file>    Read source credentials from <file> (host\n"
+            "                            path, not prefixed with the offline root)\n"
             "  -v, --verbose             Increase verbosity\n"
             "  -h, --help                Show this help\n"
             "\n"
@@ -204,13 +215,17 @@ int transaction_exit(aept_ctx_t *ctx, int r)
     return 0;
 }
 
+/* Long-only options, numbered past any character getopt returns. */
+enum { OPT_AUTH_FILE = 256 };
+
 static struct option global_options[] = {
-    {"conf",         required_argument, NULL, 'c'},
-    {"offline-root", required_argument, NULL, 'o'},
-    {"cache-dir",    required_argument, NULL, 'C'},
-    {"verbose",      no_argument,       NULL, 'v'},
-    {"help",         no_argument,       NULL, 'h'},
-    {NULL,           0,                 NULL, 0  }
+    {"conf",         required_argument, NULL, 'c'          },
+    {"offline-root", required_argument, NULL, 'o'          },
+    {"cache-dir",    required_argument, NULL, 'C'          },
+    {"auth-file",    required_argument, NULL, OPT_AUTH_FILE},
+    {"verbose",      no_argument,       NULL, 'v'          },
+    {"help",         no_argument,       NULL, 'h'          },
+    {NULL,           0,                 NULL, 0            }
 };
 
 int main(int argc, char *argv[])
@@ -234,6 +249,9 @@ int main(int argc, char *argv[])
             break;
         case 'C':
             cache_dir_override = optarg;
+            break;
+        case OPT_AUTH_FILE:
+            auth_file = optarg;
             break;
         case 'v':
             verbose_count++;

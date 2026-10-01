@@ -44,9 +44,15 @@ Architecture for why. `src/libfetch/` is a **fork**, no longer tracked upstream 
 directly; there is no patch series and no re-import script. It has been pruned
 to what aept uses: HTTP and HTTPS GET, the connection cache, redirects, proxies
 and basic auth from the source URL. Uploads, stat, directory listing, `.netrc`,
-`HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL and
-nowhere else** — the source URL for an origin server, the `$HTTP_PROXY` URL for
-a proxy; there is no environment variable that supplies a user and password.
+`HTTP_AUTH` and `HTTP_PROXY_AUTH` are gone. **Credentials come from a URL or an
+`auth.conf`, and nowhere else** — the source URL or an apt-style auth file
+(authfile.c) for an origin server, the `$HTTP_PROXY` URL for a proxy; there is
+no environment variable that supplies a user and password. The auth file was
+added for build-box: a token in a source URL ends up in the sysroot's
+`aept.conf`, while the file stays on the host (`--auth-file` while
+bootstrapping, `~/RealHome/.aeltra/auth.conf` inside a target). Its
+credentials land in the same `src->user`/`src->password` at config time, so
+everything below holds for them unchanged.
 They also go nowhere else, **by construction rather than by discipline**:
 `aept_url_split()` (util.c) separates the userinfo out of a source URL at
 config-parse time, so `src->url` — the string every log message, validator
@@ -102,7 +108,7 @@ one you introduced. Note that a `CFLAGS` change does not force a recompile —
 
 **Symbol visibility.** `libaept` is built with `-fvisibility=hidden`, so the ABI
 is what `AEPT_API` marks in the headers — not whatever is spelled `aept_*`. It
-exports **39** symbols: the 36 in `aept.h`, plus `aept_log()`,
+exports **42** symbols: the 39 in `aept.h`, plus `aept_log()`,
 `aept_malloc()` and `aept_asprintf()`, which the CLI needs because it links
 `libaept` like any other consumer. Before this it exported 139, including every
 internal helper, and `src/libfetch/` stayed hidden only because its names
@@ -111,7 +117,7 @@ link the static archive (`_LDFLAGS = -static` in `tests/Makefile.am`), where
 hidden visibility does not apply.
 
 **The ABI baseline.** `tests/libaept.abi` records the ABI as *declarations*,
-not as names — 51 interfaces: the 39 exported functions, plus every type and
+not as names — 57 interfaces: the 42 exported functions, plus every type and
 enum in `aept.h`. `tests/test_abi_symbols.sh` checks it, and
 `tests/abi-declarations.sh` extracts the current one by preprocessing the
 headers with `-DAEPT_API=AEPT_EXPORT` (everything from `aept.h`, since it is
@@ -789,6 +795,7 @@ weakest part of the CLI, which a single 80.7% figure hid.
   An **overwrite** leaves the other package installed, so it must stop claiming the path: `aept_clash_check()` records `(owner, path)` into an `aept_takeover_list_t` and `aept_clash_commit_takeovers()` rewrites that owner's `.list` **as soon as the new package's files are on disk** — after the unpack, before the postinst. The files are the new package's from that moment whatever its configure step does, and gating the rewrite on the postinst is how a failed one left the old owner still claiming a path whose later removal deleted the new package's file. Only non-directories can be taken over, since `aept_ar_list_data_paths()` skips directories, so a shared directory is never struck from anyone's list. An owner left owning no files at all has **disappeared**: `aept_do_disappear()` (remove.c) runs its `postrm` with `disappear <overwriter> <overwriter-version>` and clears its info files — before the overwriter's postinst, as dpkg does it — unless another installed package still depends on it (`still_depended_on()`, Depends and Recommends, through any name it provides), in which case it stays installed owning nothing, as it would under dpkg. Deliberately *not* routed through `aept_do_remove()` — no `prerm`, because nothing knew in advance; no file deletion, because every file it had is now somebody else's; and its conffile *records* go with its other info files while the conffiles themselves stay, having been taken over too. Only non-directory entries count towards "owns no files", since directories are shared by everyone who ships into them. `aept_run_script_args()` exists for this one call, the only maintainer-script invocation in the contract carrying more than an action and a version.
 
 - **trigger.c** — Directory-watch triggers from `{info_dir}/{name}.triggers`, matched via `fnmatch` against directories touched by the transaction. **A failing trigger script never fails the completed transaction, but it never vanishes either**: the matched directories are written to `{name}.triggers-pending` *before* the script runs — so a failure, a crash and a Ctrl-C all leave the same record — and the package's `Status:` is set to `triggers-pending` (restored, and the record removed, on success; the side file is authoritative, the Status line derived from it). Every later transaction retries the record merged with anything newly matched, and `aept triggers` retries on demand. The status feed for libsolv normalizes `triggers-pending` to `installed`, like `unpacked`: the files are on disk and clash detection must see them. The CLI reports the state as **exit 2** ("transaction succeeded, a trigger is owed") via `AEPT_ERR_TRIGGER` in `aept_last_error()`; embedders and the Python bindings read the same channel. The pending scan collects names before running anything — the scripts rewrite files in `info_dir`, and mutating a directory mid-`readdir()` can hand entries back forever. Removal deletes the record with the other info files; the upgrade-side `remove_info_files` deliberately keeps it, so the retry runs the *new* version's script.
+- **authfile.c** — source credentials from an apt-style `auth.conf`. Reads **exactly one file**, the first that exists of `--auth-file` (`aept_set_auth_file()`, a host path, literal like `--cache-dir`), `<home>/RealHome/.aeltra/auth.conf` inside a build-box target when euid is not 0 (home from `getpwuid()`, not `$HOME`, which `sudo` and friends leave pointing elsewhere), and `/etc/aept/auth.conf`; the last two under the offline root. No overlay: a merge would make "which token was sent" depend on two files and a precedence rule, and a target's own file is more often an accident than a wish. An entry applies **only to https** sources, at a path-segment boundary, first match wins, and never to a source whose URL carries credentials. It fills `src->user`/`src->password` and sets `src->file_credentials`, so `aept_set_auth_file()` after the config is loaded can drop exactly what a file gave and apply another. **Nothing read from the file is logged**: a malformed entry is reported by file and line, never by token, since the token at fault may be a password. The file used is kept in `cfg->auth_file_used` and named per source by `aept update` at debug level — not at load time, because the CLI sets the verbosity only after `aept_load_config()`. `tests/test_authfile.c` covers parsing, matching and the lookup order; `tests/test_auth_file.sh` the CLI and, through condserver's `AUTH` line, that plain http gets nothing. There is no positive wire test: the CLI cannot be told to trust a test CA, and `test_redact_credentials.sh` already holds the path from `src->user` to the wire.
 - **download.c** — wraps `src/libfetch/` for HTTP/HTTPS retrieval of indexes and packages. The only caller of the fork outside `api.c`, which sets up and tears down its connection cache. A body that ends before its `Content-Length`, or a chunked body that ends mid-chunk or without its CRLF framing, is an **error**, not a short read: `struct httpio` sets `error`, so the stream fails and its connection is dropped rather than returned to the cache. An interrupted read is not one of those — it is retried here, and only here, because this is the level that knows whether the interruption was a cancellation. Only the checksum saves a truncated package; nothing saves a truncated unsigned index. `aept_download_cond()` adds the conditional form: it hands libfetch the validators to send and reports back the ones the server offered, and turns the `304` — which libfetch reports as a NULL return with `LIBFETCH_HTTP_NOT_MODIFIED` in `libfetch_last_error`, the way every other status arrives — into an `*unchanged` of 1 with nothing written. `aept_download()` is the unconditional wrapper.
 - **api.c** — Public API implementation behind `aept.h`; **pin.c** version pinning, **autoremove.c** unneeded auto-installed packages, **clean.c** cache cleanup, **validator.c** the cache-validator record beside each index.
 

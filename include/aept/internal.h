@@ -18,12 +18,14 @@
  * every log message, validator record and download path circulates is
  * incapable of leaking a password.  The credentials live apart, here,
  * and only the request assembly in download.c puts them back together.
+ * They come from the url, or else from an auth.conf (authfile.c).
  */
 typedef struct {
     char *name;
     char *url;
-    char *user;     /* NULL when the configured url carried none */
-    char *password; /* NULL when the configured url carried none */
+    char *user;           /* NULL when neither url nor auth file had any */
+    char *password;       /* NULL when neither url nor auth file had any */
+    int file_credentials; /* user/password came from an auth file */
     int gzip;
 } aept_source_t;
 
@@ -42,6 +44,7 @@ typedef struct aept_config {
     char *marks_file;      /* default "/var/lib/aept/marks" */
     char *ssl_client_cert; /* NULL or path to client certificate */
     char *ssl_client_key;  /* NULL or path to client private key */
+    char *auth_file_used;  /* NULL or the auth file credentials came from */
 
     char **archs;
     int narchs;
@@ -102,7 +105,8 @@ struct aept_ctx {
     _Atomic int cancelled;
     int use_color;
     int config_loaded;
-    int last_error; /* AEPT_ERR_*; see aept_last_error() in aept.h */
+    char *auth_file; /* NULL, or the host path aept_set_auth_file() named */
+    int last_error;  /* AEPT_ERR_*; see aept_last_error() in aept.h */
 
     /* Where an allocation failure lands.  See AEPT_OOM_ENTER below. */
     jmp_buf oom_jmp;

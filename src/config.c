@@ -77,6 +77,7 @@ static void add_source(struct aept_config *cfg, const char *name, const char *ur
     src->url = clean;
     src->user = user;
     src->password = password;
+    src->file_credentials = 0;
     src->gzip = gzip;
 }
 
@@ -361,6 +362,7 @@ void aept_config_free(struct aept_config *cfg)
     free(cfg->marks_file);
     free(cfg->ssl_client_cert);
     free(cfg->ssl_client_key);
+    free(cfg->auth_file_used);
 
     memset(cfg, 0, sizeof(*cfg));
 }
@@ -370,6 +372,15 @@ char *aept_config_root_path(const struct aept_config *cfg, const char *path)
     char *result;
     aept_asprintf(&result, "%s%s", cfg->offline_root ? cfg->offline_root : "", path);
     return result;
+}
+
+int aept_config_is_build_box_target(const struct aept_config *cfg)
+{
+    char *marker = aept_config_root_path(cfg, "/etc/target");
+    int found = aept_file_exists(marker);
+
+    free(marker);
+    return found;
 }
 
 int aept_config_lock(struct aept_ctx *ctx)

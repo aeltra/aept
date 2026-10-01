@@ -39,6 +39,12 @@ performed by usign.
 	control. Precedence: *--cache-dir* > *AEPT_CACHE_DIR* > *option
 	cache_dir* > default.
 
+*--auth-file* <file>
+	Read source credentials from _file_ instead of looking an auth file
+	up. Like *--cache-dir*, this is a host path and is *not* prefixed
+	with the offline root. A file that cannot be read is an error. See
+	*CREDENTIALS*.
+
 *-v*, *--verbose*
 	Increase verbosity. Can be specified multiple times.
 
@@ -462,6 +468,48 @@ option cache_dir /var/cache/aept
 option check_signature 1
 ```
 
+# CREDENTIALS
+
+A source that needs authentication gets HTTP basic credentials in one of two
+ways. Either its url carries them, as in
+_https://user:password@example.org/repo_, or an auth file supplies them.
+Credentials in the url take precedence. Either way they reach the request and
+nothing else: aept strips them from everything it prints or stores.
+
+The auth file uses the format of apt's _auth.conf_: *machine*, *login* and
+*password* tokens, separated by blanks or newlines, one *machine* per entry.
+A token starting with *#* begins a comment, except where a value is expected,
+so a password may start with *#*; a value cannot contain blanks.
+
+```
+# archive.aeltra.eu needs an API token
+machine archive.aeltra.eu login token password aeltra_api_...
+machine example.org/private login alice password s3cret
+```
+
+A *machine* names a host, optionally with a port and a path prefix, and
+optionally with an _https://_ scheme. It applies to a source whose url is on
+that host and port and whose path is the prefix or lies below it, at a path
+segment boundary. The default port 443 may be given or left out on either
+side. The first matching entry is used.
+
+Credentials from the file are only ever sent over https: an entry never
+applies to a plain-http source, and an entry naming another scheme is
+ignored. A source keeps the credentials of its own url.
+
+Exactly one auth file is read, the first that exists of:
+
+. the file given with *--auth-file*;
+. inside a build-box target (_/etc/target_ exists) and when not running as
+  root, _~/RealHome/.aeltra/auth.conf_ of the user, where _~_ is the home
+  directory from the password database rather than *$HOME*;
+. _/etc/aept/auth.conf_.
+
+The last two are resolved under the offline root. A file other users can
+read is warned about; the file should be readable by its owner only. With
+*-v*, *aept update* names the auth file each source's credentials came from.
+Malformed entries are reported by file and line, never by content.
+
 # OFFLINE ROOT
 
 When an offline root is set (via *--offline-root* or the *offline_root* config
@@ -480,8 +528,9 @@ disk.
 The exception is *--cache-dir* on the command line (or *AEPT_CACHE_DIR* in
 the environment): an override given there is used verbatim, as a host path,
 and skips the offline-root prefixing that *option cache_dir* in the config
-file would receive. See the "CLI is literal" note on *--cache-dir* under
-*GLOBAL OPTIONS*.
+file would receive. *--auth-file* is literal in the same way, while the auth
+files aept looks up itself are found under the offline root. See the "CLI is
+literal" note on *--cache-dir* under *GLOBAL OPTIONS*.
 
 Prefixing _tmp_dir_ is required, not merely tidy: control archives are
 unpacked into it and their maintainer scripts are then run after chroot()ing
@@ -618,6 +667,13 @@ _/etc/aept/aept.conf_
 
 _/etc/aept/usign/trustdb/_
 	Default directory for trusted usign public keys.
+
+_/etc/aept/auth.conf_
+	Source credentials. See *CREDENTIALS*.
+
+_~/RealHome/.aeltra/auth.conf_
+	Source credentials inside a build-box target, read instead of
+	_/etc/aept/auth.conf_ when present. See *CREDENTIALS*.
 
 _/var/lib/aept/status_
 	Installed-packages database (Debian control file format).

@@ -3,6 +3,7 @@ bin_PROGRAMS = aept
 
 libaept_la_SOURCES = \
     api.c \
+    authfile.c \
     autoremove.c \
     clash.c \
     clearsign.c \
@@ -93,7 +94,7 @@ libaept_la_LIBADD = $(SOLV_LIBS) $(ARCHIVE_LIBS) $(OPENSSL_LIBS)
 # 0:3:0  aept_set_cache_dir()
 # 0:2:0  aept_triggers(), AEPT_ERR_TRIGGER
 # 0:1:0  aept_set_network_timeout(), aept_last_error()
-libaept_la_LDFLAGS = -version-number 1:2:0 $(COVERAGE_LDFLAGS)
+libaept_la_LDFLAGS = -version-number 1:3:0 $(COVERAGE_LDFLAGS)
 
 aept_SOURCES = \
     main.c \

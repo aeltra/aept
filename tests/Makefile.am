@@ -10,7 +10,7 @@ AM_CPPFLAGS = \
 unit_tests = test_archive_path test_script test_config_root \
     test_archive_open test_clearsign test_trigger_entries test_ssl_env \
     test_no_proxy test_validator test_url_sanitize test_marks test_listfile test_sums test_api \
-    test_url_parse test_config_values test_verify test_fetch_internals test_stanza \
+    test_url_parse test_config_values test_authfile test_verify test_fetch_internals test_stanza \
     test_deb test_iofail \
     test_oom
 
@@ -170,6 +170,15 @@ test_config_values_SOURCES = \
 test_config_values_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 test_config_values_LDFLAGS = $(COVERAGE_LDFLAGS)
 
+test_authfile_SOURCES = \
+    test_authfile.c \
+    $(top_srcdir)/src/config.c \
+    $(top_srcdir)/src/util.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_authfile_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_authfile_LDFLAGS = $(COVERAGE_LDFLAGS)
+
 test_verify_SOURCES = \
     test_verify.c \
     $(top_srcdir)/src/verify.c \
@@ -265,6 +274,7 @@ dist_check_SCRIPTS = \
     test_install_options.sh \
     test_signature_reject.sh \
     test_update_conditional.sh \
+    test_auth_file.sh \
     test_redact_credentials.sh \
     test_index_freshness.sh \
     test_upgrade_conffiles.sh \

@@ -24,6 +24,7 @@
 #include "aept/internal.h"
 #include "aept/integrity.h"
 #include "aept/listfile.h"
+#include "aept/authfile.h"
 #include "aept/autoremove.h"
 #include "aept/clean.h"
 #include "aept/config.h"
@@ -83,6 +84,7 @@ void aept_cleanup(aept_ctx_t *ctx)
         ctx->config_loaded = 0;
     }
 
+    free(ctx->auth_file);
     aept_log_set_ctx(NULL);
     free(ctx);
 }
@@ -120,6 +122,14 @@ static int api_load_config(aept_ctx_t *ctx, const char *path)
     }
 
     aept_config_apply_offline_root(&ctx->config);
+
+    /* After the offline root is in place: the looked-up files live
+     * under it. */
+    if (aept_auth_apply(&ctx->config, ctx->auth_file) < 0) {
+        aept_config_free(&ctx->config);
+        return -1;
+    }
+
     ctx->config_loaded = 1;
 
     libfetch_set_timeout(ctx->http, ctx->config.network_timeout);
@@ -163,6 +173,24 @@ int aept_set_cache_dir(aept_ctx_t *ctx, const char *path)
     ctx->config.cache_dir = copy;
     AEPT_OOM_LEAVE(ctx);
     return 0;
+}
+
+int aept_set_auth_file(aept_ctx_t *ctx, const char *path)
+{
+    char *copy;
+    int r = 0;
+    AEPT_OOM_ENTER(ctx, -1);
+
+    /* Copy before releasing, as in aept_set_cache_dir(). */
+    copy = path ? aept_strdup(path) : NULL;
+    free(ctx->auth_file);
+    ctx->auth_file = copy;
+
+    if (ctx->config_loaded)
+        r = aept_auth_apply(&ctx->config, ctx->auth_file);
+
+    AEPT_OOM_LEAVE(ctx);
+    return r;
 }
 
 void aept_set_verbosity(aept_ctx_t *ctx, int level)
