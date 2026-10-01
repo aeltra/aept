@@ -1,3 +1,20 @@
+aept (0.9.1-1) unstable; urgency=medium
+
+  * A failed download says why: the HTTP status in words, a TLS
+    failure by kind, or the system's reason for a failed connection or
+    name lookup. A 401 tells credentials that were rejected from none
+    being sent, and for an http source adds that auth file credentials
+    are only sent over https -- the usual cause when the server
+    redirects to https. It used to say only "failed to download".
+  * Fix: libfetch never clears its last error, so a response body that
+    failed to read could be reported with an earlier transfer's
+    reason. It is reset before each transfer.
+  * Tests: test_download_errors.sh checks the reasons against a stub
+    answering 401, 403, 404 and 500, and a refused connection.
+  * No ABI change; libaept's interface version stays 1:3:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Thu, 01 Oct 2026 23:14:35 +0300
+
 aept (0.9.0-1) unstable; urgency=medium
 
   * New: source credentials from an auth file in the format of apt's
