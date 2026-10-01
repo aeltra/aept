@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <libgen.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,82 @@ static int record_error(struct aept_ctx *ctx)
     return ctx->last_error;
 }
 
+/*
+ * Why the last transfer failed, in words, or NULL when libfetch recorded
+ * nothing more specific.  "credentials" says whether the request had any
+ * to send: a 401 then means they were rejected rather than missing.
+ * Nothing here quotes the server or the credentials.
+ */
+static const char *describe_failure(char *buf, size_t size, const char *url, int credentials)
+{
+    int code = libfetch_last_error.code;
+
+    switch (libfetch_last_error.category) {
+    case LIBFETCH_ERRCAT_HTTP:
+        if (code == 401 && credentials)
+            return "the server rejected the credentials (HTTP 401)";
+        if (code == 401) {
+            /* The common way to end up here: an http source, which the
+             * server redirects to https, with an auth file entry that
+             * applies to https only. */
+            snprintf(buf, size, "the server requires credentials (HTTP 401) and none are set%s",
+                     strncmp(url, "http://", 7) == 0
+                         ? "; credentials from an auth file are only sent to https sources"
+                         : "");
+            return buf;
+        }
+        if (code == 403)
+            return "access denied (HTTP 403)";
+        if (code == 404)
+            return "not found (HTTP 404)";
+        if (code == 407)
+            return "the proxy requires credentials (HTTP 407)";
+        if (code == 999)
+            return "the server's reply is not valid HTTP";
+        snprintf(buf, size, "HTTP %d", code);
+        return buf;
+    case LIBFETCH_ERRCAT_TLS:
+        switch (code) {
+        case LIBFETCH_ERR_TLS_SERVER_CERT_ABSENT:
+            return "the server sent no certificate";
+        case LIBFETCH_ERR_TLS_SERVER_CERT_HOSTNAME:
+            return "the server's certificate does not match its name";
+        case LIBFETCH_ERR_TLS_SERVER_CERT_UNTRUSTED:
+            return "the server's certificate is not trusted";
+        case LIBFETCH_ERR_TLS_CLIENT_CERT_UNTRUSTED:
+            return "the server did not accept the client certificate";
+        default:
+            return "the TLS handshake failed";
+        }
+    case LIBFETCH_ERRCAT_ERRNO:
+        return code ? strerror(code) : NULL;
+    case LIBFETCH_ERRCAT_NETDB:
+        return gai_strerror(code);
+    case LIBFETCH_ERRCAT_URL:
+        return "malformed url";
+    default:
+        return NULL;
+    }
+}
+
+/* The error for a failed transfer, with its reason where one is known. */
+static void log_failure(struct aept_ctx *ctx, const char *shown_url, int credentials)
+{
+    char buf[256];
+    const char *why;
+
+    if (record_error(ctx) == AEPT_ERR_TIMEOUT) {
+        aept_log_error("timed out downloading '%s'", shown_url);
+        return;
+    }
+
+    why = describe_failure(buf, sizeof(buf), shown_url, credentials);
+    if (why)
+        aept_log_error("failed to download '%s': %s", shown_url, why);
+    else
+        aept_log_error("failed to download '%s'", shown_url);
+}
+
 int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, const char *name,
                        const char *user, const char *password,
                        const struct libfetch_validators *have, struct libfetch_validators *got,
@@ -62,6 +139,7 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
     char buf[65536];
     ssize_t n;
     int ret = -1;
+    int credentials = 0;
 
     aept_log_info("downloading %s", shown_name);
 
@@ -87,12 +165,18 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
      * directly) still works, since the parse fills the same two fields
      * and the injection only overrides what it was given.
      */
+    /* libfetch never clears this, and a body that fails to read may
+     * set nothing: start from nothing, or the reason logged for this
+     * transfer could be a previous one's. */
+    libfetch_last_error = (struct libfetch_error){LIBFETCH_ERRCAT_FETCH, LIBFETCH_OK};
+
     fu = libfetch_parse_url(url);
     if (fu) {
         if (user)
             snprintf(fu->user, sizeof(fu->user), "%s", user);
         if (password)
             snprintf(fu->pwd, sizeof(fu->pwd), "%s", password);
+        credentials = fu->user[0] || fu->pwd[0];
         fio = libfetch_get_http(ctx->http, fu, "", have, got);
         libfetch_free_url(fu);
     }
@@ -112,10 +196,7 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
             goto cleanup;
         }
 
-        if (record_error(ctx) == AEPT_ERR_TIMEOUT)
-            aept_log_error("timed out downloading '%s'", shown_url);
-        else
-            aept_log_error("failed to download '%s'", shown_url);
+        log_failure(ctx, shown_url, credentials);
         goto cleanup;
     }
 
@@ -147,10 +228,7 @@ int aept_download_cond(struct aept_ctx *ctx, const char *url, const char *dest, 
              */
             if (errno == EINTR)
                 continue;
-            if (record_error(ctx) == AEPT_ERR_TIMEOUT)
-                aept_log_error("timed out downloading '%s'", shown_url);
-            else
-                aept_log_error("failed to download '%s'", shown_url);
+            log_failure(ctx, shown_url, credentials);
             goto cleanup;
         }
         if (fwrite(buf, 1, n, fp) != (size_t)n) {

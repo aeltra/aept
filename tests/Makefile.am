@@ -275,6 +275,7 @@ dist_check_SCRIPTS = \
     test_signature_reject.sh \
     test_update_conditional.sh \
     test_auth_file.sh \
+    test_download_errors.sh \
     test_redact_credentials.sh \
     test_index_freshness.sh \
     test_upgrade_conffiles.sh \

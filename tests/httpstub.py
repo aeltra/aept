@@ -142,6 +142,21 @@ class Handler(socketserver.BaseRequestHandler):
                 send(response("403 Forbidden", b"wrong credentials\n"))
             return True
 
+        elif path.startswith("/auth401/"):
+            # Unlike /auth, which answers wrong credentials with a 403,
+            # this answers everything with a 401, the way an archive
+            # behind nginx's auth_request rejects a bad token.
+            send(response("401 Unauthorized", b"who are you\n",
+                          ['WWW-Authenticate: Basic realm="test"']))
+            return True
+
+        elif path.startswith("/status/"):
+            # /status/<code>/... answers with that status, for whatever
+            # path a client appends to a source url.
+            code = path.split("/")[2]
+            send(response("%s Status" % code, b"status\n"))
+            return True
+
         elif path == "/echo-headers":
             # Report the request headers the client chooses to send, so a
             # test can assert on aept's identity rather than on the
