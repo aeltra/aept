@@ -552,6 +552,16 @@ and GID mappings are written to */proc/self/uid_map* and
 */proc/self/gid_map* so that the current user appears as root inside the
 namespace. The script then chroots into the offline root directory.
 
+A chroot alone does not keep a script inside the offline root, so
+**aept** confines it further before running it. In every offline root it
+closes the directory file descriptors it inherited: one would still lead
+to the host's tree after the chroot. Run unprivileged, it also drops
+**CAP_SYS_CHROOT** and **CAP_SYS_ADMIN** from the script's bounding set,
+so that the script, root in its user namespace, can neither chroot out
+of the offline root nor create namespaces of its own. Run as real root,
+**aept** leaves the capabilities alone: real root is not held by a
+chroot anyway.
+
 This allows non-root users to build root filesystems or install packages
 into an alternate directory tree. This functionality is required by the
 build-box tool.

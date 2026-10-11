@@ -8,13 +8,17 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sched.h>
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -483,6 +487,130 @@ static int unshare_and_map_user(const struct uid_maps *maps)
     return 0;
 }
 
+/* Capability numbers are kernel ABI; libc headers do not carry them. */
+#ifndef CAP_SYS_CHROOT
+#define CAP_SYS_CHROOT 18
+#endif
+#ifndef CAP_SYS_ADMIN
+#define CAP_SYS_ADMIN 21
+#endif
+
+/* One record of getdents64(2), which libc does not declare portably. */
+struct linux_dirent64 {
+    uint64_t d_ino;
+    int64_t d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[];
+};
+
+/* The descriptor a /proc/self/fd entry names, or -1 for "." and "..". */
+static int parse_fd(const char *name)
+{
+    int fd = 0;
+
+    if (*name == '\0')
+        return -1;
+
+    for (; *name; name++) {
+        if (*name < '0' || *name > '9' || fd > (INT_MAX - 9) / 10)
+            return -1;
+        fd = fd * 10 + (*name - '0');
+    }
+
+    return fd;
+}
+
+/*
+ * Close every directory descriptor the child inherited, before it
+ * enters the offline root: one survives chroot() and a path relative to
+ * it leads back to the host's tree.  A directory on stdin, stdout or
+ * stderr is pointed at /dev/null instead, so that its number is not
+ * handed out again.  Every other descriptor stays open.
+ *
+ * Child context: the directory is read with getdents64 into a buffer on
+ * the stack, because opendir() allocates.  The kernel lists /proc/self/fd
+ * from the descriptor table on every read, by descriptor number, so
+ * closing descriptors on the way neither skips nor repeats an entry.
+ */
+static int close_dir_fds(void)
+{
+    long buf[512];
+    int null_fd = -1;
+    int rval = -1;
+    int dir_fd;
+
+    dir_fd = open("/proc/self/fd", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir_fd == -1) {
+        child_err("aept: failed to list open file descriptors\n");
+        return -1;
+    }
+
+    for (;;) {
+        long n = syscall(SYS_getdents64, dir_fd, buf, sizeof(buf));
+        long off = 0;
+
+        if (n == 0)
+            break;
+        if (n < 0) {
+            child_err("aept: failed to list open file descriptors\n");
+            goto cleanup;
+        }
+
+        while (off < n) {
+            struct linux_dirent64 *d = (struct linux_dirent64 *)((char *)buf + off);
+            int fd = parse_fd(d->d_name);
+            struct stat st;
+
+            off += d->d_reclen;
+
+            if (fd < 0 || fd == dir_fd || fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode))
+                continue;
+
+            if (fd > STDERR_FILENO) {
+                close(fd);
+                continue;
+            }
+
+            if (null_fd == -1 && (null_fd = open("/dev/null", O_RDWR | O_CLOEXEC)) == -1) {
+                child_err("aept: failed to open /dev/null\n");
+                goto cleanup;
+            }
+
+            if (dup2(null_fd, fd) == -1) {
+                child_err("aept: failed to replace a directory descriptor\n");
+                goto cleanup;
+            }
+        }
+    }
+
+    rval = 0;
+
+cleanup:
+    if (null_fd != -1)
+        close(null_fd);
+    close(dir_fd);
+    return rval;
+}
+
+/*
+ * Drop what root in the child's user namespace could leave the offline
+ * root with: CAP_SYS_CHROOT for a second chroot() that escapes the
+ * first, CAP_SYS_ADMIN for namespaces of its own to mount in.  They go
+ * from the bounding set, so the script does not get them back when it
+ * is exec'd as uid 0.  Child context: syscalls only.
+ */
+static int drop_escape_caps(void)
+{
+    if (prctl(PR_CAPBSET_DROP, CAP_SYS_CHROOT, 0, 0, 0) != 0 ||
+        prctl(PR_CAPBSET_DROP, CAP_SYS_ADMIN, 0, 0, 0) != 0) {
+        child_err("aept: failed to drop capabilities\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 static const char *normalize_path(const char *path)
 {
     while (path[0] == '.' && path[1] == '/')
@@ -570,10 +698,15 @@ int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
         return -1;
     case 0:
         if (ctx->config.offline_root) {
-            if (geteuid() != 0) {
+            int unprivileged = geteuid() != 0;
+
+            if (unprivileged) {
                 if (unshare_and_map_user(&maps) != 0)
                     _exit(AEPT_EXIT_SETUP_FAILED);
             }
+
+            if (close_dir_fds() != 0)
+                _exit(AEPT_EXIT_SETUP_FAILED);
 
             if (chroot(ctx->config.offline_root) != 0) {
                 child_err("aept: failed to chroot into the offline root\n");
@@ -583,6 +716,10 @@ int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
                 child_err("aept: failed to chdir to '/'\n");
                 _exit(AEPT_EXIT_SETUP_FAILED);
             }
+
+            /* Real root has other ways out, so this would only get in the way. */
+            if (unprivileged && drop_escape_caps() != 0)
+                _exit(AEPT_EXIT_SETUP_FAILED);
         }
         execvp(argv[0], (char *const *)argv);
         _exit(AEPT_EXIT_EXEC_FAILED);

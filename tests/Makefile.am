@@ -15,7 +15,7 @@ unit_tests = test_archive_path test_script test_config_root \
     test_oom
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget \
-    updateerr
+    updateerr scriptprobe
 
 noinst_HEADERS = test.h
 
@@ -63,6 +63,12 @@ updateerr_SOURCES = updateerr.c
 updateerr_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
 updateerr_LDADD = $(top_builddir)/src/libaept.la
 updateerr_LDFLAGS = -static $(COVERAGE_LDFLAGS)
+
+# Run from a maintainer script inside an offline root by
+# test_script_confinement.sh.  -static: there is no library in there.
+scriptprobe_SOURCES = scriptprobe.c
+scriptprobe_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+scriptprobe_LDFLAGS = -static $(COVERAGE_LDFLAGS)
 
 # Also a harness, driven by test_threads.sh.
 threadrace_SOURCES = threadrace.c
@@ -288,7 +294,8 @@ dist_check_SCRIPTS = \
     test_threads.sh \
     test_cancel.sh \
     test_timeout.sh \
-    test_signal_resume.sh
+    test_signal_resume.sh \
+    test_script_confinement.sh
 
 EXTRA_DIST = aeptlib.sh ptydrive.py httpstub.py stallserver.py condserver.py \
     dribbleserver.py tlsserver.py libaept.abi abi-declarations.sh \
@@ -309,6 +316,7 @@ AM_TESTS_ENVIRONMENT = \
     THREADRACE='$(abs_builddir)/threadrace'; export THREADRACE; \
     STALLCLIENT='$(abs_builddir)/stallclient'; export STALLCLIENT; \
     UPDATEERR='$(abs_builddir)/updateerr'; export UPDATEERR; \
+    SCRIPTPROBE='$(abs_builddir)/scriptprobe'; export SCRIPTPROBE; \
     TLSGET='$(abs_builddir)/tlsget'; export TLSGET; \
     LIBAEPT_SO='$(abs_top_builddir)/src/.libs/libaept.so'; export LIBAEPT_SO; \
     NM='$(NM)'; export NM; \

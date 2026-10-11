@@ -309,14 +309,15 @@ run by Automake's harness.
   *regular* `aeltra` in dist-packages that shadows every namespace portion
   regardless of `PYTHONPATH` — without the shim the test would silently
   test the installed bindings.
-- `httpget`, `partialget`, `rawget`, `tlsget`, `httpstub.py`, `stallclient` and
-  `threadrace` are harnesses driven by shell tests, not tests themselves: they
-  are in `check_PROGRAMS` but deliberately absent from `unit_tests`, so `TESTS`
-  never runs them directly. `partialget`, `rawget` and `tlsget` go to libfetch
-  directly rather than through `aept_download()`, each for something it cannot
-  express: stopping a response part-way, passing flags aept never does (verbose
-  and its error-body drain, the address-family pins, no-redirect), and reading
-  the TLS error classification — plus, via `-C`, trusting a test-minted CA.
+- `httpget`, `partialget`, `rawget`, `tlsget`, `httpstub.py`, `stallclient`,
+  `threadrace` and `scriptprobe` are harnesses driven by shell tests, not tests
+  themselves: they are in `check_PROGRAMS` but deliberately absent from
+  `unit_tests`, so `TESTS` never runs them directly. `partialget`, `rawget`
+  and `tlsget` go to libfetch directly rather than through `aept_download()`,
+  each for something it cannot express: stopping a response part-way, passing
+  flags aept never does (verbose and its error-body drain, the address-family
+  pins, no-redirect), and reading the TLS error classification — plus, via
+  `-C`, trusting a test-minted CA.
 - **`make` does not build `check_PROGRAMS`.** Running `./tests/test_foo` or a
   shell test after a plain `make` runs the *previous* binary, so a revert probe
   can come out green on a fix that is no longer there. This has now happened
