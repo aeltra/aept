@@ -1,3 +1,18 @@
+aept (0.10.2-1) unstable; urgency=medium
+
+  * Fix: 0.10.1 could not be built, because the package build's coverage
+    check failed. The new code that closes inherited directory
+    descriptors runs in the child before the script is executed, where
+    gcov never records anything, and so pulled util.c's figure below the
+    recorded one.
+  * Tests: test_dir_fds runs close_dir_fds() and parse_fd() in the test
+    process itself, against more descriptors than one getdents64()
+    buffer holds: every directory descriptor is closed, every other one
+    kept, and a directory on stdin is replaced by /dev/null.
+  * No ABI change; libaept's interface version stays 1:3:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Mon, 12 Oct 2026 01:13:01 +0300
+
 aept (0.10.1-1) unstable; urgency=medium
 
   * Fix: 0.10.0 could not be built, because configure.ac and the Python
