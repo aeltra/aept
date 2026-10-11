@@ -12,7 +12,7 @@ unit_tests = test_archive_path test_script test_config_root \
     test_no_proxy test_validator test_url_sanitize test_marks test_listfile test_sums test_api \
     test_url_parse test_config_values test_authfile test_verify test_fetch_internals test_stanza \
     test_deb test_iofail \
-    test_oom
+    test_oom test_dir_fds
 
 check_PROGRAMS = $(unit_tests) httpget partialget rawget threadrace stallclient tlsget \
     updateerr scriptprobe
@@ -130,6 +130,14 @@ test_clearsign_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 # trigger.c is #included by the test, so only its dependencies are
 # listed here.
+# util.c is #included by the test, so only its dependencies are listed.
+test_dir_fds_SOURCES = \
+    test_dir_fds.c \
+    $(top_srcdir)/src/libfetch/pctdecode.c \
+    $(top_srcdir)/src/msg.c
+test_dir_fds_CFLAGS = -D_GNU_SOURCE $(COVERAGE_CFLAGS)
+test_dir_fds_LDFLAGS = $(COVERAGE_LDFLAGS)
+
 test_trigger_entries_SOURCES = \
     test_trigger_entries.c \
     $(top_srcdir)/src/listfile.c \
