@@ -29,9 +29,10 @@ static const char *strip_offline_root(struct aept_ctx *ctx, const char *path)
 int aept_run_script_args(struct aept_ctx *ctx, const char *script_dir, const char *pkg_name,
                          const char *script, const char *const *args)
 {
-    const char *argv[8];
+    const char *argv[10];
     char *path = NULL;
-    int n = 0, i, r;
+    char *interp = NULL, *interp_arg = NULL;
+    int n = 0, first, i, r;
 
     if (pkg_name)
         aept_asprintf(&path, "%s/%s.%s", script_dir, pkg_name, script);
@@ -47,8 +48,14 @@ int aept_run_script_args(struct aept_ctx *ctx, const char *script_dir, const cha
     if (ctx->config.offline_root)
         run_path = strip_offline_root(ctx, path);
 
-    argv[n++] = "/bin/sh";
+    /* The script says what runs it, in its first line. */
+    aept_script_interpreter(path, &interp, &interp_arg);
+
+    argv[n++] = interp;
+    if (interp_arg)
+        argv[n++] = interp_arg;
     argv[n++] = run_path;
+    first = n;
     /* An absent argument ends the list: nothing may follow a NULL, or
      * the script would be handed an empty operand in its place. */
     for (i = 0; args && args[i] && n < (int)(sizeof(argv) / sizeof(argv[0])) - 1; i++)
@@ -56,10 +63,13 @@ int aept_run_script_args(struct aept_ctx *ctx, const char *script_dir, const cha
     argv[n] = NULL;
 
     aept_log_debug("running %s for %s%s%s%s%s", script, pkg_name ? pkg_name : "(none)",
-                   n > 2 ? " " : "", n > 2 ? argv[2] : "", n > 3 ? " " : "", n > 3 ? argv[3] : "");
+                   n > first ? " " : "", n > first ? argv[first] : "", n > first + 1 ? " " : "",
+                   n > first + 1 ? argv[first + 1] : "");
 
     r = aept_system_offline_root(ctx, argv);
 
+    free(interp);
+    free(interp_arg);
     free(path);
 
     if (r != 0) {

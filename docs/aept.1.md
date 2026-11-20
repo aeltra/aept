@@ -568,6 +568,14 @@ build-box tool.
 
 # MAINTAINER SCRIPTS
 
+A maintainer script is run by the interpreter named in its first line,
+read as the kernel reads it: the path after **\#!**, and whatever
+follows the path as a single argument. A script without such a line is
+run by */bin/sh*. **aept** starts the interpreter itself and passes it
+the script, so the script needs neither execute permission nor a
+filesystem that allows execution; a *preinst* is run from *tmp_dir*,
+which may be mounted *noexec*. The same holds for trigger scripts.
+
 Maintainer scripts receive Debian-style arguments indicating the action
 being performed:
 
@@ -622,8 +630,9 @@ on disk, even if no file in that directory changed.
 ## Trigger script
 
 The package must also ship a *trigger* file in its control archive. This
-is an executable script (invoked with **/bin/sh**) that receives the
-matched directory paths as positional arguments:
+is a script (run by the interpreter its first line names, see
+**MAINTAINER SCRIPTS**) that receives the matched directory paths as
+positional arguments:
 
     #!/bin/sh
     for dir in "$@"; do

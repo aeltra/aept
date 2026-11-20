@@ -288,18 +288,27 @@ static int run_trigger_script(struct aept_ctx *ctx, const char *pkg_name, const 
 
     const char *run_path = strip_offline_root(ctx, path);
 
-    /* Build argv: /bin/sh <script> <dir1> <dir2> ... NULL */
-    int argc = 2 + n_dirs;
-    const char **argv = aept_malloc((argc + 1) * sizeof(char *));
-    argv[0] = "/bin/sh";
-    argv[1] = run_path;
+    /* Build argv: <interpreter> [<its argument>] <script> <dir1> <dir2> ... NULL,
+     * with the interpreter the script names in its first line. */
+    char *interp = NULL, *interp_arg = NULL;
+    const char **argv = aept_malloc((3 + n_dirs + 1) * sizeof(char *));
+    int argc = 0;
+
+    aept_script_interpreter(path, &interp, &interp_arg);
+
+    argv[argc++] = interp;
+    if (interp_arg)
+        argv[argc++] = interp_arg;
+    argv[argc++] = run_path;
     for (int i = 0; i < n_dirs; i++)
-        argv[2 + i] = dirs[i];
+        argv[argc++] = dirs[i];
     argv[argc] = NULL;
 
     r = aept_system_offline_root(ctx, argv);
 
     free(argv);
+    free(interp);
+    free(interp_arg);
     free(path);
 
     if (r != 0) {

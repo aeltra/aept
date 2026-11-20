@@ -139,6 +139,116 @@ int main(void)
         unlink_in_dir("args");
     }
 
+    /*
+     * The first line says what runs the script, as it does for the
+     * kernel.  aept used to run every script with "/bin/sh <script>",
+     * which made that line a comment: a "-e" in it was never in effect,
+     * and a package could not have a script run by anything but the
+     * /bin/sh of the system -- which is what busybox needs, to clean up
+     * after itself once the link /bin/sh is gone.
+     */
+    write_script("errexit", "#!/bin/sh -e\nfalse\nexit 0\n");
+    test_int_eq(aept_run_script(&ctx, dir, NULL, "errexit", "install", NULL), -1,
+                "the argument in the first line reaches the interpreter");
+
+    {
+        char *body;
+
+        /* An interpreter of our own, which only records what it was
+         * asked to run and with what. */
+        aept_asprintf(&body, "#!/bin/sh\nprintf '%%s %%s\\n' \"${1##*/}\" \"$2\" > %s/ran\n", dir);
+        write_script("interp", body);
+        free(body);
+
+        aept_asprintf(&body, "#!%s/interp\nexit 9\n", dir);
+        write_script("viainterp", body);
+        free(body);
+
+        test_int_eq(aept_run_script(&ctx, dir, NULL, "viainterp", "configure", NULL), 0,
+                    "the interpreter in the first line runs the script");
+        test_str_eq(read_line("ran"), "viainterp configure",
+                    "it is handed the script and the script's arguments");
+        unlink_in_dir("ran");
+    }
+
+    /* Without such a line it is /bin/sh, as before. */
+    write_script("noline", "exit 0\n");
+    test_int_eq(aept_run_script(&ctx, dir, NULL, "noline", "install", NULL), 0,
+                "a script without a first line runs with /bin/sh");
+    write_script("noline5", "exit 5\n");
+    test_int_eq(aept_run_script(&ctx, dir, NULL, "noline5", "install", NULL), -1,
+                "and its failure is still one");
+
+    /* The script is read, not executed: it needs no execute permission,
+     * and so no filesystem that grants one.  A preinst runs from
+     * tmp_dir, which may be mounted noexec. */
+    {
+        char *p;
+
+        write_script("noexec", "#!/bin/sh\nexit 0\n");
+        p = path_in_dir("noexec");
+        chmod(p, 0644);
+        free(p);
+        test_int_eq(aept_run_script(&ctx, dir, NULL, "noexec", "install", NULL), 0,
+                    "a script without execute permission runs");
+    }
+
+    /* How the first line is read. */
+    {
+        char *interp, *arg;
+
+        write_script("line1", "#! /bin/busybox sh\n");
+        {
+            char *p = path_in_dir("line1");
+            aept_script_interpreter(p, &interp, &arg);
+            free(p);
+        }
+        test_str_eq(interp, "/bin/busybox", "blanks before the interpreter are skipped");
+        test_str_eq(arg, "sh", "what follows it is the argument");
+        free(interp);
+        free(arg);
+
+        write_script("line2", "#!/bin/sh  -e -x \t\nexit 0\n");
+        {
+            char *p = path_in_dir("line2");
+            aept_script_interpreter(p, &interp, &arg);
+            free(p);
+        }
+        test_str_eq(arg, "-e -x", "everything after the interpreter is one argument");
+        free(interp);
+        free(arg);
+
+        write_script("line3", "#!/bin/sh\n");
+        {
+            char *p = path_in_dir("line3");
+            aept_script_interpreter(p, &interp, &arg);
+            free(p);
+        }
+        test_str_eq(interp, "/bin/sh", "an interpreter alone");
+        test_ok(arg == NULL, "has no argument");
+        free(interp);
+        free(arg);
+
+        write_script("line4", "#!\nexit 0\n");
+        {
+            char *p = path_in_dir("line4");
+            aept_script_interpreter(p, &interp, &arg);
+            free(p);
+        }
+        test_str_eq(interp, "/bin/sh", "a first line naming nothing falls back to /bin/sh");
+        free(interp);
+        free(arg);
+
+        {
+            char *p = path_in_dir("nosuchfile");
+            aept_script_interpreter(p, &interp, &arg);
+            free(p);
+        }
+        test_str_eq(interp, "/bin/sh", "so does a file that cannot be read");
+        free(interp);
+        free(arg);
+    }
+
     /* With a package name the script resolves as <dir>/<pkg>.<script>. */
     write_script("mypkg.postinst", "#!/bin/sh\nexit 3\n");
     test_int_eq(aept_run_script(&ctx, dir, "mypkg", "postinst", "configure", NULL), -1,
@@ -150,6 +260,16 @@ int main(void)
     unlink_in_dir("fail127");
     unlink_in_dir("killed");
     unlink_in_dir("args");
+    unlink_in_dir("errexit");
+    unlink_in_dir("interp");
+    unlink_in_dir("viainterp");
+    unlink_in_dir("noline");
+    unlink_in_dir("noline5");
+    unlink_in_dir("noexec");
+    unlink_in_dir("line1");
+    unlink_in_dir("line2");
+    unlink_in_dir("line3");
+    unlink_in_dir("line4");
     unlink_in_dir("mypkg.postinst");
     rmdir(dir);
 

@@ -45,6 +45,17 @@ int aept_file_mkdir_hier(const char *path, mode_t mode);
 int aept_system(const char *argv[]);
 int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[]);
 
+/* The interpreter a script asks for in its first line, as the kernel
+ * reads a "#!" line: the path, and whatever follows it as one argument
+ * (*arg is NULL when there is none).  A script without such a line
+ * gets /bin/sh.  Both strings are allocated.
+ *
+ * aept starts the interpreter itself instead of executing the script:
+ * that needs no execute permission on the file and no filesystem that
+ * allows one, and a preinst runs from tmp_dir, which is often mounted
+ * noexec. */
+void aept_script_interpreter(const char *path, char **interp, char **arg);
+
 void aept_fileset_init(aept_fileset_t *fs);
 void aept_fileset_add(aept_fileset_t *fs, const char *path);
 void aept_fileset_sort(aept_fileset_t *fs);

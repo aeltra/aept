@@ -675,6 +675,64 @@ void aept_fileset_free(aept_fileset_t *fs)
     aept_fileset_init(fs);
 }
 
+/* The kernel reads no more of a script's first line than this. */
+#define AEPT_SHEBANG_MAX 256
+
+static int is_blank(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+void aept_script_interpreter(const char *path, char **interp, char **arg)
+{
+    char buf[AEPT_SHEBANG_MAX];
+    FILE *fp;
+
+    *interp = NULL;
+    *arg = NULL;
+    buf[0] = '\0';
+
+    fp = fopen(path, "r");
+    if (fp) {
+        if (!fgets(buf, sizeof(buf), fp))
+            buf[0] = '\0';
+        fclose(fp);
+    }
+
+    if (buf[0] == '#' && buf[1] == '!') {
+        char *start = buf + 2;
+        char *end, *rest, *tail;
+
+        buf[strcspn(buf, "\n")] = '\0';
+
+        while (is_blank(*start))
+            start++;
+        end = start;
+        while (*end && !is_blank(*end))
+            end++;
+
+        /* Everything after the path is one argument, blanks inside it
+         * included; only the ones around it are dropped. */
+        rest = end;
+        while (is_blank(*rest))
+            rest++;
+        tail = rest + strlen(rest);
+        while (tail > rest && is_blank(tail[-1]))
+            tail--;
+        *tail = '\0';
+
+        if (end > start) {
+            if (*rest)
+                *arg = aept_strdup(rest);
+            *end = '\0';
+            *interp = aept_strdup(start);
+        }
+    }
+
+    if (!*interp)
+        *interp = aept_strdup("/bin/sh");
+}
+
 int aept_system_offline_root(struct aept_ctx *ctx, const char *argv[])
 {
     struct uid_maps maps;

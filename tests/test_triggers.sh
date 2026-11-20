@@ -287,4 +287,44 @@ $(cat "$log")"
 [ ! -f "$info/badtrig4.triggers-pending" ] || fail "the record survived the successful retry"
 note "upgrade: record kept, retried with the new script, cleared on success"
 
+# ── the first line of the trigger script says what runs it ───────────
+#
+# As for the maintainer scripts (test_script.c): aept starts the
+# interpreter the script names, it does not hand every script to
+# /bin/sh.  The interpreter here is one of our own, inside the root,
+# which only records what it was asked to run and with what.
+
+printf '#!/bin/sh\nprintf "interp: %%s\\n" "${1##*/} $2" >> /trigger.log\n' > "$root/bin/interp"
+chmod 755 "$root/bin/interp"
+
+: > "$log"
+mkdir -p "$work/it/usr/share/data"
+printf 'i\n' > "$work/it/usr/share/data/interp-payload"
+
+_d=$(mktemp -d) || fail "mktemp failed"
+mkdir -p "$_d/c"
+printf 'Package: interptrig\nVersion: 1.0\nArchitecture: all\nMaintainer: t <t@example.invalid>\nDescription: aept test fixture\n' \
+    > "$_d/c/control"
+printf '/usr/share/data\n' > "$_d/c/triggers"
+printf '#!/bin/interp\necho "run by the shell" >> /trigger.log\n' > "$_d/c/trigger"
+chmod 755 "$_d/c/trigger"
+tar czf "$_d/control.tar.gz" -C "$_d/c" control triggers trigger || fail "tar control"
+tar czf "$_d/data.tar.gz"    -C "$work/it" .                     || fail "tar data"
+printf '2.0\n' > "$_d/debian-binary"
+( cd "$_d" && ar rc "$work/interptrig_1.0.aeltra" debian-binary control.tar.gz data.tar.gz ) \
+    || fail "ar failed"
+rm -rf "$_d"
+
+out=$(aept_run "$root" install --non-interactive "$work/interptrig_1.0.aeltra" 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] || fail "installing interptrig exited $rc:
+$out"
+grep -q '^interp: interptrig.trigger /usr/share/data$' "$log" \
+    || fail "the trigger script was not run by the interpreter it names:
+$(cat "$log")"
+grep -q 'run by the shell' "$log" \
+    && fail "the trigger script was handed to /bin/sh instead:
+$(cat "$log")"
+note "a trigger script is run by the interpreter in its first line"
+
 exit 0
