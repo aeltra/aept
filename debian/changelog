@@ -1,3 +1,25 @@
+aept (0.11.0-1) unstable; urgency=medium
+
+  * Maintainer and trigger scripts are run by the interpreter named in
+    their first line, read as the kernel reads it: the path after "#!"
+    and whatever follows it as one argument. A script without such a
+    line is run by /bin/sh. Until now every script was run as
+    "/bin/sh <script>", which made the first line a comment.
+  * This changes behaviour for existing packages: an argument in the
+    first line is now in effect. A script that starts with
+    "#!/bin/sh -e", which is what aeltra-pack wrote up to 1.16.1, now
+    stops at the first failing command.
+  * A package can have scripts that work without the system's /bin/sh,
+    for example "#!/bin/busybox sh". busybox needs this to remove its
+    applet links when the package with the link /bin/sh is gone already.
+  * aept starts the interpreter itself and passes it the script, it does
+    not execute the file. The script needs neither execute permission
+    nor a filesystem that allows execution; a preinst runs from tmp_dir,
+    which may be mounted noexec.
+  * No ABI change; libaept's interface version stays 1:3:0.
+
+ -- Tobias Koch <tobias.koch@gmail.com>  Fri, 20 Nov 2026 09:45:08 +0300
+
 aept (0.10.2-1) unstable; urgency=medium
 
   * Fix: 0.10.1 could not be built, because the package build's coverage
