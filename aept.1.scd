@@ -559,6 +559,27 @@ This allows non-root users to build root filesystems or install packages into
 an alternate directory tree. This functionality is required by the build-box
 tool.
 
+# BUILD-BOX TARGETS
+
+A root is a build-box target if the file _/etc/target_ exists in it, under
+the offline root when one is set. The build-box tool writes that file when
+it creates a target; *aept* only tests that it is there and does not read
+it. Whoever creates the file in another root makes that root a build-box
+target as far as *aept* is concerned.
+
+Two things differ in such a root, and nothing else:
+
+. *clean* says nothing when *clean_cache* is 0. Elsewhere it reports that
+  cache cleaning is disabled and names the directory it keeps. In a target
+  the kept cache is the arrangement working as intended, since the cache is
+  shared with the host. No file is kept or removed that would not be
+  otherwise.
+. A user who is not root gets source credentials from
+  _~/RealHome/.aeltra/auth.conf_ if that file exists, see *CREDENTIALS*.
+  build-box makes the user's own home directory available at _~/RealHome_,
+  so the credentials stay outside the target. In a root without that file
+  the lookup goes on to _/etc/aept/auth.conf_, as it does everywhere else.
+
 # MAINTAINER SCRIPTS
 
 A maintainer script is run by the interpreter named in its first line, read as
